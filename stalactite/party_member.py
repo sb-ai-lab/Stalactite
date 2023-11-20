@@ -6,11 +6,11 @@ from stalactite.base import DataTensor
 
 class PartyMember(ABC):
     @abstractmethod
-    def records_uuids(self) -> List[str]:
+    def records_uids(self) -> List[str]:
         ...
 
     @abstractmethod
-    def register_records_uuids(self, uids: List[str]):
+    def register_records_uids(self, uids: List[str]):
         ...
 
     @abstractmethod

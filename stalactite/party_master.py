@@ -1,3 +1,4 @@
+import collections
 from abc import ABC, abstractmethod
 from typing import List
 
@@ -30,7 +31,12 @@ class PartyMaster(ABC):
 
     @abstractmethod
     def synchronize_uids(self, party: Party) -> List[str]:
-        ...
+        uids = (uid for member_uids in party.records_uids() for uid in set(member_uids))
+        shared_uids = [uid for uid, count in collections.Counter(uids).items() if count == party.world_size]
+
+        party.register_records_uids(shared_uids)
+
+        return shared_uids
 
     def loop(self, batcher: Batcher, party: Party):
         updates = self.make_init_updates(party.world_size)
