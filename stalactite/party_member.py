@@ -10,7 +10,7 @@ class PartyMember(ABC):
         ...
 
     @abstractmethod
-    def register_records_uuids(self, uuids: List[str]):
+    def register_records_uuids(self, uids: List[str]):
         ...
 
     @abstractmethod
@@ -30,5 +30,5 @@ class PartyMember(ABC):
         ...
 
     @abstractmethod
-    def update_predict(self, upd: DataTensor) -> DataTensor:
+    def update_predict(self, batch: List[str], upd: DataTensor) -> DataTensor:
         ...

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict
 
-from stalactite.base import DataTensor
+from stalactite.base import DataTensor, PartyDataTensor
 
 
 class Party(ABC):
@@ -15,11 +15,11 @@ class Party(ABC):
         ...
 
     @abstractmethod
-    def records_uuids(self) -> List[str]:
+    def records_uids(self) -> List[str]:
         ...
 
     @abstractmethod
-    def register_records_uuids(self, uuids: List[str]):
+    def register_records_uids(self, uids: List[str]):
         ...
 
     @abstractmethod
@@ -30,20 +30,14 @@ class Party(ABC):
     def finalize(self):
         ...
 
-    # in reality, 'upd' will be a DataTensor but with one more dimension
-    # now it is list for illustrative purposes
     @abstractmethod
-    def update_weights(self, upd: List[DataTensor]):
+    def update_weights(self, upd: PartyDataTensor):
         ...
 
-    # in reality, 'upd' will be a DataTensor but with one more dimension
-    # now it is list for illustrative purposes
     @abstractmethod
-    def predict(self) -> List[DataTensor]:
+    def predict(self, use_test: bool = False) -> PartyDataTensor:
         ...
 
-    # in reality, 'upd' will be a DataTensor but with one more dimension
-    # now it is list for illustrative purposes
     @abstractmethod
-    def update_predict(self, upd: List[DataTensor]) -> List[DataTensor]:
+    def update_predict(self, batch: List[str], upd: PartyDataTensor) -> PartyDataTensor:
         ...
