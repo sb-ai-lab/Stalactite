@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import List
 
 from stalactite.base import Batcher, DataTensor, PartyDataTensor
-from stalactite.communications import Party
+from stalactite.comm.abc_party import Party
 
 
 class PartyMaster(ABC):
