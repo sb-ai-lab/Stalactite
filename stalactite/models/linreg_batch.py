@@ -44,7 +44,9 @@ class LinearRegressionBatch(torch.nn.Module):
         Y_pred = self.forward(X_pred)
         return Y_pred
 
-    def get_weights(self, ):
+    def get_weights(
+        self,
+    ):
         # import pdb; pdb.set_trace()
         weights = self.linear.weight.clone()
         return weights

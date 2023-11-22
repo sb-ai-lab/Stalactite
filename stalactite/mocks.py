@@ -4,22 +4,32 @@ from typing import List, Optional
 import torch
 from sklearn import metrics
 
-from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party, RecordsBatch
+from stalactite.base import (
+    Batcher,
+    DataTensor,
+    Party,
+    PartyDataTensor,
+    PartyMaster,
+    PartyMember,
+    RecordsBatch,
+)
 from stalactite.batching import ListBatcher
 
 logger = logging.getLogger(__name__)
 
 
 class MockPartyMasterImpl(PartyMaster):
-    def __init__(self,
-                 uid: str,
-                 epochs: int,
-                 report_train_metrics_iteration: int,
-                 report_test_metrics_iteration: int,
-                 target: DataTensor,
-                 target_uids: List[str],
-                 batch_size: int,
-                 model_update_dim_size: int):
+    def __init__(
+        self,
+        uid: str,
+        epochs: int,
+        report_train_metrics_iteration: int,
+        report_test_metrics_iteration: int,
+        target: DataTensor,
+        target_uids: List[str],
+        batch_size: int,
+        model_update_dim_size: int,
+    ):
         self.id = uid
         self.epochs = epochs
         self.report_train_metrics_iteration = report_train_metrics_iteration
@@ -49,25 +59,27 @@ class MockPartyMasterImpl(PartyMaster):
         return [torch.rand(self._weights_dim) for _ in range(world_size)]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
-        logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
-                    f"Predictions size: {predictions.size()}" % self.id)
+        logger.info(
+            f"Master %s: reporting metrics. Y dim: {y.size()}. " f"Predictions size: {predictions.size()}" % self.id
+        )
         error = metrics.mean_absolute_error(y, predictions)
         logger.info(f"Master %s: mock metrics (MAE): {error}" % error)
 
-    def aggregate(self,  participating_members: List[str], party_predictions: PartyDataTensor,
-                  infer: bool = False) -> DataTensor:
+    def aggregate(
+        self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
+    ) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
         return torch.mean(torch.stack(party_predictions, dim=1), dim=1)
 
     def compute_updates(
-            self,
-            participating_members: List[str],
-            predictions: DataTensor,
-            party_predictions: PartyDataTensor,
-            world_size: int,
-            subiter_seq_num: int) \
-            -> List[DataTensor]:
+        self,
+        participating_members: List[str],
+        predictions: DataTensor,
+        party_predictions: PartyDataTensor,
+        world_size: int,
+        subiter_seq_num: int,
+    ) -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
@@ -122,8 +134,9 @@ class MockPartyMemberImpl(PartyMember):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         if upd.size() != self._weights.size():
-            raise ValueError(f"Incorrect size of update. "
-                             f"Expected: {tuple(self._weights.size())}. Actual: {tuple(upd.size())}")
+            raise ValueError(
+                f"Incorrect size of update. " f"Expected: {tuple(self._weights.size())}. Actual: {tuple(upd.size())}"
+            )
 
         self._weights += upd
         logger.info("Member %s: successfully updated weights" % self.id)
