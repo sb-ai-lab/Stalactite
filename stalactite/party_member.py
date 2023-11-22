@@ -22,7 +22,7 @@ class PartyMember(ABC):
         ...
 
     @abstractmethod
-    def update_weights(self, upd: DataTensor):
+    def update_weights(self, upd: DataTensor) -> DataTensor: # returning gradients
         ...
 
     @abstractmethod
