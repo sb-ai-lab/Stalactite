@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+service Communicator {
+  // Bidirectional ping-pong to keep the connection alive
+  rpc PingPong(stream Ping) returns (stream Ping) {}
+  // Custom serialization of the tensors
+  rpc ExchangeBinarizedDataUnaryUnary(SafetensorDataProto) returns (SafetensorDataProto) {}
+  // Proto serialization of the tensors (converted to numpy)
+  rpc ExchangeNumpyDataUnaryUnary(NumpyMessage) returns (NumpyMessage) {}
+  // For large client messages:
+  // Custom serialization of the tensors
+  rpc ExchangeBinarizedDataStreamUnary(stream SafetensorDataProto) returns (SafetensorDataProto) {}
+  // Proto serialization of the tensors (converted to numpy)
+  rpc ExchangeNumpyDataStreamUnary(stream NumpyMessage) returns (NumpyMessage) {}
+  // For large client and server messages:
+  // Custom serialization of the tensors
+  rpc ExchangeBinarizedDataStreamStream(stream SafetensorDataProto) returns (stream SafetensorDataProto) {}
+  // Proto serialization of the tensors (converted to numpy)
+  rpc ExchangeNumpyDataStreamStream(stream NumpyMessage) returns (stream NumpyMessage) {}
+}
+
+
+message SafetensorDataProto {
+  bytes data = 1;
+  int32 iteration = 2;
+  string client_id = 3;
+}
+
+message Ping {
+  string data = 1;
+}
+
+
+// this part is from
+// https://github.com/npuichigo/pytorch_lmdb_dataset/blob/master/proto/tensor.proto
+// which is licensed under Apache 2.0 according to
+// https://github.com/npuichigo/pytorch_lmdb_dataset/blob/master/proto/utils.py
+//
+//message NumpyMessages {
+//    int32 status = 1;
+//    repeated NumpyMessage msg = 2;
+//}
+
+// TensorProto stores serialized Tensor objects.
+message NumpyMessage {
+  // The dimensions in the tensor.
+  repeated int64 dims = 1;
+
+  // Data type
+  enum DataType {
+    UNDEFINED = 0;
+
+    // Basic types
+    FLOAT = 1;  // float
+    INT32 = 2;  // int
+    BYTE = 3;   // byte, when deserialized, is going to be restored as uint8
+    STRING = 4; // string
+
+    // Less-commonly used data types
+    BOOL = 5;     // bool
+    UINT8 = 6;    // uint8_t
+    INT8 = 7;     // int8_t
+    UINT16 = 8;   // uint16_t
+    INT16 = 9;    // int16_t
+    INT64 = 10;   // int64_t
+    FLOAT16 = 12; // at::Half
+    DOUBLE = 13;  // double
+  }
+
+  DataType data_type = 2;
+
+  // For float
+  repeated double float_data = 3;
+  // For int32, uint8, int8, uint16, int16, bool, and float16
+  // Note about float16: in storage we will basically convert float16 byte-wise
+  // to unsigned short and then store them in the int32_data field.
+  repeated int32 int32_data = 4;
+  // For bytes
+  bytes byte_data = 5;
+  // For strings
+  repeated bytes string_data = 6;
+  // For double
+  repeated double double_data = 7;
+  // For int64
+  repeated int64 int64_data = 8;
+
+  int32 status = 9;
+}

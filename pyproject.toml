@@ -12,7 +12,12 @@ packages = [
 python = "^3.9"
 torch = "^2.1.1"
 grpcio = "^1.59.3"
+safetensors = "^0.4.0"
+numpy = "^1.26.2"
 
+
+[tool.poetry.group.dev.dependencies]
+grpcio-tools = "^1.59.3"
 
 [build-system]
 requires = ["poetry-core"]
