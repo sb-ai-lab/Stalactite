@@ -13,6 +13,10 @@ class BatchedData:
     total_batches: int
 
 
+def format_important_logging(text: str) -> str:
+    return "=" * 65 + "\n" + text + "\n" + "=" * 109
+
+
 def batch_generator(data: torch.Tensor | list[Any], batch_size: int) -> Iterator[BatchedData]:
     total_batches = int(np.ceil(len(data) / batch_size))
     for batch in range(total_batches):
@@ -22,10 +26,10 @@ def batch_generator(data: torch.Tensor | list[Any], batch_size: int) -> Iterator
             total_batches=total_batches
         )
 
+
 class ClientTask(enum.Enum):
     batched_exchange = 0
     exchange = 1
-
 
 
 class PingResponse(str, enum.Enum):
