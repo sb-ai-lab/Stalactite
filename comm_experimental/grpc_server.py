@@ -103,12 +103,9 @@ class CommunicationManager:
             self._agg_results_batched[client_iteration][client_id] = torch.cat(
                 [self._agg_results_batched[client_iteration][client_id], request_data['tensor']]
             )
-            if batch_num == total_batches - 1:
-                while len(self._agg_results_batched[client_iteration]) != self.world_size:
-                    continue
+            if (len(self._agg_results_batched[client_iteration]) == self.world_size) and (batch_num == total_batches - 1):
                 returned_tensor = self._aggregare_tensors_list(self._agg_results_batched[client_iteration].values())
-
-                logger.info(f"All queries collected, returning aggregated result")
+                # self._agg_results_batched[client_iteration] = defaultdict(lambda: torch.tensor([]))
                 for batched_data in batch_generator(returned_tensor, self.batch_size):
                     yield services_pb2.SafetensorDataProto(
                         data=safetensors.torch.save(tensors={'tensor': batched_data.data}),
@@ -117,7 +114,9 @@ class CommunicationManager:
                         batch=batched_data.batch,
                         total_batches=batched_data.total_batches,
                     )
-                self._agg_results_batched[client_iteration] = defaultdict(lambda: torch.tensor([]))
+
+
+
 
 class GRpcCommunicatorServicer(services_pb2_grpc.CommunicatorServicer):
     def __init__(self, comm_manager: CommunicationManager, *args, **kwargs):
@@ -147,6 +146,17 @@ class GRpcCommunicatorServicer(services_pb2_grpc.CommunicatorServicer):
     ) -> Iterator[services_pb2.SafetensorDataProto]:
         print('ExchangeBinarizedDataStreamStream', context.peer())
         result_batches = self.comm_manager.aggregate_batched_clients_results(request_iterator)
+        # returned_tensor, batch_size, client_id, client_iteration = self.comm_manager.aggregate_batched_clients_results(request_iterator)
+
+        logger.info(f"All queries collected, returning aggregated result")
+        # for batched_data in batch_generator(returned_tensor, batch_size):
+        #     yield services_pb2.SafetensorDataProto(
+        #         data=safetensors.torch.save(tensors={'tensor': batched_data.data}),
+        #         client_id=client_id,
+        #         iteration=client_iteration,
+        #         batch=batched_data.batch,
+        #         total_batches=batched_data.total_batches,
+        #     )
         for result in result_batches:
             print(context.peer())
             yield result
