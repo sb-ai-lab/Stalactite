@@ -1,21 +1,25 @@
 import logging
 import time
-from typing import Iterator
+from typing import Iterator, Any
 from threading import Thread
 import uuid
 
 import grpc
+import numpy as np
 import torch
 import safetensors.torch
 
 from gen_code import services_pb2, services_pb2_grpc
-from helpers import PingResponse, ClientStatus
+from helpers import PingResponse, ClientStatus, BatchedData, ClientTask
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 logger.addHandler(sh)
+
+MAX_MESSAGE_LENGTH = 8 * 1_000_000 * 10 + 5_000_000
+
 
 class GRpcClient:
     def __init__(
@@ -31,7 +35,13 @@ class GRpcClient:
         self.unary_unary_operations_timeout = unary_unary_operations_timeout
 
         self._uuid = uuid.uuid4()
-        self._grpc_channel = grpc.insecure_channel(f"{server_host}:{server_port}")
+        self._grpc_channel = grpc.insecure_channel(
+            f"{server_host}:{server_port}",
+            options=[
+                ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
+            ]
+        )
         self._stub = services_pb2_grpc.CommunicatorStub(self._grpc_channel)
 
         self._status = ClientStatus.waiting
@@ -74,7 +84,7 @@ class GRpcClient:
         future = self._stub.ExchangeBinarizedDataUnaryUnary.future(
             services_pb2.SafetensorDataProto(
                 data=safetensors.torch.save(
-                    tensors={'tensor': torch.tensor([1, 2], dtype=torch.float32)},
+                    tensors={'tensor': torch.rand(1_000_000, 10, dtype=torch.float64)},
                 ),
                 client_id=self.client_name,
                 iteration=self.iteration,
@@ -83,15 +93,78 @@ class GRpcClient:
         )
         return future
 
+    def batch_generator(self):
+        total_rows = 1_000
+        num_columns = 10
+        batch_size = 10
+        total_batches = int(np.ceil(total_rows / batch_size))
+        for batch in range(total_batches):
+            yield BatchedData(
+                data=torch.rand(total_rows // batch_size, num_columns, dtype=torch.float64),
+                batch=batch,
+                total_batches=total_batches,
+            )
+
+    def _get_message(self, data: torch.Tensor | BatchedData) -> services_pb2.SafetensorDataProto:
+        return services_pb2.SafetensorDataProto(
+                data=safetensors.torch.save(tensors={'tensor': data.data}),
+                iteration=self.iteration,
+                client_id=self.client_name,
+                batch=data.batch,
+                total_batches=data.total_batches
+            )
+
+
+    def exchange_messages_generator(self, ):
+        for batch in self.batch_generator():
+            yield self._get_message(batch)
+
+    def _get_iter_future(self):
+        return self._stub.ExchangeBinarizedDataStreamStream(
+            self.exchange_messages_generator(),
+            wait_for_ready=True,
+        )
+
+    def get_task(self, task_type: ClientTask):
+        if task_type == task_type.exchange:
+            return self._get_future()
+        elif task_type == task_type.batched_exchange:
+            return self._get_iter_future()
+        else:
+            raise ValueError(f'Task type {task_type} not known')
+
+    def get_task_result(self, task_type: ClientTask, future: Any):
+        if task_type == task_type.exchange:
+            data = future.result()
+            return safetensors.torch.load(data.data)['tensor']
+        elif task_type == task_type.batched_exchange:
+            data = torch.tensor([])
+            for batch in future:
+                data_batch = safetensors.torch.load(batch.data)['tensor']
+                data = torch.cat([data, data_batch])
+                if batch.batch == batch.total_batches - 1:
+                    break
+            return data
+        else:
+            raise ValueError(f'Task type {task_type} not known')
+
+
     def run(self):
         while True:
             if self._status == ClientStatus.waiting:
                 continue
             elif self._status == ClientStatus.active:
                 # TODO RPC calls here: Реализовать через добавление в очередь тасок (в тч таска finish)
-                future = self._get_future()
-                data = future.result()
-                logger.info(f"Got aggregation result from server: {safetensors.torch.load(data.data)}")
+                task_type = ClientTask.batched_exchange
+                task = self.get_task(task_type)
+                result = self.get_task_result(task_type, task)
+
+                # future = self._get_future()
+                # data = future.result()
+                # result = safetensors.torch.load(data.data)['tensor']
+                logger.info(
+                    f"Got aggregation result from server: result shape {result.shape}, result[0, 0] {result[0, 0]}"
+                )
                 self._status = ClientStatus.finished
             else:
                 logger.info(f"Client {self.client_name} finished run. Terminating...")
@@ -116,13 +189,13 @@ class GRpcClient:
             self._close()
 
     def _close(self):
-        self._grpc_channel.close()
         # self._pings_thread.join(timeout=0)
-        # logger.debug("Joined ping-pong thread")
+        self._grpc_channel.close()
 
+        # logger.debug("Joined ping-pong thread")
 
 
 if __name__ == '__main__':
     # logging.basicConfig()
-    client = GRpcClient(server_host='0.0.0.0', server_port=50051)
+    client = GRpcClient(server_host='0.0.0.0', server_port=50051, ping_interval=1.)
     client.start()

@@ -24,6 +24,8 @@ message SafetensorDataProto {
   bytes data = 1;
   int32 iteration = 2;
   string client_id = 3;
+  optional int32 batch = 4;
+  optional int32 total_batches = 5;
 }
 
 message Ping {

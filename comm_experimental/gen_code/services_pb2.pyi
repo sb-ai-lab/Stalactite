@@ -7,14 +7,18 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Optional as _Op
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class SafetensorDataProto(_message.Message):
-    __slots__ = ["data", "iteration", "client_id"]
+    __slots__ = ["data", "iteration", "client_id", "batch", "total_batches"]
     DATA_FIELD_NUMBER: _ClassVar[int]
     ITERATION_FIELD_NUMBER: _ClassVar[int]
     CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    BATCH_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_BATCHES_FIELD_NUMBER: _ClassVar[int]
     data: bytes
     iteration: int
     client_id: str
-    def __init__(self, data: _Optional[bytes] = ..., iteration: _Optional[int] = ..., client_id: _Optional[str] = ...) -> None: ...
+    batch: int
+    total_batches: int
+    def __init__(self, data: _Optional[bytes] = ..., iteration: _Optional[int] = ..., client_id: _Optional[str] = ..., batch: _Optional[int] = ..., total_batches: _Optional[int] = ...) -> None: ...
 
 class Ping(_message.Message):
     __slots__ = ["data"]
