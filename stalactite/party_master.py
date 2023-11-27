@@ -40,11 +40,13 @@ class PartyMaster(ABC):
 
     def loop(self, batcher: Batcher, party: Party):
         updates = self.make_init_updates(party.world_size)
+        # начальные rhs'ы
         for epoch in range(self.epochs):
             for i, batch in enumerate(batcher):
                 party_predictions = party.update_predict(batch, updates)
                 predictions = self.aggregate(party_predictions)
                 updates = self.compute_updates(predictions, party_predictions, party.world_size)
+                # это rhs'ы
 
                 if self.report_train_metrics_iteration > 0 and i % self.report_train_metrics_iteration == 0:
                     party_predictions = party.predict()
