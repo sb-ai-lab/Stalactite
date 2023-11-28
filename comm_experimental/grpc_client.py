@@ -6,10 +6,12 @@ from typing import Any, AsyncIterator
 import uuid
 
 import grpc
+import numpy as np
 import torch
 import safetensors.torch
 
 from gen_code import services_pb2, services_pb2_grpc
+from utils import batch_generator, save_data, load_data, BatchedData
 from helpers import PingResponse, ClientStatus, ClientTask, format_important_logging
 from constants import MAX_MESSAGE_LENGTH
 
@@ -20,6 +22,19 @@ logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 logger.addHandler(sh)
+
+
+def batch_generator():
+    total_rows = 1_000
+    num_columns = 10
+    batch_size = 10
+    total_batches = int(np.ceil(total_rows / batch_size))
+    for batch in range(total_batches):
+        yield BatchedData(
+            data=torch.rand(total_rows // batch_size, num_columns, dtype=torch.float64),
+            batch=batch,
+            total_batches=total_batches,
+        )
 
 
 class GRpcClient:
@@ -64,12 +79,10 @@ class GRpcClient:
                 wait_for_ready=True,
             )
             self._pings_task = asyncio.create_task(self.process_pongs(server_response_iterator=pingpong_responses))
-
+            # await self.run_task(ClientTask.batched_exchange)
             await self.run_task(ClientTask.exchange)
-        #     await self._close()
         except KeyboardInterrupt:
             pass
-            # await self._close()
 
     @property
     def iteration(self):
@@ -82,6 +95,15 @@ class GRpcClient:
     @property
     def ping_message(self):
         return services_pb2.Ping(data=self.client_name)
+
+    def tensor_message(self, data: BatchedData) -> services_pb2.SafetensorDataProto:
+        return services_pb2.SafetensorDataProto(
+            data=save_data(data.data),
+            iteration=self.iteration,
+            client_id=self.client_name,
+            batch=data.batch,
+            total_batches=data.total_batches
+        )
 
     async def ping_messages_generator(self):
         while True:
@@ -120,51 +142,32 @@ class GRpcClient:
         ))
         return future
 
-    # def batch_generator(self):
-    #     total_rows = 1_000
-    #     num_columns = 10
-    #     batch_size = 10
-    #     total_batches = int(np.ceil(total_rows / batch_size))
-    #     for batch in range(total_batches):
-    #         yield BatchedData(
-    #             data=torch.rand(total_rows // batch_size, num_columns, dtype=torch.float64),
-    #             batch=batch,
-    #             total_batches=total_batches,
-    #         )
+    def _exchange_messages_generator(self, ):
+        for batch in batch_generator():
+            # time.sleep(0.1)
+            yield self.tensor_message(batch)
 
-    # def _get_message(self, data: torch.Tensor | BatchedData) -> services_pb2.SafetensorDataProto:
-    #     return services_pb2.SafetensorDataProto(
-    #             data=safetensors.torch.save(tensors={'tensor': data.data}),
-    #             iteration=self.iteration,
-    #             client_id=self.client_name,
-    #             batch=data.batch,
-    #             total_batches=data.total_batches
-    #         )
-
-    # def exchange_messages_generator(self, ):
-    #     for batch in self.batch_generator():
-    #         yield self._get_message(batch)
-
-    # def _get_iter_future(self):
-    #     return self._stub.ExchangeBinarizedDataStreamStream(
-    #         self.exchange_messages_generator(),
-    #         wait_for_ready=True,
-    #     )
+    def _get_iter_future(self):
+        return self._stub.ExchangeBinarizedDataStreamStream(
+            self._exchange_messages_generator(),
+            wait_for_ready=True,
+        )
 
     def get_task(self, task_type: ClientTask):
         if task_type == task_type.exchange:
             return self._get_future()
-        # elif task_type == task_type.batched_exchange:
-        #     return self._get_iter_future()
+        elif task_type == task_type.batched_exchange:
+            return self._get_iter_future()
         else:
             raise ValueError(f'Task type {task_type} not known')
 
-    async def get_task_result(self, task_type: ClientTask, future: Any):
+    async def get_task_result(self, task_type: ClientTask, future: Any) -> torch.Tensor:
+        result = torch.tensor([])
         if task_type == task_type.exchange:
             start = time.time()
             data = await future
             breakpoint = time.time()
-            value = safetensors.torch.load(data.data)['tensor']
+            result = load_data(data.data)
             end = time.time()
             total_time = end - start
             awaiting_time = breakpoint - start
@@ -174,18 +177,18 @@ class GRpcClient:
                 f" - coro awaited for {round(awaiting_time, 4)} sec;\n"
                 f" - deserialization time {round(deserialization_time, 4)}"
             ))
-
-            return value
         elif task_type == task_type.batched_exchange:
-            data = torch.tensor([])
-            for batch in future:
-                data_batch = safetensors.torch.load(batch.data)['tensor']
-                data = torch.cat([data, data_batch])
-                if batch.batch == batch.total_batches - 1:
-                    break
-            return data
+            start = time.time()
+            async for batch in future:
+                data_batch = load_data(batch.data)
+                result = torch.cat([result, data_batch])
+            end = time.time()
+            logger.info(format_important_logging(
+                f"Result got in {round(end - start, 4)} sec: \n"
+            ))
         else:
             raise ValueError(f'Task type {task_type} not known')
+        return result
 
     async def run_task(self, task_type: ClientTask):
         async with self._condition:

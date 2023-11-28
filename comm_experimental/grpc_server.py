@@ -4,7 +4,7 @@ from collections import defaultdict
 from concurrent import futures
 import logging
 import time
-from typing import Iterator, ValuesView, AsyncIterator
+from typing import Iterator, ValuesView, AsyncIterator, Generator
 from threading import Thread
 
 import grpc
@@ -13,7 +13,8 @@ import torch
 import safetensors.torch
 
 from gen_code import services_pb2, services_pb2_grpc
-from helpers import PingResponse, batch_generator, format_important_logging
+from helpers import PingResponse, format_important_logging
+from utils import batch_generator, save_data, load_data
 from constants import MAX_MESSAGE_LENGTH
 
 parser = argparse.ArgumentParser()
@@ -33,14 +34,17 @@ class CommunicationManager:
         self.batch_size = batch_size
 
         self._lock = asyncio.Lock()
-        self._unary_unary_condition = asyncio.Condition()
 
+        self._unary_unary_condition = asyncio.Condition()
+        self._agg_results = defaultdict(dict)
         self._returned_clients = 0
 
-        self.connections = dict()
-        self._agg_results = defaultdict(dict)
+        self._multi_multi_condition = asyncio.Condition()
+        self._num_clients = 0
+
         self._agg_results_batched = defaultdict(lambda: defaultdict(lambda: torch.tensor([])))
 
+        self.connections = dict()
         asyncio.create_task(self.monitor_pings())
 
     async def monitor_pings(self):
@@ -56,7 +60,7 @@ class CommunicationManager:
         client_name = request.data
         logger.debug(f"Got ping from client {client_name}")
         # async with self._lock:
-        self.connections[client_name] = time.time()  # TODO add monitoring of last update time
+        self.connections[client_name] = time.time()
         if len(self.connections) == self.world_size:
             logger.info(f"All {self.world_size} clients connected")
             msg_data = PingResponse.all_ready
@@ -68,18 +72,10 @@ class CommunicationManager:
     def _aggregate_tensors_list(values: ValuesView[torch.Tensor]) -> torch.Tensor:
         return torch.sum(torch.stack(list(values)), dim=0)
 
-    @staticmethod
-    def _load_data(data: bytes) -> torch.Tensor:
-        return safetensors.torch.load(data)['tensor']
-
-    @staticmethod
-    def _save_data(data: torch.Tensor) -> bytes:
-        return safetensors.torch.save(tensors={'tensor': data})
-
     async def aggregate_clients_results(
             self, request: services_pb2.SafetensorDataProto
     ) -> services_pb2.SafetensorDataProto:
-        data = self._load_data(request.data)
+        data = load_data(request.data)
         client_id = request.client_id
         client_iteration = request.iteration
         logger.info(f"Got aggregation query from {client_id}")
@@ -104,40 +100,56 @@ class CommunicationManager:
             self._returned_clients += 1
             if self._returned_clients == self.world_size:
                 self._agg_results[iteration] = dict()
+                self._returned_clients = 0
 
         return services_pb2.SafetensorDataProto(
-            data=self._save_data(returned_tensor),
+            data=save_data(returned_tensor),
             client_id=client_id,
             iteration=iteration,
         )
 
-    #
-    # def aggregate_batched_clients_results(
-    #         self, request_iterator: Iterator[services_pb2.SafetensorDataProto]
-    # ) -> Iterator[services_pb2.SafetensorDataProto]:
-    #     for request in request_iterator:
-    #         print('request.client_id', request.client_id)
-    #         request_data = safetensors.torch.load(request.data)
-    #         client_id = request.client_id
-    #         client_iteration = request.iteration
-    #         batch_num = request.batch
-    #         total_batches = request.total_batches
-    #         self._agg_results_batched[client_iteration][client_id] = torch.cat(
-    #             [self._agg_results_batched[client_iteration][client_id], request_data['tensor']]
-    #         )
-    #         if (len(self._agg_results_batched[client_iteration]) == self.world_size) and (batch_num == total_batches - 1):
-    #             returned_tensor = self._aggregare_tensors_list(self._agg_results_batched[client_iteration].values())
-    #             # self._agg_results_batched[client_iteration] = defaultdict(lambda: torch.tensor([]))
-    #             for batched_data in batch_generator(returned_tensor, self.batch_size):
-    #                 yield services_pb2.SafetensorDataProto(
-    #                     data=safetensors.torch.save(tensors={'tensor': batched_data.data}),
-    #                     client_id=client_id,
-    #                     iteration=client_iteration,
-    #                     batch=batched_data.batch,
-    #                     total_batches=batched_data.total_batches,
-    #                 )
-    #
-    #
+    async def aggregate_clients_batched_results(
+            self, request_iterator: AsyncIterator[services_pb2.SafetensorDataProto], context: grpc.aio.ServicerContext
+    ) -> None:
+        read = asyncio.create_task(self._collect_batched_requests(request_iterator))
+        client_id, client_iteration = await read
+        write = asyncio.create_task(self._send_batched_response(context, client_id, client_iteration))
+        await write
+
+    async def _collect_batched_requests(self, request_iterator: AsyncIterator[services_pb2.SafetensorDataProto]):
+        client_id, client_iteration = None, None
+        async for request in request_iterator:
+            request_data = load_data(request.data)
+            client_id = request.client_id
+            client_iteration = request.iteration
+            batch_num = request.batch
+            total_batches = request.total_batches
+            async with self._lock:
+                self._agg_results_batched[client_iteration][client_id] = torch.cat(
+                    [self._agg_results_batched[client_iteration][client_id], request_data]
+                )
+            if batch_num == total_batches - 1:
+                async with self._multi_multi_condition:
+                    self._num_clients += 1
+                    self._multi_multi_condition.notify_all()
+        return client_id, client_iteration
+
+    async def _send_batched_response(self, context: grpc.aio.ServicerContext, client_id: str, iteration: int):
+        async with self._multi_multi_condition:
+            await self._multi_multi_condition.wait_for(
+                lambda: len(self._agg_results_batched[iteration]) == self.world_size
+            )
+        collected_tensors = self._agg_results_batched[iteration].values()
+        returned_tensor = self._aggregate_tensors_list(collected_tensors)
+
+        for batched_data in batch_generator(returned_tensor, self.batch_size):
+            await context.write(services_pb2.SafetensorDataProto(
+                data=save_data(batched_data.data),
+                client_id=client_id,
+                iteration=iteration,
+                batch=batched_data.batch,
+                total_batches=batched_data.total_batches,
+            ))
 
 
 class GRpcCommunicatorServicer(services_pb2_grpc.CommunicatorServicer):
@@ -152,36 +164,21 @@ class GRpcCommunicatorServicer(services_pb2_grpc.CommunicatorServicer):
         )
 
     async def PingPong(
-            self, request_iterator: AsyncIterator[services_pb2.Ping], context: grpc.ServicerContext
+            self, request_iterator: AsyncIterator[services_pb2.Ping], context: grpc.aio.ServicerContext
     ) -> AsyncIterator[services_pb2.Ping]:
         async for request in request_iterator:
             returned_status = await self.comm_manager.process_ping(request)
             yield returned_status
 
     async def ExchangeBinarizedDataUnaryUnary(
-            self, request: services_pb2.SafetensorDataProto, context: grpc.ServicerContext
+            self, request: services_pb2.SafetensorDataProto, context: grpc.aio.ServicerContext
     ) -> services_pb2.SafetensorDataProto:
         return await self.comm_manager.aggregate_clients_results(request)
 
-    # def ExchangeBinarizedDataStreamStream(
-    #         self, request_iterator: Iterator[services_pb2.SafetensorDataProto], context: grpc.ServicerContext
-    # ) -> Iterator[services_pb2.SafetensorDataProto]:
-    #     print('ExchangeBinarizedDataStreamStream', context.peer())
-    #     result_batches = self.comm_manager.aggregate_batched_clients_results(request_iterator)
-    #     # returned_tensor, batch_size, client_id, client_iteration = self.comm_manager.aggregate_batched_clients_results(request_iterator)
-    #
-    #     logger.info(f"All queries collected, returning aggregated result")
-    #     # for batched_data in batch_generator(returned_tensor, batch_size):
-    #     #     yield services_pb2.SafetensorDataProto(
-    #     #         data=safetensors.torch.save(tensors={'tensor': batched_data.data}),
-    #     #         client_id=client_id,
-    #     #         iteration=client_iteration,
-    #     #         batch=batched_data.batch,
-    #     #         total_batches=batched_data.total_batches,
-    #     #     )
-    #     for result in result_batches:
-    #         print(context.peer())
-    #         yield result
+    async def ExchangeBinarizedDataStreamStream(
+            self, request_iterator: AsyncIterator[services_pb2.SafetensorDataProto], context: grpc.aio.ServicerContext
+    ) -> None:
+        await self.comm_manager.aggregate_clients_batched_results(request_iterator, context)
 
 
 async def serve(
