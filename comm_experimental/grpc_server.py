@@ -28,7 +28,6 @@ logger.addHandler(sh)
 
 class CommunicationManager:
     def __init__(self, world_size: int, disconnect_idle_client_time: float = 6., batch_size: int = 100):
-
         self.world_size = world_size
         self.disconnect_idle_client_time = disconnect_idle_client_time
         self.batch_size = batch_size
@@ -36,12 +35,11 @@ class CommunicationManager:
         self._lock = asyncio.Lock()
 
         self._unary_unary_condition = asyncio.Condition()
+        self._unary_unary_returned_clients = 0
         self._agg_results = defaultdict(dict)
-        self._returned_clients = 0
 
         self._multi_multi_condition = asyncio.Condition()
-        self._num_clients = 0
-
+        self._multi_multi_returned_clients = 0
         self._agg_results_batched = defaultdict(lambda: defaultdict(lambda: torch.tensor([])))
 
         self.connections = dict()
@@ -97,10 +95,10 @@ class CommunicationManager:
         )
 
         async with self._lock:
-            self._returned_clients += 1
-            if self._returned_clients == self.world_size:
+            self._unary_unary_returned_clients += 1
+            if self._unary_unary_returned_clients == self.world_size:
                 self._agg_results[iteration] = dict()
-                self._returned_clients = 0
+                self._unary_unary_returned_clients = 0
 
         return services_pb2.SafetensorDataProto(
             data=save_data(returned_tensor),
@@ -130,7 +128,6 @@ class CommunicationManager:
                 )
             if batch_num == total_batches - 1:
                 async with self._multi_multi_condition:
-                    self._num_clients += 1
                     self._multi_multi_condition.notify_all()
         return client_id, client_iteration
 
@@ -150,6 +147,12 @@ class CommunicationManager:
                 batch=batched_data.batch,
                 total_batches=batched_data.total_batches,
             ))
+        async with self._lock:
+            self._multi_multi_returned_clients += 1
+            if self._multi_multi_returned_clients == self.world_size:
+                self._agg_results_batched[iteration] = defaultdict(lambda: torch.tensor([]))
+                self._multi_multi_returned_clients = 0
+
 
 
 class GRpcCommunicatorServicer(services_pb2_grpc.CommunicatorServicer):

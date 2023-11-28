@@ -79,8 +79,8 @@ class GRpcClient:
                 wait_for_ready=True,
             )
             self._pings_task = asyncio.create_task(self.process_pongs(server_response_iterator=pingpong_responses))
-            # await self.run_task(ClientTask.batched_exchange)
-            await self.run_task(ClientTask.exchange)
+            await self.run_task(ClientTask.batched_exchange)
+            # await self.run_task(ClientTask.exchange)
         except KeyboardInterrupt:
             pass
 
@@ -123,7 +123,7 @@ class GRpcClient:
                 async with self._condition:
                     self._condition.notify_all()
         except Exception as exc:
-            print('Exception: !!!!!', exc)
+            logger.error(f'Exception: {exc}')
 
     def _get_future(self, ):
         start = time.time()
@@ -144,7 +144,6 @@ class GRpcClient:
 
     def _exchange_messages_generator(self, ):
         for batch in batch_generator():
-            # time.sleep(0.1)
             yield self.tensor_message(batch)
 
     def _get_iter_future(self):
