@@ -90,11 +90,11 @@ class PartyImpl(Party):
         while True:
             event = master_q.get(timeout=5)
             logger.debug(f"getting event from master queue with {event.type} type")
-            if event.type == "initialised":
-                self.party_counter[event.type] += 1
-            if event.type == "pred":
-                self.preds.append(event.data)  # todo: make smth here
-            # self.update_predict(batch=[], upd=0)
+            # if event.type == "initialised":
+            #     self.party_counter[event.type] += 1
+            # if event.type == "pred":
+            #     self.preds.append(event.data)  #
+            # # self.update_predict(batch=[], upd=0)
             #
             logger.debug(f"party_counter: rhs send {self.party_counter['rhs_send']}")
 

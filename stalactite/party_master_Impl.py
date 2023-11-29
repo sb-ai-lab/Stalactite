@@ -29,7 +29,7 @@ class PartyMasterImpl(PartyMaster):
 
         self.master_finalize()
 
-    def loop(self, batcher: Batcher, party: Party): #todo add (X, y) to batcher
+    def loop(self, batcher: Batcher, party: Party):
 
         updates = self.make_init_updates(party.world_size)
         # начальные rhs'ы
@@ -41,8 +41,7 @@ class PartyMasterImpl(PartyMaster):
 
                 party_predictions = party.update_predict(batch[0], updates)  # batch[0] is X, batch[1] in Y
                 predictions = self.aggregate(party_predictions)
-                updates = self.compute_updates(predictions, party_predictions, party.world_size) # add Y here?
-                # todo !!!
+                updates = self.compute_updates(predictions, party_predictions, party.world_size) # todo: add Y here?
                 time.sleep(10)
     def make_batcher(self, uids: List[str]) -> Batcher:
         return [(x, 1) for x in range(2)]
