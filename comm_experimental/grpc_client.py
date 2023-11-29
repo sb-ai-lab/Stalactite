@@ -79,8 +79,8 @@ class GRpcClient:
                 wait_for_ready=True,
             )
             self._pings_task = asyncio.create_task(self.process_pongs(server_response_iterator=pingpong_responses))
-            await self.run_task(ClientTask.batched_exchange)
-            # await self.run_task(ClientTask.exchange)
+            # await self.run_task(ClientTask.batched_exchange)
+            await self.run_task(ClientTask.exchange)
         except KeyboardInterrupt:
             pass
 
@@ -153,16 +153,16 @@ class GRpcClient:
         )
 
     def get_task(self, task_type: ClientTask):
-        if task_type == task_type.exchange:
+        if task_type == ClientTask.exchange:
             return self._get_future()
-        elif task_type == task_type.batched_exchange:
+        elif task_type == ClientTask.batched_exchange:
             return self._get_iter_future()
         else:
             raise ValueError(f'Task type {task_type} not known')
 
     async def get_task_result(self, task_type: ClientTask, future: Any) -> torch.Tensor:
         result = torch.tensor([])
-        if task_type == task_type.exchange:
+        if task_type == ClientTask.exchange:
             start = time.time()
             data = await future
             breakpoint = time.time()
@@ -176,7 +176,7 @@ class GRpcClient:
                 f" - coro awaited for {round(awaiting_time, 4)} sec;\n"
                 f" - deserialization time {round(deserialization_time, 4)}"
             ))
-        elif task_type == task_type.batched_exchange:
+        elif task_type == ClientTask.batched_exchange:
             start = time.time()
             async for batch in future:
                 data_batch = load_data(batch.data)
