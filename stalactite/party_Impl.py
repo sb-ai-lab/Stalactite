@@ -66,8 +66,9 @@ class PartyImpl(Party):
     def send(self, method_name: str, mass_kwargs: Dict[str, list], **kwargs):
         pass
 
+    @property
     def world_size(self) -> int:
-        pass
+        return len(self.members)
 
     def update_predict(self, batch: List[str], upd: PartyDataTensor) -> PartyDataTensor:
         """
@@ -77,15 +78,10 @@ class PartyImpl(Party):
         4. Sent predictions from all members to master
         """
 
-        # this is for developing only (sent random rhs to all members end get random predictions from members)
-        logger.debug("do update predict")
+        logger.debug("PARTY: do update predict")
         for i, m in enumerate(self.members):
-            rhs = random.random()  # todo: do it in master
-            logger.debug(f"Computing rhs...")
-            # logger.debug(f"random rhs is {rhs}")
-            event = Event(type="rhs", data=rhs)
-            logger.debug(f"Sending  rhs to member {i+1}")
-
+            event = Event(type="rhs", data={"X": batch, "rhs":  upd[i]})
+            logger.debug(f"PARTY: Sending  batch & rhs to member {i+1}")
             self.members_q[i].put(event)
 
         self.party_counter["rhs_send"] += 1
@@ -97,17 +93,17 @@ class PartyImpl(Party):
             if event.type == "initialised":
                 self.party_counter[event.type] += 1
             if event.type == "pred":
-                self.preds.append(event.data)
-            self.update_predict(batch=[], upd=0)
-
+                self.preds.append(event.data)  # todo: make smth here
+            # self.update_predict(batch=[], upd=0)
+            #
             logger.debug(f"party_counter: rhs send {self.party_counter['rhs_send']}")
 
-            if self.party_counter["rhs_send"] == 5:
+            if self.party_counter["rhs_send"] == 2: #2 is batch size
                 logger.debug(f"Stopping master thread...")
                 break
             time.sleep(5)
 
-    def member_func(self, member_q: Queue):
+    def member_func(self, member_q: Queue, member):
         while True:
             event = member_q.get()
             logger.debug(f"getting event from member queue with {event.type} type")
@@ -116,13 +112,14 @@ class PartyImpl(Party):
                 self.party_counter[event.type] += 1
 
             elif event.type == "rhs":
-                pred = random.random() + 1  # todo: do it in member
-                logger.debug(f"Computing preds...")
+                batch = event.data["X"]
+                rhs = event.data["rhs"]
+                pred = member.update_predict(batch, rhs)
                 event = Event(type="pred", data=pred)
                 self.master_q.put(event)
                 logger.debug(f"Sending  preds to master")
 
-            if self.party_counter["rhs_send"] == 5:
+            if self.party_counter["rhs_send"] == 2:
                 logger.debug(f"Stopping member thread...")
                 break
             time.sleep(5)
@@ -135,11 +132,14 @@ class PartyImpl(Party):
         th_master.start()
         logger.debug("master thread-1 started")
         for i, member in enumerate(self.members):
-            th_member = Thread(target=self.member_func, args=(self.members_q[i],))
+            th_member = Thread(target=self.member_func, args=(self.members_q[i], member))
             threads.append(th_member)
             logger.debug(f"starting member thread-{i + 2}")
             th_member.start()
             logger.debug(f"member thread-{i+2} started")
+
+        self.master.run(self) #???
+
         for i, t in enumerate(threads):
             logger.debug(f"before joining thread {i+1}")
             t.join()
