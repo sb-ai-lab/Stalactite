@@ -26,8 +26,8 @@ class CommunicatorStub(object):
                 )
         self.ExchangeNumpyDataUnaryUnary = channel.unary_unary(
                 '/Communicator/ExchangeNumpyDataUnaryUnary',
-                request_serializer=services__pb2.NumpyMessage.SerializeToString,
-                response_deserializer=services__pb2.NumpyMessage.FromString,
+                request_serializer=services__pb2.TensorProto.SerializeToString,
+                response_deserializer=services__pb2.TensorProto.FromString,
                 )
         self.ExchangeBinarizedDataStreamUnary = channel.stream_unary(
                 '/Communicator/ExchangeBinarizedDataStreamUnary',
@@ -36,8 +36,8 @@ class CommunicatorStub(object):
                 )
         self.ExchangeNumpyDataStreamUnary = channel.stream_unary(
                 '/Communicator/ExchangeNumpyDataStreamUnary',
-                request_serializer=services__pb2.NumpyMessage.SerializeToString,
-                response_deserializer=services__pb2.NumpyMessage.FromString,
+                request_serializer=services__pb2.TensorProto.SerializeToString,
+                response_deserializer=services__pb2.TensorProto.FromString,
                 )
         self.ExchangeBinarizedDataStreamStream = channel.stream_stream(
                 '/Communicator/ExchangeBinarizedDataStreamStream',
@@ -46,8 +46,8 @@ class CommunicatorStub(object):
                 )
         self.ExchangeNumpyDataStreamStream = channel.stream_stream(
                 '/Communicator/ExchangeNumpyDataStreamStream',
-                request_serializer=services__pb2.NumpyMessage.SerializeToString,
-                response_deserializer=services__pb2.NumpyMessage.FromString,
+                request_serializer=services__pb2.TensorProto.SerializeToString,
+                response_deserializer=services__pb2.TensorProto.FromString,
                 )
 
 
@@ -120,8 +120,8 @@ def add_CommunicatorServicer_to_server(servicer, server):
             ),
             'ExchangeNumpyDataUnaryUnary': grpc.unary_unary_rpc_method_handler(
                     servicer.ExchangeNumpyDataUnaryUnary,
-                    request_deserializer=services__pb2.NumpyMessage.FromString,
-                    response_serializer=services__pb2.NumpyMessage.SerializeToString,
+                    request_deserializer=services__pb2.TensorProto.FromString,
+                    response_serializer=services__pb2.TensorProto.SerializeToString,
             ),
             'ExchangeBinarizedDataStreamUnary': grpc.stream_unary_rpc_method_handler(
                     servicer.ExchangeBinarizedDataStreamUnary,
@@ -130,8 +130,8 @@ def add_CommunicatorServicer_to_server(servicer, server):
             ),
             'ExchangeNumpyDataStreamUnary': grpc.stream_unary_rpc_method_handler(
                     servicer.ExchangeNumpyDataStreamUnary,
-                    request_deserializer=services__pb2.NumpyMessage.FromString,
-                    response_serializer=services__pb2.NumpyMessage.SerializeToString,
+                    request_deserializer=services__pb2.TensorProto.FromString,
+                    response_serializer=services__pb2.TensorProto.SerializeToString,
             ),
             'ExchangeBinarizedDataStreamStream': grpc.stream_stream_rpc_method_handler(
                     servicer.ExchangeBinarizedDataStreamStream,
@@ -140,8 +140,8 @@ def add_CommunicatorServicer_to_server(servicer, server):
             ),
             'ExchangeNumpyDataStreamStream': grpc.stream_stream_rpc_method_handler(
                     servicer.ExchangeNumpyDataStreamStream,
-                    request_deserializer=services__pb2.NumpyMessage.FromString,
-                    response_serializer=services__pb2.NumpyMessage.SerializeToString,
+                    request_deserializer=services__pb2.TensorProto.FromString,
+                    response_serializer=services__pb2.TensorProto.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -199,8 +199,8 @@ class Communicator(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Communicator/ExchangeNumpyDataUnaryUnary',
-            services__pb2.NumpyMessage.SerializeToString,
-            services__pb2.NumpyMessage.FromString,
+            services__pb2.TensorProto.SerializeToString,
+            services__pb2.TensorProto.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -233,8 +233,8 @@ class Communicator(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.stream_unary(request_iterator, target, '/Communicator/ExchangeNumpyDataStreamUnary',
-            services__pb2.NumpyMessage.SerializeToString,
-            services__pb2.NumpyMessage.FromString,
+            services__pb2.TensorProto.SerializeToString,
+            services__pb2.TensorProto.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -267,7 +267,7 @@ class Communicator(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.stream_stream(request_iterator, target, '/Communicator/ExchangeNumpyDataStreamStream',
-            services__pb2.NumpyMessage.SerializeToString,
-            services__pb2.NumpyMessage.FromString,
+            services__pb2.TensorProto.SerializeToString,
+            services__pb2.TensorProto.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

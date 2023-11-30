@@ -12,7 +12,7 @@ import safetensors.torch
 
 from gen_code import services_pb2, services_pb2_grpc
 from utils import batch_generator, save_data, load_data, BatchedData
-from helpers import PingResponse, ClientStatus, ClientTask, format_important_logging
+from helpers import PingResponse, ClientStatus, ClientTask, format_important_logging, Serialization
 from constants import MAX_MESSAGE_LENGTH
 
 parser = argparse.ArgumentParser()
@@ -80,7 +80,7 @@ class GRpcClient:
             )
             self._pings_task = asyncio.create_task(self.process_pongs(server_response_iterator=pingpong_responses))
             # await self.run_task(ClientTask.batched_exchange)
-            await self.run_task(ClientTask.exchange)
+            await self.run_task(ClientTask.exchange_tensor)
         except KeyboardInterrupt:
             pass
 
@@ -153,20 +153,20 @@ class GRpcClient:
         )
 
     def get_task(self, task_type: ClientTask):
-        if task_type == ClientTask.exchange:
+        if task_type == ClientTask.exchange_tensor:
             return self._get_future()
-        elif task_type == ClientTask.batched_exchange:
+        elif task_type == ClientTask.batched_exchange_tensor:
             return self._get_iter_future()
         else:
             raise ValueError(f'Task type {task_type} not known')
 
     async def get_task_result(self, task_type: ClientTask, future: Any) -> torch.Tensor:
         result = torch.tensor([])
-        if task_type == ClientTask.exchange:
+        if task_type == ClientTask.exchange_tensor:
             start = time.time()
             data = await future
             breakpoint = time.time()
-            result = load_data(data.data)
+            result = load_data(data, serialization=Serialization.safetensors)
             end = time.time()
             total_time = end - start
             awaiting_time = breakpoint - start
@@ -176,10 +176,10 @@ class GRpcClient:
                 f" - coro awaited for {round(awaiting_time, 4)} sec;\n"
                 f" - deserialization time {round(deserialization_time, 4)}"
             ))
-        elif task_type == ClientTask.batched_exchange:
+        elif task_type == ClientTask.batched_exchange_tensor:
             start = time.time()
             async for batch in future:
-                data_batch = load_data(batch.data)
+                data_batch = load_data(batch, serialization=Serialization.safetensors)
                 result = torch.cat([result, data_batch])
             end = time.time()
             logger.info(format_important_logging(

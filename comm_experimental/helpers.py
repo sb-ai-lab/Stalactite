@@ -1,9 +1,17 @@
 import enum
 
 
+class Serialization(enum.Enum):
+    safetensors = 0
+    protobuf = 1
+
+
 class ClientTask(enum.Enum):
-    batched_exchange = 0
-    exchange = 1
+    batched_exchange_tensor = 0
+    exchange_tensor = 1
+    batched_exchange_array = 2
+    exchange_array = 3
+    finish = 4
 
 
 class PingResponse(str, enum.Enum):

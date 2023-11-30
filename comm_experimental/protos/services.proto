@@ -6,17 +6,17 @@ service Communicator {
   // Custom serialization of the tensors
   rpc ExchangeBinarizedDataUnaryUnary(SafetensorDataProto) returns (SafetensorDataProto) {}
   // Proto serialization of the tensors (converted to numpy)
-  rpc ExchangeNumpyDataUnaryUnary(NumpyMessage) returns (NumpyMessage) {}
+  rpc ExchangeNumpyDataUnaryUnary(TensorProto) returns (TensorProto) {}
   // For large client messages:
   // Custom serialization of the tensors
   rpc ExchangeBinarizedDataStreamUnary(stream SafetensorDataProto) returns (SafetensorDataProto) {}
   // Proto serialization of the tensors (converted to numpy)
-  rpc ExchangeNumpyDataStreamUnary(stream NumpyMessage) returns (NumpyMessage) {}
+  rpc ExchangeNumpyDataStreamUnary(stream TensorProto) returns (TensorProto) {}
   // For large client and server messages:
   // Custom serialization of the tensors
   rpc ExchangeBinarizedDataStreamStream(stream SafetensorDataProto) returns (stream SafetensorDataProto) {}
   // Proto serialization of the tensors (converted to numpy)
-  rpc ExchangeNumpyDataStreamStream(stream NumpyMessage) returns (stream NumpyMessage) {}
+  rpc ExchangeNumpyDataStreamStream(stream TensorProto) returns (stream TensorProto) {}
 }
 
 
@@ -44,7 +44,7 @@ message Ping {
 //}
 
 // TensorProto stores serialized Tensor objects.
-message NumpyMessage {
+message TensorProto {
   // The dimensions in the tensor.
   repeated int64 dims = 1;
 
@@ -87,4 +87,8 @@ message NumpyMessage {
   repeated int64 int64_data = 8;
 
   int32 status = 9;
+  int32 iteration = 10;
+  string client_id = 11;
+  optional int32 batch = 12;
+  optional int32 total_batches = 13;
 }

@@ -26,36 +26,36 @@ class Ping(_message.Message):
     data: str
     def __init__(self, data: _Optional[str] = ...) -> None: ...
 
-class NumpyMessage(_message.Message):
-    __slots__ = ["dims", "data_type", "float_data", "int32_data", "byte_data", "string_data", "double_data", "int64_data", "status"]
+class TensorProto(_message.Message):
+    __slots__ = ["dims", "data_type", "float_data", "int32_data", "byte_data", "string_data", "double_data", "int64_data", "status", "iteration", "client_id", "batch", "total_batches"]
     class DataType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = []
-        UNDEFINED: _ClassVar[NumpyMessage.DataType]
-        FLOAT: _ClassVar[NumpyMessage.DataType]
-        INT32: _ClassVar[NumpyMessage.DataType]
-        BYTE: _ClassVar[NumpyMessage.DataType]
-        STRING: _ClassVar[NumpyMessage.DataType]
-        BOOL: _ClassVar[NumpyMessage.DataType]
-        UINT8: _ClassVar[NumpyMessage.DataType]
-        INT8: _ClassVar[NumpyMessage.DataType]
-        UINT16: _ClassVar[NumpyMessage.DataType]
-        INT16: _ClassVar[NumpyMessage.DataType]
-        INT64: _ClassVar[NumpyMessage.DataType]
-        FLOAT16: _ClassVar[NumpyMessage.DataType]
-        DOUBLE: _ClassVar[NumpyMessage.DataType]
-    UNDEFINED: NumpyMessage.DataType
-    FLOAT: NumpyMessage.DataType
-    INT32: NumpyMessage.DataType
-    BYTE: NumpyMessage.DataType
-    STRING: NumpyMessage.DataType
-    BOOL: NumpyMessage.DataType
-    UINT8: NumpyMessage.DataType
-    INT8: NumpyMessage.DataType
-    UINT16: NumpyMessage.DataType
-    INT16: NumpyMessage.DataType
-    INT64: NumpyMessage.DataType
-    FLOAT16: NumpyMessage.DataType
-    DOUBLE: NumpyMessage.DataType
+        UNDEFINED: _ClassVar[TensorProto.DataType]
+        FLOAT: _ClassVar[TensorProto.DataType]
+        INT32: _ClassVar[TensorProto.DataType]
+        BYTE: _ClassVar[TensorProto.DataType]
+        STRING: _ClassVar[TensorProto.DataType]
+        BOOL: _ClassVar[TensorProto.DataType]
+        UINT8: _ClassVar[TensorProto.DataType]
+        INT8: _ClassVar[TensorProto.DataType]
+        UINT16: _ClassVar[TensorProto.DataType]
+        INT16: _ClassVar[TensorProto.DataType]
+        INT64: _ClassVar[TensorProto.DataType]
+        FLOAT16: _ClassVar[TensorProto.DataType]
+        DOUBLE: _ClassVar[TensorProto.DataType]
+    UNDEFINED: TensorProto.DataType
+    FLOAT: TensorProto.DataType
+    INT32: TensorProto.DataType
+    BYTE: TensorProto.DataType
+    STRING: TensorProto.DataType
+    BOOL: TensorProto.DataType
+    UINT8: TensorProto.DataType
+    INT8: TensorProto.DataType
+    UINT16: TensorProto.DataType
+    INT16: TensorProto.DataType
+    INT64: TensorProto.DataType
+    FLOAT16: TensorProto.DataType
+    DOUBLE: TensorProto.DataType
     DIMS_FIELD_NUMBER: _ClassVar[int]
     DATA_TYPE_FIELD_NUMBER: _ClassVar[int]
     FLOAT_DATA_FIELD_NUMBER: _ClassVar[int]
@@ -65,8 +65,12 @@ class NumpyMessage(_message.Message):
     DOUBLE_DATA_FIELD_NUMBER: _ClassVar[int]
     INT64_DATA_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
+    ITERATION_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    BATCH_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_BATCHES_FIELD_NUMBER: _ClassVar[int]
     dims: _containers.RepeatedScalarFieldContainer[int]
-    data_type: NumpyMessage.DataType
+    data_type: TensorProto.DataType
     float_data: _containers.RepeatedScalarFieldContainer[float]
     int32_data: _containers.RepeatedScalarFieldContainer[int]
     byte_data: bytes
@@ -74,4 +78,8 @@ class NumpyMessage(_message.Message):
     double_data: _containers.RepeatedScalarFieldContainer[float]
     int64_data: _containers.RepeatedScalarFieldContainer[int]
     status: int
-    def __init__(self, dims: _Optional[_Iterable[int]] = ..., data_type: _Optional[_Union[NumpyMessage.DataType, str]] = ..., float_data: _Optional[_Iterable[float]] = ..., int32_data: _Optional[_Iterable[int]] = ..., byte_data: _Optional[bytes] = ..., string_data: _Optional[_Iterable[bytes]] = ..., double_data: _Optional[_Iterable[float]] = ..., int64_data: _Optional[_Iterable[int]] = ..., status: _Optional[int] = ...) -> None: ...
+    iteration: int
+    client_id: str
+    batch: int
+    total_batches: int
+    def __init__(self, dims: _Optional[_Iterable[int]] = ..., data_type: _Optional[_Union[TensorProto.DataType, str]] = ..., float_data: _Optional[_Iterable[float]] = ..., int32_data: _Optional[_Iterable[int]] = ..., byte_data: _Optional[bytes] = ..., string_data: _Optional[_Iterable[bytes]] = ..., double_data: _Optional[_Iterable[float]] = ..., int64_data: _Optional[_Iterable[int]] = ..., status: _Optional[int] = ..., iteration: _Optional[int] = ..., client_id: _Optional[str] = ..., batch: _Optional[int] = ..., total_batches: _Optional[int] = ...) -> None: ...
