@@ -4,6 +4,7 @@ from typing import List, Dict
 from stalactite.base import DataTensor, PartyDataTensor
 
 
+
 class Party(ABC):
     @property
     @abstractmethod
