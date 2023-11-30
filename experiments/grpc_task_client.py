@@ -1,22 +1,26 @@
 import argparse
 import asyncio
 import logging
-from functools import wraps
 import time
-from typing import Any, AsyncIterator, Generator, Callable
+from typing import AsyncIterator
 import uuid
 from contextlib import asynccontextmanager
 
 import grpc
-import numpy as np
 import torch
-import safetensors.torch
 
-from gen_code import services_pb2, services_pb2_grpc
-from utils import save_data, load_data, BatchedData  # batch_generator
-from helpers import PingResponse, ClientStatus, ClientTask, format_important_logging, Serialization
-from constants import MAX_MESSAGE_LENGTH
-from experiment_helpers import Task, ExperimentalData
+from generated_code import services_pb2, services_pb2_grpc
+from utils import (
+    PingResponse,
+    ClientStatus,
+    ClientTask,
+    format_important_logging,
+    Serialization,
+    MAX_MESSAGE_LENGTH,
+    Task,
+    ExperimentalData,
+)
+
 
 parser = argparse.ArgumentParser()
 
@@ -181,5 +185,4 @@ if __name__ == '__main__':
     parser.add_argument("--batch_size", type=int, default=1000, help="Number of tensor rows in batch")
     args = parser.parse_args()
 
-    # client.add_task_to_queue(ClientTask.exchange)
     asyncio.get_event_loop().run_until_complete(run_client(args))

@@ -10,10 +10,19 @@ import numpy as np
 import torch
 import safetensors.torch
 
-from gen_code import services_pb2, services_pb2_grpc
-from utils import batch_generator, save_data, load_data, BatchedData
-from helpers import PingResponse, ClientStatus, ClientTask, format_important_logging, Serialization
-from constants import MAX_MESSAGE_LENGTH
+from generated_code import services_pb2, services_pb2_grpc
+from utils import (
+    batch_generator,
+    save_data,
+    load_data,
+    BatchedData,
+    PingResponse,
+    ClientStatus,
+    ClientTask,
+    format_important_logging,
+    Serialization,
+    MAX_MESSAGE_LENGTH,
+)
 
 parser = argparse.ArgumentParser()
 

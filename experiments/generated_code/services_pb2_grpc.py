@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import gen_code.services_pb2 as services__pb2
+import generated_code.services_pb2 as services__pb2
 
 
 class CommunicatorStub(object):

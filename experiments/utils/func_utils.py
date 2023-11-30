@@ -5,8 +5,8 @@ import numpy as np
 import torch
 import safetensors.torch
 
-from gen_code import services_pb2
-from helpers import Serialization
+from generated_code import services_pb2
+from utils.helpers import Serialization
 
 
 @dataclass

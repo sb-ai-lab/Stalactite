@@ -7,8 +7,8 @@ from typing import Any, Generator, Callable
 import numpy as np
 import torch
 
-from utils import save_data, load_data, BatchedData
-from helpers import ClientTask, format_important_logging, Serialization
+from utils.func_utils import save_data, load_data, BatchedData
+from utils.helpers import ClientTask, format_important_logging, Serialization
 
 parser = argparse.ArgumentParser()
 
