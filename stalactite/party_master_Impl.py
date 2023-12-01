@@ -16,6 +16,8 @@ class PartyMasterImpl(PartyMaster):
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.Y = Y
+        self.epoch_counter = 0
+        self.batch_counter = 0
 
     def make_batcher(self, uids: List[str]) -> Batcher:
         """

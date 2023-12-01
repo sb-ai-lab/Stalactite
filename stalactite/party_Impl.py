@@ -95,8 +95,9 @@ class PartyImpl(Party):
             event = Event(type="rhs", data={"uids": batch[0], "rhs":  upd[i], "member_id": i})
             logger.debug(f"PARTY: Sending  batch & rhs to member {i+1}")
             self.members_q[i].put(event)
+            self.party_counter["rhs_send"] += 1
 
-        self.party_counter["rhs_send"] += 1
+        self.party_counter["rhs_batch_send"] += 1
         while len(preds_dict) < self.world_size:
             event = self.predictions_q.get()
             if event.type == "pred":
@@ -123,7 +124,7 @@ class PartyImpl(Party):
                 self.predictions_q.put(event)
                 logger.debug(f"Sending  preds to party")
 
-            if self.party_counter["rhs_send"] == 3:  # todo: rewrite finalise condition
+            if self.party_counter["rhs_batch_send"] == 3:  # todo: rewrite finalise condition
                 logger.debug(f"Stopping member thread...")
                 break
 

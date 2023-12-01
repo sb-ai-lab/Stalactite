@@ -14,6 +14,8 @@ class PartyMaster(ABC):
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
     Y: DataTensor
+    epoch_counter: int
+    batch_counter: int
 
     def run(self, party: Party):
 
@@ -28,32 +30,6 @@ class PartyMaster(ABC):
         )
 
         self.master_finalize()
-
-    # def run(self):
-    #     party = self.randezvous()
-    #     uids = self.synchronize_uids(party)
-    #
-    #     self.master_initialize()
-    #
-    #     self.loop(
-    #         batcher=self.make_batcher(uids),
-    #         party=party
-    #     )
-    #
-    #     self.master_finalize()
-
-    # @abstractmethod
-    # def randezvous(self) -> Party:
-    #     ...
-
-    # @abstractmethod
-    # def synchronize_uids(self, party: Party) -> List[str]:
-    #     uids = (uid for member_uids in party.records_uids() for uid in set(member_uids))
-    #     shared_uids = [uid for uid, count in collections.Counter(uids).items() if count == party.world_size]
-    #
-    #     party.register_records_uids(shared_uids)
-    #
-    #     return shared_uids
 
     def loop(self, batcher: Batcher, party: Party):
         updates = self.make_init_updates(party.world_size)
@@ -74,8 +50,8 @@ class PartyMaster(ABC):
                     party_predictions = party.predict(use_test=True)
                     predictions = self.aggregate(party_predictions)
                     self.report_metrics(self.Y, predictions, name="Test")
-
-        ...
+                self.batch_counter += 1
+            self.epoch_counter += 1
 
     @abstractmethod
     def make_batcher(self, uids: List[str]) -> Batcher:
