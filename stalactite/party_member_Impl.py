@@ -2,7 +2,9 @@ import random
 import logging
 from typing import List
 
-from party_member import PartyMember
+import torch
+
+from stalactite.party_member import PartyMember
 from stalactite.base import DataTensor
 
 logger = logging.getLogger("my_logger")
@@ -17,7 +19,7 @@ class PartyMemberImpl(PartyMember):
 
     def predict(self, batch) -> DataTensor:
         logger.debug(f"PARTY MEMBER: making predict...")
-        return random.random()
+        return torch.rand(len(batch))
 
     def records_uids(self) -> List[str]:
         pass
@@ -31,4 +33,4 @@ class PartyMemberImpl(PartyMember):
 
     def update_weights(self, upd: DataTensor):
         logger.debug(f"PARTY MEMBER: updating weights...")
-        return random.random()
+        # todo: add batch here (uid part)? Q Nik

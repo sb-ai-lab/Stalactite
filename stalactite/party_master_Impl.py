@@ -1,54 +1,40 @@
 import random
 import logging
-import time
-from threading import Thread
 from typing import List
 
-from party_master import PartyMaster
+import torch
+
+from stalactite.party_master import PartyMaster
 from stalactite.base import PartyDataTensor, DataTensor, Batcher
-from stalactite.communications import Party
 
 logger = logging.getLogger("my_logger")
 
+
 class PartyMasterImpl(PartyMaster):
-
-    def __init__(self, epochs):
+    def __init__(self, epochs: int, report_train_metrics_iteration: int, report_test_metrics_iteration: int, Y: DataTensor):
         self.epochs = epochs
+        self.report_train_metrics_iteration = report_train_metrics_iteration
+        self.report_test_metrics_iteration = report_test_metrics_iteration
+        self.Y = Y
 
-    def run(self, party):
-
-        # party = self.randezvous()
-        # uids = self.synchronize_uids(party)
-
-        self.master_initialize()
-
-        self.loop(
-            batcher=self.make_batcher(uids=[0, 1, 2]),
-            party=party
-        )
-
-        self.master_finalize()
-
-    def loop(self, batcher: Batcher, party: Party):
-
-        updates = self.make_init_updates(party.world_size)
-        # начальные rhs'ы
-        for epoch in range(self.epochs):
-            logger.debug(f"PARTY MASTER: TRAIN LOOP - starting EPOCH {epoch}")
-
-            for i, batch in enumerate(batcher):
-                logger.debug(f"PARTY MASTER: TRAIN LOOP - starting BATCH {i}")
-
-                party_predictions = party.update_predict(batch[0], updates)  # batch[0] is X, batch[1] in Y
-                predictions = self.aggregate(party_predictions)
-                updates = self.compute_updates(predictions, party_predictions, party.world_size) # todo: add Y here?
-                time.sleep(10)
     def make_batcher(self, uids: List[str]) -> Batcher:
-        return [(x, 1) for x in range(2)]
+        """
+        ['a', 'b', 'c', 'd', 'e'] - uids
+        [0, 0, 1, 1, 0] - targets
+        (['a', 'b'], [0, 0]) - batch1
+        (['c', 'd'], [1, 1]) batch2
+        (['e'], [0]) - batch3
+
+        :param uids:
+        :return:
+        """
+        batch_size = 2  # todo: this must be in input
+        y_list = [random.randint(0, 1) for u in uids]  # todo: this must be in input
+        return [(uids[pos:pos + batch_size], y_list[pos:pos + batch_size]) for pos in range(0, len(uids), batch_size)] #todo: do this in Batcherimpl
 
     def make_init_updates(self, world_size: int) -> PartyDataTensor:
         logger.debug("PARTY MASTER: making init updates")
-        return [random.random() for _ in range(world_size)]
+        return torch.rand(world_size)
 
     def master_finalize(self):
         pass
@@ -56,21 +42,16 @@ class PartyMasterImpl(PartyMaster):
     def master_initialize(self):
         pass
 
-    def randezvous(self) -> Party:
-        pass
-
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
         pass
 
-    def synchronize_uids(self, party: Party) -> List[str]:
-        pass
     def aggregate(self, party_predictions: PartyDataTensor) -> DataTensor:
         """
         summ of all members' predictions
         :param party_predictions:
         :return:
         """
-        return party_predictions
+        return torch.sum(party_predictions, dim=1)
 
     def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor, world_size: int) -> List[DataTensor]:
         """
@@ -82,4 +63,4 @@ class PartyMasterImpl(PartyMaster):
         """
         logger.debug(f"PARTY MASTER: compute_updates")
 
-        return [random.random() for _ in range(world_size)]
+        return [torch.rand(1) for _ in range(predictions.size(dim=0))]

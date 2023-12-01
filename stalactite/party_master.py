@@ -1,9 +1,12 @@
 import collections
+import logging
 from abc import ABC, abstractmethod
 from typing import List
 
 from stalactite.base import Batcher, DataTensor, PartyDataTensor
 from stalactite.communications import Party
+
+logger = logging.getLogger("my_logger")
 
 
 class PartyMaster(ABC):
@@ -12,41 +15,55 @@ class PartyMaster(ABC):
     report_test_metrics_iteration: int
     Y: DataTensor
 
-    def run(self):
-        party = self.randezvous()
-        uids = self.synchronize_uids(party)
+    def run(self, party: Party):
+
+        party.randezvous()
+        uids = party.synchronize_uids()
 
         self.master_initialize()
 
         self.loop(
-            batcher=self.make_batcher(uids),
+            batcher=self.make_batcher(uids=uids),
             party=party
         )
 
         self.master_finalize()
 
-    @abstractmethod
-    def randezvous(self) -> Party:
-        ...
+    # def run(self):
+    #     party = self.randezvous()
+    #     uids = self.synchronize_uids(party)
+    #
+    #     self.master_initialize()
+    #
+    #     self.loop(
+    #         batcher=self.make_batcher(uids),
+    #         party=party
+    #     )
+    #
+    #     self.master_finalize()
 
-    @abstractmethod
-    def synchronize_uids(self, party: Party) -> List[str]:
-        uids = (uid for member_uids in party.records_uids() for uid in set(member_uids))
-        shared_uids = [uid for uid, count in collections.Counter(uids).items() if count == party.world_size]
+    # @abstractmethod
+    # def randezvous(self) -> Party:
+    #     ...
 
-        party.register_records_uids(shared_uids)
-
-        return shared_uids
+    # @abstractmethod
+    # def synchronize_uids(self, party: Party) -> List[str]:
+    #     uids = (uid for member_uids in party.records_uids() for uid in set(member_uids))
+    #     shared_uids = [uid for uid, count in collections.Counter(uids).items() if count == party.world_size]
+    #
+    #     party.register_records_uids(shared_uids)
+    #
+    #     return shared_uids
 
     def loop(self, batcher: Batcher, party: Party):
         updates = self.make_init_updates(party.world_size)
-        # начальные rhs'ы
         for epoch in range(self.epochs):
+            logger.debug(f"PARTY MASTER: TRAIN LOOP - starting EPOCH {epoch}")
             for i, batch in enumerate(batcher):
+                logger.debug(f"PARTY MASTER: TRAIN LOOP - starting BATCH {i}")
                 party_predictions = party.update_predict(batch, updates)
                 predictions = self.aggregate(party_predictions)
                 updates = self.compute_updates(predictions, party_predictions, party.world_size)
-                # это rhs'ы
 
                 if self.report_train_metrics_iteration > 0 and i % self.report_train_metrics_iteration == 0:
                     party_predictions = party.predict()

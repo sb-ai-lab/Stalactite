@@ -1,18 +1,16 @@
 import sys
 import collections
 import logging
-import random
 import time
 from typing import List, Any, Dict
 from dataclasses import dataclass
 from queue import Queue
 from threading import Thread
 
-from communications import Party
-from stalactite.base import PartyDataTensor
+import torch
 
-# logging.basicConfig(level=logging.DEBUG,
-#                     format='(%(threadName)-9s) %(message)s',)
+from stalactite.communications import Party
+from stalactite.base import PartyDataTensor
 
 
 formatter = logging.Formatter(
@@ -25,6 +23,7 @@ logging.basicConfig(handlers=[StreamHandler], level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 
 logger = logging.getLogger("my_logger")
+
 
 @dataclass
 class Event:
@@ -39,8 +38,8 @@ class PartyImpl(Party):
         self.members = members
         self.master_q = Queue()
         self.members_q = [Queue() for _ in members]
+        self.predictions_q = Queue()
         self.party_counter = collections.Counter()
-        self.preds = [] #move it to master
 
     def initialize(self):
         logger.debug("init party")
@@ -51,8 +50,20 @@ class PartyImpl(Party):
     def finalize(self):
         return
 
-    def predict(self, use_test: bool = False) -> PartyDataTensor:
+    def synchronize_uids(self) -> List[str]:
+        return ["a", "b", "c", "d", "e"]
+
+    def randezvous(self) -> Party:
         pass
+
+    def predict(self, use_test: bool = False) -> PartyDataTensor:
+        """
+        1. Sent prediction request to all members
+        2. collect all predictions from members
+        :param use_test:
+        :return:
+        """
+        return torch.stack([torch.rand(5) for x in range(self.world_size)]) #5 is ds_size
 
     def records_uids(self) -> List[str]:
         pass
@@ -75,33 +86,25 @@ class PartyImpl(Party):
         1. Sent rhs's from master to all members
         2. Update weights in members side
         3. Make batch predictions on members
-        4. Sent predictions from all members to master
+        4. Collect all predictions from members and return
         """
-
         logger.debug("PARTY: do update predict")
+        preds_dict = {}
+
         for i, m in enumerate(self.members):
-            event = Event(type="rhs", data={"X": batch, "rhs":  upd[i]})
+            event = Event(type="rhs", data={"uids": batch[0], "rhs":  upd[i], "member_id": i})
             logger.debug(f"PARTY: Sending  batch & rhs to member {i+1}")
             self.members_q[i].put(event)
 
         self.party_counter["rhs_send"] += 1
-
-    def Master_func(self, master_q: Queue):
-        while True:
-            event = master_q.get(timeout=5)
-            logger.debug(f"getting event from master queue with {event.type} type")
-            # if event.type == "initialised":
-            #     self.party_counter[event.type] += 1
-            # if event.type == "pred":
-            #     self.preds.append(event.data)  #
-            # # self.update_predict(batch=[], upd=0)
-            #
-            logger.debug(f"party_counter: rhs send {self.party_counter['rhs_send']}")
-
-            if self.party_counter["rhs_send"] == 2: #2 is batch size
-                logger.debug(f"Stopping master thread...")
-                break
-            time.sleep(5)
+        while len(preds_dict) < self.world_size:
+            event = self.predictions_q.get()
+            if event.type == "pred":
+                member = event.data["member_id"]
+                logger.debug(f"PARTY: GET prediction from member {member}")
+                preds_dict[member] = event.data["prediction"]
+            logger.debug(f"PARTY: predictions count: {len(preds_dict)}")
+        return torch.stack([preds_dict[x] for x in range(self.world_size)])
 
     def member_func(self, member_q: Queue, member):
         while True:
@@ -112,25 +115,20 @@ class PartyImpl(Party):
                 self.party_counter[event.type] += 1
 
             elif event.type == "rhs":
-                batch = event.data["X"]
+                uids = event.data["uids"]
                 rhs = event.data["rhs"]
-                pred = member.update_predict(batch, rhs)
-                event = Event(type="pred", data=pred)
-                self.master_q.put(event)
-                logger.debug(f"Sending  preds to master")
+                pred = member.update_predict(uids, rhs)
+                member_id = event.data["member_id"]
+                event = Event(type="pred", data={"prediction": pred, "member_id": member_id})
+                self.predictions_q.put(event)
+                logger.debug(f"Sending  preds to party")
 
-            if self.party_counter["rhs_send"] == 2:
+            if self.party_counter["rhs_send"] == 3:  # todo: rewrite finalise condition
                 logger.debug(f"Stopping member thread...")
                 break
-            time.sleep(5)
 
     def run(self):
         threads = []
-        th_master = Thread(target=self.Master_func, args=(self.master_q,))
-        threads.append(th_master)
-        logger.debug("starting master-1 thread")
-        th_master.start()
-        logger.debug("master thread-1 started")
         for i, member in enumerate(self.members):
             th_member = Thread(target=self.member_func, args=(self.members_q[i], member))
             threads.append(th_member)
@@ -138,7 +136,7 @@ class PartyImpl(Party):
             th_member.start()
             logger.debug(f"member thread-{i+2} started")
 
-        self.master.run(self) #???
+        self.master.run(self)
 
         for i, t in enumerate(threads):
             logger.debug(f"before joining thread {i+1}")

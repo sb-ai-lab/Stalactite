@@ -1,3 +1,5 @@
+import collections
+
 from abc import ABC, abstractmethod
 from typing import List, Dict
 
@@ -41,3 +43,16 @@ class Party(ABC):
     @abstractmethod
     def update_predict(self, batch: List[str], upd: PartyDataTensor) -> PartyDataTensor:
         ...
+
+    @abstractmethod
+    def randezvous(self):
+        ...
+
+    @abstractmethod
+    def synchronize_uids(self) -> List[str]:
+        uids = (uid for member_uids in self.records_uids() for uid in set(member_uids))
+        shared_uids = [uid for uid, count in collections.Counter(uids).items() if count == self.world_size]
+
+        self.register_records_uids(shared_uids)
+
+        return shared_uids
