@@ -11,6 +11,7 @@ class PartyMaster(ABC):
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
     Y: DataTensor
+    lr: float
 
     def run(self):
         party = self.randezvous()
@@ -63,7 +64,8 @@ class PartyMaster(ABC):
         ...
 
     @abstractmethod
-    def master_initialize(self):
+    def master_initialize(self, privacy: str):
+        self.privacy = privacy
         ...
 
     @abstractmethod
@@ -76,11 +78,14 @@ class PartyMaster(ABC):
 
     @abstractmethod
     def aggregate(self, party_predictions: PartyDataTensor) -> DataTensor:
+        for ix,  result in enumerate(party_predictions):
+            pass
         ...
 
     @abstractmethod
     def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor, world_size: int) \
             -> List[DataTensor]:
+
         ...
 
     @abstractmethod
