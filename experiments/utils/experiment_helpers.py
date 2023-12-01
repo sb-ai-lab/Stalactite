@@ -8,7 +8,16 @@ import numpy as np
 import torch
 
 from utils.func_utils import save_data, load_data, BatchedData
-from utils.helpers import ClientTask, format_important_logging, Serialization
+from utils.helpers import (
+    ClientTask,
+    format_important_logging,
+    Serialization,
+    generate_data,
+    safetensor_collect_results_unary,
+    safetensor_collect_results_stream,
+    prototensor_collect_results_unary,
+    prototensor_collect_results_stream,
+)
 
 parser = argparse.ArgumentParser()
 
@@ -45,17 +54,19 @@ class ExperimentalData:
         self.batch_size = batch_size
         self.serialization = serialization
 
+    @generate_data.time()
     def generate_data(self) -> torch.Tensor:
         return torch.rand(self.num_rows, self.num_columns, dtype=self.dtype)
 
     def batch_generate_data(self) -> Generator[BatchedData, None, None]:
         total_batches = int(np.ceil(self.num_rows / self.batch_size))
         for batch in range(total_batches):
-            yield BatchedData(
-                data=torch.rand(self.batch_size, self.num_columns, dtype=self.dtype),
-                batch=batch,
-                total_batches=total_batches,
-            )
+            with generate_data.time():
+                yield BatchedData(
+                    data=torch.rand(self.batch_size, self.num_columns, dtype=self.dtype),
+                    batch=batch,
+                    total_batches=total_batches,
+                )
 
 
 class Task:
@@ -125,10 +136,13 @@ class Task:
         result = torch.tensor([])
         if self.task_type in (ClientTask.exchange_tensor, ClientTask.exchange_array):
             start = time.time()
-            data = await future
-            breakpoint = time.time()
-            serialization = Serialization.safetensors if self.task_type == ClientTask.exchange_tensor else Serialization.protobuf
-            result = load_data(data, serialization=serialization)
+            time_collection_method = safetensor_collect_results_unary if self.task_type == ClientTask.exchange_tensor \
+                else prototensor_collect_results_unary
+            with time_collection_method.time():
+                data = await future
+                breakpoint = time.time()
+                serialization = Serialization.safetensors if self.task_type == ClientTask.exchange_tensor else Serialization.protobuf
+                result = load_data(data, serialization=serialization)
             end = time.time()
             total_time = end - start
             awaiting_time = breakpoint - start
@@ -142,9 +156,12 @@ class Task:
             start = time.time()
             serialization = Serialization.safetensors if self.task_type == ClientTask.batched_exchange_tensor \
                 else Serialization.protobuf
-            async for batch in future:
-                data_batch = load_data(batch, serialization=serialization)
-                result = torch.cat([result, data_batch])
+            time_collection_method = safetensor_collect_results_stream \
+                if self.task_type == ClientTask.batched_exchange_tensor else prototensor_collect_results_stream
+            with time_collection_method.time():
+                async for batch in future:
+                    data_batch = load_data(batch, serialization=serialization)
+                    result = torch.cat([result, data_batch])
             end = time.time()
             logger.info(format_important_logging(
                 f"Result got in {round(end - start, 4)} sec: \n"

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 import grpc
 import torch
+from prometheus_client import start_http_server
 
 from generated_code import services_pb2, services_pb2_grpc
 from utils import (
@@ -183,6 +184,13 @@ if __name__ == '__main__':
     parser.add_argument("--num_rows", type=int, default=100_000, help="Number of tensor rows")
     parser.add_argument("--num_cols", type=int, default=10, help="Number of tensor rows")
     parser.add_argument("--batch_size", type=int, default=1000, help="Number of tensor rows in batch")
+
+    parser.add_argument("--port_prometheus", type=int, default=8001, help="Port for HTTP prometheus server")
+
     args = parser.parse_args()
 
-    asyncio.get_event_loop().run_until_complete(run_client(args))
+    start_http_server(args.port_prometheus)
+    try:
+        asyncio.get_event_loop().run_until_complete(run_client(args))
+    except KeyboardInterrupt:
+        logger.info('Terminating')
