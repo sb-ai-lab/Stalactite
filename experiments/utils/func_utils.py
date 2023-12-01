@@ -2,11 +2,18 @@ from dataclasses import dataclass
 from typing import Any, Iterator, ValuesView
 
 import numpy as np
+# from prometheus_async.aio import time
 import torch
 import safetensors.torch
 
 from generated_code import services_pb2
-from utils.helpers import Serialization
+from utils.helpers import (
+    Serialization,
+    serialization_safetensor_time,
+    serialization_proto_time,
+    deserialization_safetensor_time,
+    deserialization_proto_time,
+)
 
 
 @dataclass
@@ -35,11 +42,11 @@ def load_data(
         serialization: Serialization
 ) -> torch.Tensor:
     if serialization == Serialization.safetensors:
-        return safetensors.torch.load(data.data)['tensor']
+        with serialization_safetensor_time.time():
+            return safetensors.torch.load(data.data)['tensor']
     elif serialization == Serialization.protobuf:
-        res = torch.asarray(data.float_data, dtype=torch.float64).reshape(list(data.dims))
-        return res
-
+        with serialization_proto_time.time():
+            return torch.asarray(data.float_data, dtype=torch.float64).reshape(list(data.dims))
 
 def save_data(
         tensor: torch.Tensor,
@@ -50,19 +57,21 @@ def save_data(
         total_batches: int | None = None,
 ) -> services_pb2.TensorProto | services_pb2.SafetensorDataProto:
     if serialization == Serialization.safetensors:
-        message = services_pb2.SafetensorDataProto(
-            data=safetensors.torch.save(tensors={'tensor': tensor}),
-            iteration=client_iteration,
-            client_id=client_id,
-        )
+        with deserialization_safetensor_time.time():
+            message = services_pb2.SafetensorDataProto(
+                data=safetensors.torch.save(tensors={'tensor': tensor}),
+                iteration=client_iteration,
+                client_id=client_id,
+            )
     elif serialization == Serialization.protobuf:
-        message = services_pb2.TensorProto(
-            iteration=client_iteration,
-            client_id=client_id,
-            data_type=services_pb2.TensorProto.FLOAT,
-        )
-        message.dims.extend(tensor.shape)
-        message.float_data.extend(tensor.flatten().tolist())
+        with deserialization_proto_time.time():
+            message = services_pb2.TensorProto(
+                iteration=client_iteration,
+                client_id=client_id,
+                data_type=services_pb2.TensorProto.FLOAT,
+            )
+            message.dims.extend(tensor.shape)
+            message.float_data.extend(tensor.flatten().tolist())
 
     if batch is not None:
         message.batch = batch

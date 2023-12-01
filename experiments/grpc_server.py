@@ -7,18 +7,24 @@ import time
 from typing import AsyncIterator
 
 import grpc
+from prometheus_client import start_http_server
+from prometheus_async.aio import time as prometheus_time
 import torch
 
 from generated_code import services_pb2, services_pb2_grpc
 from utils import (
+    aggregate_tensors_list,
     batch_generator,
     save_data,
     load_data,
-    aggregate_tensors_list,
     PingResponse,
     format_important_logging,
     Serialization,
     MAX_MESSAGE_LENGTH,
+    safetensor_exchange_time,
+    prototensor_exchange_time,
+    safetensor_batch_exchange_time,
+    prototensor_batch_exchange_time,
 )
 
 parser = argparse.ArgumentParser()
@@ -224,6 +230,7 @@ class GRpcCommunicatorServicer(services_pb2_grpc.CommunicatorServicer):
             returned_status = await self.comm_manager.process_ping(request)
             yield returned_status
 
+    @prometheus_time(prototensor_exchange_time)
     async def ExchangeNumpyDataUnaryUnary(
             self, request: services_pb2.TensorProto, context: grpc.aio.ServicerContext
     ) -> services_pb2.TensorProto:
@@ -234,6 +241,7 @@ class GRpcCommunicatorServicer(services_pb2_grpc.CommunicatorServicer):
         """
         return await self.comm_manager.aggregate_clients_results(request, serialization=Serialization.protobuf)
 
+    @prometheus_time(prototensor_batch_exchange_time)
     async def ExchangeNumpyDataStreamStream(
             self, request_iterator: AsyncIterator[services_pb2.TensorProto], context: grpc.aio.ServicerContext
     ) -> None:
@@ -246,6 +254,7 @@ class GRpcCommunicatorServicer(services_pb2_grpc.CommunicatorServicer):
             request_iterator, context, serialization=Serialization.protobuf
         )
 
+    @prometheus_time(safetensor_exchange_time)
     async def ExchangeBinarizedDataUnaryUnary(
             self, request: services_pb2.SafetensorDataProto, context: grpc.aio.ServicerContext
     ) -> services_pb2.SafetensorDataProto:
@@ -256,6 +265,7 @@ class GRpcCommunicatorServicer(services_pb2_grpc.CommunicatorServicer):
         """
         return await self.comm_manager.aggregate_clients_results(request, serialization=Serialization.safetensors)
 
+    @prometheus_time(safetensor_batch_exchange_time)
     async def ExchangeBinarizedDataStreamStream(
             self, request_iterator: AsyncIterator[services_pb2.SafetensorDataProto], context: grpc.aio.ServicerContext
     ) -> None:
@@ -300,6 +310,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_message_size", type=int, default=MAX_MESSAGE_LENGTH, help="Message size (bytes)")
     parser.add_argument("--thread_pool_max_workers", type=int, default=20, help="Max ThreadPoolExecutor workers")
     args = parser.parse_args()
+    start_http_server(8000)
     try:
         asyncio.get_event_loop().run_until_complete(serve(
             port=args.port,

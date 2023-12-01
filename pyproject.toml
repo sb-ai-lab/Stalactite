@@ -18,6 +18,8 @@ numpy = "^1.26.2"
 
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.59.3"
+prometheus-client = "^0.19.0"
+prometheus-async = "^22.2.0"
 
 [build-system]
 requires = ["poetry-core"]
