@@ -4,6 +4,7 @@ from typing import List
 
 from stalactite.base import Batcher, DataTensor, PartyDataTensor
 from stalactite.communications import Party
+from stalactite.pet import PrivacyGuard
 
 
 class PartyMaster(ABC):
@@ -12,6 +13,7 @@ class PartyMaster(ABC):
     report_test_metrics_iteration: int
     Y: DataTensor
     lr: float
+    privacy = None
 
     def run(self):
         party = self.randezvous()
@@ -45,7 +47,12 @@ class PartyMaster(ABC):
             for i, batch in enumerate(batcher):
                 party_predictions = party.update_predict(batch, updates)
                 predictions = self.aggregate(party_predictions)
+                if self.privacy:
+                    predictions = self.privacy.add_gaussian_noise(predictions)
                 updates = self.compute_updates(predictions, party_predictions, party.world_size)
+                if self.privacy:
+                    updates = self.privacy.norm_clipping(updates)
+                    updates = self.privacy.encrypt(updates)
 
                 if self.report_train_metrics_iteration > 0 and i % self.report_train_metrics_iteration == 0:
                     party_predictions = party.predict()
@@ -65,7 +72,7 @@ class PartyMaster(ABC):
 
     @abstractmethod
     def master_initialize(self, privacy: str):
-        self.privacy = privacy
+        self.privacy = PrivacyGuard(privacy)
         ...
 
     @abstractmethod
@@ -78,7 +85,7 @@ class PartyMaster(ABC):
 
     @abstractmethod
     def aggregate(self, party_predictions: PartyDataTensor) -> DataTensor:
-        for ix,  result in enumerate(party_predictions):
+        for ix, result in enumerate(party_predictions):
             pass
         ...
 

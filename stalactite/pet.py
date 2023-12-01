@@ -9,7 +9,7 @@ class PrivacyGuard:
         assert method in ['DP', 'MPC', 'HE', 'TEE', 'GD']
         self.method = method
 
-    def gaussian_noise(self, sigma: float, shape):
+    def add_gaussian_noise(self, sigma: float, shape) -> DataTensor:
         ...
 
     def norm_clipping(self, input: DataTensor, k: float) -> DataTensor:
