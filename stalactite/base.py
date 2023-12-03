@@ -23,7 +23,7 @@ class Batcher(ABC):
         ...
 
 
-class Party(ABC):
+class PartyCommunicator(ABC):
     world_size: int
 
     @abstractmethod
@@ -33,6 +33,10 @@ class Party(ABC):
     @abstractmethod
     def randezvous(self):
         ...
+
+
+class Party(ABC):
+    world_size: int
 
     @abstractmethod
     def records_uids(self) -> List[str]:
@@ -83,8 +87,6 @@ class PartyMaster(ABC):
     batch_counter: int
 
     def run(self, party: Party):
-        party.randezvous()
-
         uids = party.synchronize_uids()
 
         self.master_initialize()
