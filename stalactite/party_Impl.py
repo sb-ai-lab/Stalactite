@@ -8,7 +8,7 @@ from threading import Thread
 import torch
 
 from stalactite.base import PartyDataTensor, Party
-from stalactite.communications import Event
+from stalactite.communications import _Event
 
 formatter = logging.Formatter(
     fmt='(%(threadName)-9s) %(message)s',
@@ -35,7 +35,7 @@ class PartyImpl(Party):
     def initialize(self):
         logger.debug("init party")
         # for _ in range(2):
-        event = Event("init", 0)
+        event = _Event("init", 0)
         self.master_q.put(event)
 
     def finalize(self):
@@ -83,7 +83,7 @@ class PartyImpl(Party):
         preds_dict = {}
 
         for i, m in enumerate(self.members):
-            event = Event(type="rhs", data={"uids": batch[0], "rhs":  upd[i], "member_id": i})
+            event = _Event(type="rhs", data={"uids": batch[0], "rhs":  upd[i], "member_id": i})
             logger.debug(f"PARTY: Sending  batch & rhs to member {i+1}")
             self.members_q[i].put(event)
             self.party_counter["rhs_send"] += 1
@@ -111,7 +111,7 @@ class PartyImpl(Party):
                 rhs = event.data["rhs"]
                 pred = member.update_predict(uids, rhs)
                 member_id = event.data["member_id"]
-                event = Event(type="pred", data={"prediction": pred, "member_id": member_id})
+                event = _Event(type="pred", data={"prediction": pred, "member_id": member_id})
                 self.predictions_q.put(event)
                 logger.debug(f"Sending  preds to party")
 

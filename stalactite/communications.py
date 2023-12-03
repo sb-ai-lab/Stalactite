@@ -1,3 +1,4 @@
+import enum
 import logging
 import uuid
 from concurrent.futures import Future
@@ -11,13 +12,32 @@ from stalactite.base import Party, PartyDataTensor, PartyMaster, PartyMember, Pa
 logger = logging.getLogger(__name__)
 
 
+class _Methods(enum.Enum):
+    service_return_answer = 'service_return_answer'
+    service_heartbeat = 'service_heartbeat'
+
+    synchronize_uids = 'synchronize_uids'
+    register_records_uids = 'register_records_uids'
+
+    initialize = 'initialize'
+    finalize = 'finalize'
+
+    update_weights = 'update_weights'
+    predict = 'predict'
+    update_predict = 'update_predict'
+
+
 @dataclass
-class Event:
+class _Event:
     id: str
     parent_id: Optional[str]
     from_uid: str
     method_name: str
     data: Dict[str, Any]
+
+    def __repr__(self) -> str:
+        return f"_Event(id={self.id}, method_name={self.method_name}, " \
+               f"from_id={self.from_uid}, parent_id={self.parent_id})"
 
 
 @dataclass(frozen=True)
@@ -63,8 +83,8 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
         if send_to_id not in self._participants_info:
             raise ValueError(f"Unknown receiver: {send_to_id}")
 
-        event = Event(id=str(uuid.uuid4()), parent_id=None, from_uid=self.participant_id,
-                      method_name=method_name, data=kwargs)
+        event = _Event(id=str(uuid.uuid4()), parent_id=None, from_uid=self.participant_id,
+                       method_name=method_name, data=kwargs)
 
         return self._publish_message(event, send_to_id)
 
@@ -82,8 +102,8 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
                 continue
 
             # todo: add correct from_uid
-            event = Event(id=str(uuid.uuid4()), parent_id=None, from_uid='',
-                          method_name=method_name, data={'data': args, **kwargs})
+            event = _Event(id=str(uuid.uuid4()), parent_id=None, from_uid='',
+                           method_name=method_name, data={'data': args, **kwargs})
 
             future = self._publish_message(event, m.id)
 
@@ -94,7 +114,7 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
 
         return futures
 
-    def _publish_message(self, event: Event, receriver_id: str):
+    def _publish_message(self, event: _Event, receriver_id: str):
         future = Future()
         self._event_futures[event.id] = future
         self._participants_info[receriver_id].queue.put(event)
@@ -106,10 +126,30 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
                                "Perhaps, randezvous has not been called or was unsuccessful")
 
     def _master_thread_func(self):
-        # todo: logging of start
+        logger.info("Master thread for master %s has started" % self.master.id)
+
         while True:
-            pass
-        # todo: logging of finishing
+            event = self._participants_info[self.master.id].queue.get()
+
+            logger.debug("Received event %s" % event)
+
+            if event.method_name == _Methods.service_return_answer:
+                if event.parent_id not in self._event_futures:
+                    raise ValueError(f"No awaiting future with if {event.parent_id}."
+                                     f"(Event {event.id} from {event.from_uid})")
+
+                future = self._event_futures.pop(event.parent_id)
+                future.set_result(event.data)
+                future.done()
+            elif event.method_name == _Methods.service_heartbeat:
+                logger.info("Received hartbeat: %s" % event.data)
+            elif event.method_name == _Methods.finalize:
+                logger.info("Finalized")
+                break
+            else:
+                raise ValueError(f"Unsupported method {event.method_name} (Event {event.id} from {event.from_uid})")
+
+        logger.info("Master thread for master %s has finished" % self.master.id)
 
     def _member_thread_func(self):
         pass
