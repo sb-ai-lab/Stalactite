@@ -223,6 +223,8 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
 
 
 class LocalPartyImpl(Party):
+    # todo: add docs
+    # todo: add logging to the methods
     def __init__(self, party_communicator: PartyCommunicator, op_timeout: Optional[float] = None):
         self.party_communicator = party_communicator
         self.op_timeout = op_timeout
