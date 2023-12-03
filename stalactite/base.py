@@ -27,11 +27,20 @@ class PartyCommunicator(ABC):
     world_size: int
 
     @abstractmethod
-    def send(self, method_name: str, mass_kwargs: Dict[str, Any], **kwargs) -> List[Future]:
+    def randezvous(self):
+        ...
+
+    @property
+    @abstractmethod
+    def is_ready(self) -> bool:
         ...
 
     @abstractmethod
-    def randezvous(self):
+    def send(self, send_to_id: str,  method_name: str, **kwargs) -> Future:
+        ...
+
+    @abstractmethod
+    def broadcast_send(self, method_name: str, mass_kwargs: Dict[str, Any], **kwargs) -> List[Future]:
         ...
 
 
