@@ -2,7 +2,7 @@ import collections
 import logging
 from abc import ABC, abstractmethod
 from asyncio import Future
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import torch
 
@@ -41,6 +41,7 @@ class PartyCommunicator(ABC):
 
     @abstractmethod
     def broadcast(self, method_name: str, mass_kwargs: Dict[str, Any],
+                  parent_id: Optional[str] = None,
                   include_current_participant: bool = False, **kwargs) -> List[Future]:
         ...
 

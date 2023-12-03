@@ -72,6 +72,7 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
         return self._publish_message(event, send_to_id)
 
     def broadcast(self, method_name: str, mass_kwargs: Dict[str, Any],
+                  parent_id: Optional[str] = None,
                   include_current_participant: bool = False, **kwargs) -> List[Future]:
         self._check_if_ready()
         logger.debug("Sending event (%s) for all members" % method_name)
@@ -88,19 +89,22 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
                 logger.warning("No data to sent for member %s. Skipping it." % member_id)
                 continue
 
-            event = _Event(id=str(uuid.uuid4()), parent_id=None, from_uid=self.participant.id,
+            event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant.id,
                            method_name=method_name, data={'data': args, **kwargs})
 
             future = self._publish_message(event, member_id)
-            futures.append(future)
+            if future:
+                futures.append(future)
 
         return futures
 
-    def _publish_message(self, event: _Event, receiver_id: str):
+    def _publish_message(self, event: _Event, receiver_id: str) -> Optional[Future]:
         # not all command requires feedback
         if event.parent_id:
             future = Future()
             self._event_futures[event.id] = future
+        else:
+            future = None
 
         self._party_info[receiver_id].queue.put(event)
 
