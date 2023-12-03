@@ -42,7 +42,7 @@ def local():
 
 
 @local.command()
-@click.option('members-count', type=int, default=3)
+@click.option('--members-count', type=int, default=3)
 def run(members_count: int):
     shared_party_info = dict()
 

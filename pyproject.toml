@@ -13,6 +13,7 @@ python = "^3.9"
 torch = "^2.1.1"
 pytest = "^7.4.3"
 click = "^8.1.7"
+numpy = "^1.26.2"
 
 [tool.poetry.scripts]
 stalactite = "stalactite.main:cli"
