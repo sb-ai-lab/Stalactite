@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 DataTensor = torch.Tensor
 # in reality, it will be a DataTensor but with one more dimension
-PartyDataTensor = torch.Tensor
+PartyDataTensor = List[torch.Tensor]
 
 
 class Batcher(ABC):
@@ -27,6 +27,8 @@ class Batcher(ABC):
 class PartyCommunicator(ABC):
     # todo: add docs
     world_size: int
+    # todo: add docs about order guaranteeing
+    members: List[str]
 
     @abstractmethod
     def randezvous(self):
@@ -41,10 +43,14 @@ class PartyCommunicator(ABC):
     def send(self, send_to_id: str,  method_name: str, **kwargs) -> Future:
         ...
 
+    # todo: shouldn't we replace it with message type?
     @abstractmethod
-    def broadcast(self, method_name: str, mass_kwargs: Dict[str, Any],
+    def broadcast(self,
+                  method_name: str,
+                  mass_kwargs: Optional[List[Any]] = None,
                   parent_id: Optional[str] = None,
-                  include_current_participant: bool = False, **kwargs) -> List[Future]:
+                  include_current_participant: bool = False,
+                  **kwargs) -> List[Future]:
         ...
 
     @abstractmethod
@@ -57,7 +63,7 @@ class Party(ABC):
     world_size: int
 
     @abstractmethod
-    def records_uids(self) -> List[str]:
+    def records_uids(self) -> List[List[str]]:
         ...
 
     @abstractmethod
@@ -84,7 +90,6 @@ class Party(ABC):
     def update_predict(self, batch: List[str], upd: PartyDataTensor) -> PartyDataTensor:
         ...
 
-    @abstractmethod
     def synchronize_uids(self) -> List[str]:
         uids = (uid for member_uids in self.records_uids() for uid in set(member_uids))
         shared_uids = [uid for uid, count in collections.Counter(uids).items() if count == self.world_size]

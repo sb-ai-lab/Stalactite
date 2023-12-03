@@ -1,3 +1,4 @@
+import concurrent.futures
 import enum
 import logging
 import time
@@ -7,18 +8,18 @@ from concurrent.futures import Future
 from dataclasses import dataclass
 from queue import Queue
 from threading import Thread
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, cast
 
-from stalactite.base import PartyMaster, PartyMember, PartyCommunicator
+from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, Party, PartyDataTensor
 
 logger = logging.getLogger(__name__)
 
 
-class _Methods(enum.Enum):
+class _Method(enum.Enum):
     service_return_answer = 'service_return_answer'
     service_heartbeat = 'service_heartbeat'
 
-    synchronize_uids = 'synchronize_uids'
+    record_uids = 'synchronize_uids'
     register_records_uids = 'register_records_uids'
 
     initialize = 'initialize'
@@ -60,6 +61,7 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
         return self._party_info is not None
 
     def run(self):
+        # todo: incorrect implementation
         self.randezvous()
 
     def send(self, send_to_id: str, method_name: str, parent_id: Optional[str] = None, **kwargs) -> Future:
@@ -73,9 +75,12 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
 
         return self._publish_message(event, send_to_id)
 
-    def broadcast(self, method_name: str, mass_kwargs: Dict[str, Any],
+    def broadcast(self,
+                  method_name: str,
+                  mass_kwargs: Optional[List[Any]] = None,
                   parent_id: Optional[str] = None,
-                  include_current_participant: bool = False, **kwargs) -> List[Future]:
+                  include_current_participant: bool = False,
+                  **kwargs) -> List[Future]:
         self._check_if_ready()
         logger.debug("Sending event (%s) for all members" % method_name)
 
@@ -85,11 +90,7 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
             if member_id == self.participant.id and not include_current_participant:
                 continue
 
-            args = mass_kwargs.get(member_id, None)
-
-            if not args:
-                logger.warning("No data to sent for member %s. Skipping it." % member_id)
-                continue
+            args = mass_kwargs.get(member_id, dict()) if mass_kwargs else dict()
 
             event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant.id,
                            method_name=method_name, data={'data': args, **kwargs})
@@ -153,7 +154,7 @@ class MasterLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator)
 
             logger.debug("Received event %s" % event)
 
-            if event.method_name == _Methods.service_return_answer.value:
+            if event.method_name == _Method.service_return_answer.value:
                 if event.parent_id not in self._event_futures:
                     raise ValueError(f"No awaiting future with if {event.parent_id}."
                                      f"(Event {event.id} from {event.from_uid})")
@@ -162,9 +163,9 @@ class MasterLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator)
                 future = self._event_futures.pop(event.parent_id)
                 future.set_result(event.data)
                 future.done()
-            elif event.method_name == _Methods.service_heartbeat.value:
+            elif event.method_name == _Method.service_heartbeat.value:
                 logger.info("Received heartbeat from %s: %s" % (event.id, event.data))
-            elif event.method_name == _Methods.finalize:
+            elif event.method_name == _Method.finalize:
                 logger.info("Finalized")
                 break
             else:
@@ -195,13 +196,13 @@ class MemberLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator)
         logger.info("Member thread for member %s has started" % self.participant.id)
 
         supported_methods = [
-            _Methods.synchronize_uids.value,
-            _Methods.register_records_uids.value,
-            _Methods.initialize.value,
-            _Methods.finalize.value,
-            _Methods.update_weights.value,
-            _Methods.predict.value,
-            _Methods.update_predict.value
+            _Method.record_uids.value,
+            _Method.register_records_uids.value,
+            _Method.initialize.value,
+            _Method.finalize.value,
+            _Method.update_weights.value,
+            _Method.predict.value,
+            _Method.update_predict.value
         ]
 
         not_found_methods = [
@@ -220,12 +221,56 @@ class MemberLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator)
                 method = getattr(self.participant, event.method_name)
                 result = method(**event.data)
 
-                self.send(send_to_id=event.from_uid, method_name=_Methods.service_return_answer.value,
+                self.send(send_to_id=event.from_uid, method_name=_Method.service_return_answer.value,
                           parent_id=event.id, result=result)
 
-                if event.method_name == _Methods.finalize.value:
+                if event.method_name == _Method.finalize.value:
                     break
             else:
                 raise ValueError(f"Unsupported method {event.method_name} (Event {event.id} from {event.from_uid})")
 
         logger.info("Member thread for member %s has finished" % self.participant.id)
+
+
+class PartyImpl(Party):
+    party_communicator: PartyCommunicator
+    op_timeout: Optional[float]
+
+    def _sync_broadcast_to_members(self,
+                                   method_name: _Method,
+                                   mass_kwargs: Optional[List[Any]] = None, **kwargs) -> List[Any]:
+        futures = self.party_communicator.broadcast(method_name=method_name.value, mass_kwargs=mass_kwargs, **kwargs)
+        completed_futures, uncompleted_futures = concurrent.futures.wait(futures, timeout=self.op_timeout)
+
+        if len(uncompleted_futures) > 0:
+            # todo: custom exception with additional info about uncompleted tasks
+            raise RuntimeError(f"Not all tasks have been completed. "
+                               f"Completed tasks: {len(completed_futures)}. "
+                               f"Uncompleted tasks: {len(uncompleted_futures)}.")
+
+        fresults = {future.member_id: future.result() for future in completed_futures}
+        return [fresults[member_id] for member_id in self.party_communicator.members]
+
+    def records_uids(self) -> List[List[str]]:
+        return cast(List[List[str]], self._sync_broadcast_to_members(method_name=_Method.record_uids))
+
+    def register_records_uids(self, uids: List[str]):
+        self._sync_broadcast_to_members(method_name=_Method.register_records_uids, uids=uids)
+
+    def initialize(self):
+        self._sync_broadcast_to_members(method_name=_Method.initialize)
+
+    def finalize(self):
+        self._sync_broadcast_to_members(method_name=_Method.finalize)
+
+    def update_weights(self, upd: PartyDataTensor):
+        self._sync_broadcast_to_members(method_name=_Method.update_weights, upd=upd)
+
+    def predict(self, use_test: bool = False) -> PartyDataTensor:
+        return cast(PartyDataTensor, self._sync_broadcast_to_members(method_name=_Method.predict, use_test=True))
+
+    def update_predict(self, batch: List[str], upd: PartyDataTensor) -> PartyDataTensor:
+        return cast(
+            PartyDataTensor,
+            self._sync_broadcast_to_members(method_name=_Method.update_predict, batch=batch, upd=PartyDataTensor)
+        )
