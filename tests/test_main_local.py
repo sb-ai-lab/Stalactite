@@ -11,8 +11,19 @@ def test_one():
 
 
 def test_integration_local_party():
+    # todo
+    #  1. fix: members == 3, iterations=10
+    #  2. configure master, member and party
+    #  3. run party
+    #  4. ensure:
+    #   - all iterations performed
+    #   - predictions made on appropriate iterations
+    #   - ctrl^c works as expected
     members_count = 3
-    epochs = 1
+    iterations = 10
+
+
+
     batch_size = 2
     ds_rows = 5
     batches = epochs * (ds_rows//batch_size+1)

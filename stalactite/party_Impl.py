@@ -1,17 +1,14 @@
 import sys
 import collections
 import logging
-import time
-from typing import List, Any, Dict
-from dataclasses import dataclass
+from typing import List, Dict
 from queue import Queue
 from threading import Thread
 
 import torch
 
-from stalactite.communications import Party
-from stalactite.base import PartyDataTensor
-
+from stalactite.base import PartyDataTensor, Party
+from stalactite.communications import Event
 
 formatter = logging.Formatter(
     fmt='(%(threadName)-9s) %(message)s',
@@ -23,12 +20,6 @@ logging.basicConfig(handlers=[StreamHandler], level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 
 logger = logging.getLogger("my_logger")
-
-
-@dataclass
-class Event:
-    type: str
-    data: Any
 
 
 class PartyImpl(Party):

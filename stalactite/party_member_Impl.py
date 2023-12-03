@@ -4,8 +4,7 @@ from typing import List
 
 import torch
 
-from stalactite.party_member import PartyMember
-from stalactite.base import DataTensor
+from stalactite.base import DataTensor, PartyMember
 
 logger = logging.getLogger("my_logger")
 
