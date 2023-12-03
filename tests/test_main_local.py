@@ -2,7 +2,7 @@ import torch
 
 from stalactite.party_master_Impl import PartyMasterImpl
 from stalactite.party_member_Impl import PartyMemberImpl
-from stalactite.party_Impl import PartyImpl
+from stalactite.communications import LocalPartyImpl
 
 
 def test_one():
@@ -36,7 +36,7 @@ def test_integration_local_party():
         Y=torch.randint(0, 2, (5,))
     )
     members = [PartyMemberImpl() for _ in range(members_count)]
-    party = PartyImpl(master, members)
+    party = LocalPartyImpl(master, members)
     party.initialize()
     party.run()
     assert 1 == 1

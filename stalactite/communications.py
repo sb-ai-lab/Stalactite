@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from queue import Queue
 from typing import List, Dict, Any, Optional, Union, cast, Set
 
-from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, Party, PartyDataTensor, ParticipantFuture
+from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, ParticipantFuture, Party, PartyDataTensor
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,13 @@ class LocalPartyCommunicator(PartyCommunicator):
     @property
     def is_ready(self) -> bool:
         return self._party_info is not None
+
+    def randezvous(self):
+        self._party_info[self.participant.id] = _ParticipantInfo(queue=Queue())
+
+        # todo: allow to work with timeout for randezvous operation
+        while len(self._party_info) < self.world_size:
+            time.sleep(0.1)
 
     def run(self):
         self.randezvous()
@@ -125,7 +132,7 @@ class LocalPartyCommunicator(PartyCommunicator):
         ...
 
 
-class MasterLocalPartyCommunicator(LocalPartyCommunicator):
+class LocalMasterPartyCommunicator(LocalPartyCommunicator):
     # todo: add docs
     def __init__(self,
                  participant: PartyMaster,
@@ -135,13 +142,6 @@ class MasterLocalPartyCommunicator(LocalPartyCommunicator):
         self.world_size = world_size
         self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
         self._event_futures: Optional[Dict[str, Future]] = None
-
-    def randezvous(self):
-        self._party_info[self.participant.id] = _ParticipantInfo(queue=Queue())
-
-        # todo: allow to work with timeout for randezvous operation
-        while len(self._party_info) < self.world_size:
-            time.sleep(0.1)
 
     def _run(self):
         logger.info("Master thread for master %s has started" % self.participant.id)
@@ -171,7 +171,7 @@ class MasterLocalPartyCommunicator(LocalPartyCommunicator):
         logger.info("Master thread for master %s has finished" % self.participant.id)
 
 
-class MemberLocalPartyCommunicator(LocalPartyCommunicator):
+class LocalMemberPartyCommunicator(LocalPartyCommunicator):
     # todo: add docs
     def __init__(self,
                  participant: PartyMember,
@@ -181,10 +181,6 @@ class MemberLocalPartyCommunicator(LocalPartyCommunicator):
         self.world_size = world_size
         self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
         self._event_futures: Optional[Dict[str, Future]] = None
-
-    def randezvous(self):
-        self._event_futures = dict()
-        self._party_info[self.participant.id] = _ParticipantInfo(queue=Queue())
 
     def _run(self):
         logger.info("Member thread for member %s has started" % self.participant.id)
@@ -226,9 +222,10 @@ class MemberLocalPartyCommunicator(LocalPartyCommunicator):
         logger.info("Member thread for member %s has finished" % self.participant.id)
 
 
-class PartyImpl(Party):
-    party_communicator: PartyCommunicator
-    op_timeout: Optional[float]
+class LocalPartyImpl(Party):
+    def __init__(self, party_communicator: PartyCommunicator, op_timeout: Optional[float] = None):
+        self.party_communicator = party_communicator
+        self.op_timeout = op_timeout
 
     def _sync_broadcast_to_members(self,
                                    method_name: _Method,
