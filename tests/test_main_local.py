@@ -1,8 +1,7 @@
 import torch
 
-from stalactite.party_master_Impl import PartyMasterImpl
-from stalactite.party_member_Impl import PartyMemberImpl
-from stalactite.communications import LocalPartyImpl
+from stalactite.communications.local import LocalPartyImpl
+from stalactite.mocks import PartyMasterImpl, PartyMemberImpl
 
 
 def test_one():
@@ -20,9 +19,7 @@ def test_integration_local_party():
     #   - predictions made on appropriate iterations
     #   - ctrl^c works as expected
     members_count = 3
-    iterations = 10
-
-
+    epochs = 10
 
     batch_size = 2
     ds_rows = 5

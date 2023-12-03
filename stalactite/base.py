@@ -109,13 +109,10 @@ class Party(ABC):
 class PartyMaster(ABC):
     # todo: add docs
     id: str
-
     epochs: int
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
     Y: DataTensor
-    epoch_counter: int
-    batch_counter: int
 
     def run(self, party: Party):
         uids = party.synchronize_uids()
@@ -148,8 +145,6 @@ class PartyMaster(ABC):
                     party_predictions = party.predict(use_test=True)
                     predictions = self.aggregate(party_predictions)
                     self.report_metrics(self.Y, predictions, name="Test")
-                self.batch_counter += 1
-            self.epoch_counter += 1
 
     @abstractmethod
     def make_batcher(self, uids: List[str]) -> Batcher:

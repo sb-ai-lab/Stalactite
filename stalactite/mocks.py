@@ -1,12 +1,13 @@
-import random
 import logging
+import random
 from typing import List
 
 import torch
 
-from stalactite.base import PartyDataTensor, DataTensor, Batcher, PartyMaster
+from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember
 
-logger = logging.getLogger("my_logger")
+
+logger = logging.getLogger(__name__)
 
 
 class PartyMasterImpl(PartyMaster):
@@ -65,3 +66,29 @@ class PartyMasterImpl(PartyMaster):
         logger.debug(f"PARTY MASTER: compute_updates")
 
         return [torch.rand(1) for _ in range(predictions.size(dim=0))]
+
+
+class PartyMemberImpl(PartyMember):
+    def initialize(self):
+        pass
+
+    def finalize(self):
+        pass
+
+    def predict(self, batch) -> DataTensor:
+        logger.debug(f"PARTY MEMBER: making predict...")
+        return torch.rand(len(batch))
+
+    def records_uids(self) -> List[str]:
+        pass
+
+    def register_records_uids(self, uids: List[str]):
+        pass
+
+    def update_predict(self, batch: List[str], upd: DataTensor) -> DataTensor:
+        self.update_weights(upd)
+        return self.predict(batch)
+
+    def update_weights(self, upd: DataTensor):
+        logger.debug(f"PARTY MEMBER: updating weights...")
+        # todo: add batch here (uid part)? Q Nik

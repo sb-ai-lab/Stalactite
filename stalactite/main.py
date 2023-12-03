@@ -1,15 +1,14 @@
 from threading import Thread
 from typing import Dict, Any
 
+import click
 import torch
 
-from party_master_Impl import PartyMasterImpl
-from party_member_Impl import PartyMemberImpl
-from stalactite.communications import LocalMasterPartyCommunicator, \
-    LocalMemberPartyCommunicator
+from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
+from stalactite.mocks import PartyMasterImpl, PartyMemberImpl
 
 
-def master_main(world_size: int, shared_party_info: Dict[str, Any]):
+def local_master_main(world_size: int, shared_party_info: Dict[str, Any]):
     comm = LocalMasterPartyCommunicator(
         participant=PartyMasterImpl(
             epochs=1,
@@ -23,7 +22,7 @@ def master_main(world_size: int, shared_party_info: Dict[str, Any]):
     comm.run()
 
 
-def member_main(world_size: int, shared_party_info: Dict[str, Any]):
+def local_member_main(world_size: int, shared_party_info: Dict[str, Any]):
     comm = LocalMemberPartyCommunicator(
         participant=PartyMemberImpl(),
         world_size=world_size,
@@ -32,15 +31,26 @@ def member_main(world_size: int, shared_party_info: Dict[str, Any]):
     comm.run()
 
 
-def main():
-    member_count = 3
+@click.group()
+def cli():
+    pass
+
+
+@cli.group()
+def local():
+    pass
+
+
+@local.command()
+@click.option('members-count', type=int, default=3)
+def run(members_count: int):
     shared_party_info = dict()
 
     threads = [
-        Thread(name="master_main", target=master_main, args=(member_count, shared_party_info)),
+        Thread(name="master_main", target=local_master_main, args=(members_count, shared_party_info)),
         *(
-            Thread(name=f"member_main_{i}", target=member_main, args=(member_count, shared_party_info))
-            for i in range(member_count)
+            Thread(name=f"member_main_{i}", target=local_member_main, args=(members_count, shared_party_info))
+            for i in range(members_count)
         )
     ]
 
@@ -52,4 +62,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    cli()

@@ -12,6 +12,7 @@ packages = [
 python = "^3.9"
 torch = "^2.1.1"
 pytest = "^7.4.3"
+click = "^8.1.7"
 
 
 [build-system]
