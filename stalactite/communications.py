@@ -1,11 +1,13 @@
 import enum
 import logging
+import time
 import uuid
+from abc import abstractmethod
 from concurrent.futures import Future
 from dataclasses import dataclass
 from queue import Queue
 from threading import Thread
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 
 from stalactite.base import PartyMaster, PartyMember, PartyCommunicator
 
@@ -41,76 +43,66 @@ class _Event:
 
 
 @dataclass(frozen=True)
-class _MemberInfo:
+class _ParticipantInfo:
     queue: Queue
     thread: Thread
 
 
 class LocalThreadBasedPartyCommunicator(PartyCommunicator):
-    def __init__(self, participant_id: str, master: PartyMaster, members: List[PartyMember]):
-        if len(members) == 0:
-            raise ValueError("Members list cannot be empty")
-
-        self.participant_id = participant_id
-        self.world_size = len(members)
-        self.master = master
-        self.members = members
-        self._event_futures: Optional[Dict[str, Future]] = None
-        self._participants_info: Optional[Dict[str, _MemberInfo]] = None
+    participant: Union[PartyMaster, PartyMember]
+    _party_info: Optional[Dict[str, _ParticipantInfo]]
+    _event_futures: Optional[Dict[str, Future]]
 
     @property
     def is_ready(self) -> bool:
-        return self._participants_info is not None
+        return self._party_info is not None
 
-    def randezvous(self):
-        self._event_futures = dict()
-        self._participants_info = {
-            self.master.id: _MemberInfo(
-                queue=Queue(),
-                thread=Thread(name="master_event_loop", target=self._master_thread_func)
-            ),
-            **((m.id, _MemberInfo(
-                queue=Queue(),
-                thread=Thread(name="member_event_loop", target=self._member_thread_func, kwargs={"member": m}))
-                ) for m in self.members)
-        }
+    def run(self):
+        self.randezvous()
 
     def send(self, send_to_id: str, method_name: str, parent_id: Optional[str] = None, **kwargs) -> Future:
         self._check_if_ready()
 
-        if send_to_id not in self._participants_info:
+        if send_to_id not in self._party_info:
             raise ValueError(f"Unknown receiver: {send_to_id}")
 
-        event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant_id,
+        event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant.id,
                        method_name=method_name, data=kwargs)
 
         return self._publish_message(event, send_to_id)
 
-    def broadcast_send(self, method_name: str, mass_kwargs: Dict[str, Any], **kwargs) -> List[Future]:
+    def broadcast(self, method_name: str, mass_kwargs: Dict[str, Any],
+                  include_current_participant: bool = False, **kwargs) -> List[Future]:
         self._check_if_ready()
         logger.debug("Sending event (%s) for all members" % method_name)
 
         futures = []
 
-        for m in self.members:
-            args = mass_kwargs.get(m.id, None)
-
-            if not args:
-                logger.warning("No data to sent for member %s. Skipping it." % m.id)
+        for member_id in self._party_info.keys():
+            if member_id == self.participant.id and not include_current_participant:
                 continue
 
-            event = _Event(id=str(uuid.uuid4()), parent_id=None, from_uid=self.participant_id,
+            args = mass_kwargs.get(member_id, None)
+
+            if not args:
+                logger.warning("No data to sent for member %s. Skipping it." % member_id)
+                continue
+
+            event = _Event(id=str(uuid.uuid4()), parent_id=None, from_uid=self.participant.id,
                            method_name=method_name, data={'data': args, **kwargs})
 
-            future = self._publish_message(event, m.id)
+            future = self._publish_message(event, member_id)
             futures.append(future)
 
         return futures
 
     def _publish_message(self, event: _Event, receiver_id: str):
-        future = Future()
-        self._event_futures[event.id] = future
-        self._participants_info[receiver_id].queue.put(event)
+        # not all command requires feedback
+        if event.parent_id:
+            future = Future()
+            self._event_futures[event.id] = future
+
+        self._party_info[receiver_id].queue.put(event)
 
         logger.debug(f"Sent to %s event %s" % (receiver_id, event))
 
@@ -121,11 +113,36 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
             raise RuntimeError("Cannot proceed because communicator is not ready. "
                                "Perhaps, randezvous has not been called or was unsuccessful")
 
-    def _master_thread_func(self):
-        logger.info("Master thread for master %s has started" % self.master.id)
+    @abstractmethod
+    def _thread_func(self):
+        ...
+
+
+class MasterLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator):
+    def __init__(self,
+                 participant: PartyMaster,
+                 world_size: int,
+                 shared_party_info: Optional[Dict[str, _ParticipantInfo]]):
+        self.participant = participant
+        self.world_size = world_size
+        self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
+        self._event_futures: Optional[Dict[str, Future]] = None
+
+    def randezvous(self):
+        self._party_info[self.participant.id] = _ParticipantInfo(
+            queue=Queue(),
+            thread=Thread(name="master_event_loop", target=self._thread_func)
+        )
+
+        # todo: allow to work with timeout for randezvous operation
+        while len(self._party_info) < self.world_size:
+            time.sleep(0.1)
+
+    def _thread_func(self):
+        logger.info("Master thread for master %s has started" % self.participant.id)
 
         while True:
-            event = self._participants_info[self.master.id].queue.get()
+            event = self._party_info[self.participant.id].queue.get()
 
             logger.debug("Received event %s" % event)
 
@@ -146,10 +163,28 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
             else:
                 raise ValueError(f"Unsupported method {event.method_name} (Event {event.id} from {event.from_uid})")
 
-        logger.info("Master thread for master %s has finished" % self.master.id)
+        logger.info("Master thread for master %s has finished" % self.participant.id)
 
-    def _member_thread_func(self, member: PartyMember):
-        logger.info("Member thread for member %s has started" % member.id)
+
+class MemberLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator):
+    def __init__(self,
+                 participant: PartyMember,
+                 world_size: int,
+                 shared_party_info: Optional[Dict[str, _ParticipantInfo]]):
+        self.participant = participant
+        self.world_size = world_size
+        self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
+        self._event_futures: Optional[Dict[str, Future]] = None
+
+    def randezvous(self):
+        self._event_futures = dict()
+        self._party_info[self.participant.id] = _ParticipantInfo(
+            queue=Queue(),
+            thread=Thread(name=f"member_event_loop_{self.participant.id}", target=self._thread_func)
+        )
+
+    def _thread_func(self):
+        logger.info("Member thread for member %s has started" % self.participant.id)
 
         supported_methods = [
             _Methods.synchronize_uids.value,
@@ -161,17 +196,20 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
             _Methods.update_predict.value
         ]
 
-        not_found_methods = [method_name for method_name in supported_methods if hasattr(member, method_name)]
+        not_found_methods = [
+            method_name for method_name in supported_methods
+            if hasattr(self.participant.id, method_name)
+        ]
         if len(not_found_methods) > 0:
-            raise RuntimeError(f"Found methods not supported by member {member.id}: {not_found_methods}")
+            raise RuntimeError(f"Found methods not supported by member {self.participant.id}: {not_found_methods}")
 
         while True:
-            event = self._participants_info[member.id].queue.get()
+            event = self._party_info[self.participant.id].queue.get()
 
             logger.debug("Received event %s" % event)
 
             if event.method_name in supported_methods:
-                method = getattr(member, event.method_name)
+                method = getattr(self.participant, event.method_name)
                 result = method(**event.data)
 
                 self.send(send_to_id=event.from_uid, method_name=_Methods.service_return_answer.value,
@@ -182,4 +220,4 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
             else:
                 raise ValueError(f"Unsupported method {event.method_name} (Event {event.id} from {event.from_uid})")
 
-        logger.info("Member thread for member %s has finished" % member.id)
+        logger.info("Member thread for member %s has finished" % self.participant.id)

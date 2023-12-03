@@ -40,7 +40,8 @@ class PartyCommunicator(ABC):
         ...
 
     @abstractmethod
-    def broadcast_send(self, method_name: str, mass_kwargs: Dict[str, Any], **kwargs) -> List[Future]:
+    def broadcast(self, method_name: str, mass_kwargs: Dict[str, Any],
+                  include_current_participant: bool = False, **kwargs) -> List[Future]:
         ...
 
     @abstractmethod
