@@ -49,6 +49,8 @@ class _ParticipantInfo:
 
 
 class LocalThreadBasedPartyCommunicator(PartyCommunicator):
+    # todo: add docs
+    # todo: introduce the single interface for that
     participant: Union[PartyMaster, PartyMember]
     _party_info: Optional[Dict[str, _ParticipantInfo]]
     _event_futures: Optional[Dict[str, Future]]
@@ -123,6 +125,7 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
 
 
 class MasterLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator):
+    # todo: add docs
     def __init__(self,
                  participant: PartyMaster,
                  world_size: int,
@@ -171,6 +174,7 @@ class MasterLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator)
 
 
 class MemberLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator):
+    # todo: add docs
     def __init__(self,
                  participant: PartyMember,
                  world_size: int,

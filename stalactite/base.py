@@ -16,6 +16,7 @@ PartyDataTensor = torch.Tensor
 
 
 class Batcher(ABC):
+    # todo: add docs
     uids: List[str]
 
     @abstractmethod
@@ -24,6 +25,7 @@ class Batcher(ABC):
 
 
 class PartyCommunicator(ABC):
+    # todo: add docs
     world_size: int
 
     @abstractmethod
@@ -51,6 +53,7 @@ class PartyCommunicator(ABC):
 
 
 class Party(ABC):
+    # todo: add docs
     world_size: int
 
     @abstractmethod
@@ -92,6 +95,7 @@ class Party(ABC):
 
 
 class PartyMaster(ABC):
+    # todo: add docs
     id: str
 
     epochs: int
@@ -166,6 +170,7 @@ class PartyMaster(ABC):
 
 
 class PartyMember(ABC):
+    # todo: add docs
     id: str
 
     @abstractmethod
