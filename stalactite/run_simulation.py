@@ -5,12 +5,12 @@ import torch
 
 from party_master_Impl import PartyMasterImpl
 from party_member_Impl import PartyMemberImpl
-from stalactite.communications import MasterLocalThreadBasedPartyCommunicator, \
-    MemberLocalThreadBasedPartyCommunicator
+from stalactite.communications import MasterLocalPartyCommunicator, \
+    MemberLocalPartyCommunicator
 
 
 def master_main(world_size: int, shared_party_info: Dict[str, Any]):
-    comm = MasterLocalThreadBasedPartyCommunicator(
+    comm = MasterLocalPartyCommunicator(
         participant=PartyMasterImpl(
             epochs=1,
             report_train_metrics_iteration=5,
@@ -24,7 +24,7 @@ def master_main(world_size: int, shared_party_info: Dict[str, Any]):
 
 
 def member_main(world_size: int, shared_party_info: Dict[str, Any]):
-    comm = MemberLocalThreadBasedPartyCommunicator(
+    comm = MemberLocalPartyCommunicator(
         participant=PartyMemberImpl(),
         world_size=world_size,
         shared_party_info=shared_party_info

@@ -2,6 +2,7 @@ import collections
 import logging
 from abc import ABC, abstractmethod
 from asyncio import Future
+from concurrent.futures import Future
 from typing import List, Dict, Any, Optional
 
 import torch
@@ -24,6 +25,12 @@ class Batcher(ABC):
         ...
 
 
+class ParticipantFuture(Future):
+    def __init__(self, participant_id: str):
+        super().__init__()
+        self.participant_id = participant_id
+
+
 class PartyCommunicator(ABC):
     # todo: add docs
     world_size: int
@@ -40,7 +47,7 @@ class PartyCommunicator(ABC):
         ...
 
     @abstractmethod
-    def send(self, send_to_id: str,  method_name: str, **kwargs) -> Future:
+    def send(self, send_to_id: str,  method_name: str, **kwargs) -> ParticipantFuture:
         ...
 
     # todo: shouldn't we replace it with message type?
@@ -50,7 +57,7 @@ class PartyCommunicator(ABC):
                   mass_kwargs: Optional[List[Any]] = None,
                   parent_id: Optional[str] = None,
                   include_current_participant: bool = False,
-                  **kwargs) -> List[Future]:
+                  **kwargs) -> List[ParticipantFuture]:
         ...
 
     @abstractmethod

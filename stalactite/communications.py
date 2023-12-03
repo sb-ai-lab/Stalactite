@@ -7,10 +7,9 @@ from abc import abstractmethod
 from concurrent.futures import Future
 from dataclasses import dataclass
 from queue import Queue
-from threading import Thread
-from typing import List, Dict, Any, Optional, Union, cast
+from typing import List, Dict, Any, Optional, Union, cast, Set
 
-from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, Party, PartyDataTensor
+from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, Party, PartyDataTensor, ParticipantFuture
 
 logger = logging.getLogger(__name__)
 
@@ -46,25 +45,24 @@ class _Event:
 @dataclass(frozen=True)
 class _ParticipantInfo:
     queue: Queue
-    thread: Thread
 
 
-class LocalThreadBasedPartyCommunicator(PartyCommunicator):
+class LocalPartyCommunicator(PartyCommunicator):
     # todo: add docs
     # todo: introduce the single interface for that
     participant: Union[PartyMaster, PartyMember]
     _party_info: Optional[Dict[str, _ParticipantInfo]]
-    _event_futures: Optional[Dict[str, Future]]
+    _event_futures: Optional[Dict[str, ParticipantFuture]]
 
     @property
     def is_ready(self) -> bool:
         return self._party_info is not None
 
     def run(self):
-        # todo: incorrect implementation
         self.randezvous()
+        self._run()
 
-    def send(self, send_to_id: str, method_name: str, parent_id: Optional[str] = None, **kwargs) -> Future:
+    def send(self, send_to_id: str, method_name: str, parent_id: Optional[str] = None, **kwargs) -> ParticipantFuture:
         self._check_if_ready()
 
         if send_to_id not in self._party_info:
@@ -80,17 +78,19 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
                   mass_kwargs: Optional[List[Any]] = None,
                   parent_id: Optional[str] = None,
                   include_current_participant: bool = False,
-                  **kwargs) -> List[Future]:
+                  **kwargs) -> List[ParticipantFuture]:
         self._check_if_ready()
         logger.debug("Sending event (%s) for all members" % method_name)
 
+        if len(mass_kwargs) != len(self.members):
+            raise ValueError(f"Length of arguments list ({len(mass_kwargs)}) is not equal "
+                             f"to the length of members ({len(self.members)})")
+
         futures = []
 
-        for member_id in self._party_info.keys():
+        for args, member_id in zip(mass_kwargs, self.members):
             if member_id == self.participant.id and not include_current_participant:
                 continue
-
-            args = mass_kwargs.get(member_id, dict()) if mass_kwargs else dict()
 
             event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant.id,
                            method_name=method_name, data={'data': args, **kwargs})
@@ -101,10 +101,10 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
 
         return futures
 
-    def _publish_message(self, event: _Event, receiver_id: str) -> Optional[Future]:
+    def _publish_message(self, event: _Event, receiver_id: str) -> Optional[ParticipantFuture]:
         # not all command requires feedback
         if event.parent_id:
-            future = Future()
+            future = ParticipantFuture(participant_id=receiver_id)
             self._event_futures[event.id] = future
         else:
             future = None
@@ -121,11 +121,11 @@ class LocalThreadBasedPartyCommunicator(PartyCommunicator):
                                "Perhaps, randezvous has not been called or was unsuccessful")
 
     @abstractmethod
-    def _thread_func(self):
+    def _run(self):
         ...
 
 
-class MasterLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator):
+class MasterLocalPartyCommunicator(LocalPartyCommunicator):
     # todo: add docs
     def __init__(self,
                  participant: PartyMaster,
@@ -137,16 +137,13 @@ class MasterLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator)
         self._event_futures: Optional[Dict[str, Future]] = None
 
     def randezvous(self):
-        self._party_info[self.participant.id] = _ParticipantInfo(
-            queue=Queue(),
-            thread=Thread(name="master_event_loop", target=self._thread_func)
-        )
+        self._party_info[self.participant.id] = _ParticipantInfo(queue=Queue())
 
         # todo: allow to work with timeout for randezvous operation
         while len(self._party_info) < self.world_size:
             time.sleep(0.1)
 
-    def _thread_func(self):
+    def _run(self):
         logger.info("Master thread for master %s has started" % self.participant.id)
 
         while True:
@@ -174,7 +171,7 @@ class MasterLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator)
         logger.info("Master thread for master %s has finished" % self.participant.id)
 
 
-class MemberLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator):
+class MemberLocalPartyCommunicator(LocalPartyCommunicator):
     # todo: add docs
     def __init__(self,
                  participant: PartyMember,
@@ -187,12 +184,9 @@ class MemberLocalThreadBasedPartyCommunicator(LocalThreadBasedPartyCommunicator)
 
     def randezvous(self):
         self._event_futures = dict()
-        self._party_info[self.participant.id] = _ParticipantInfo(
-            queue=Queue(),
-            thread=Thread(name=f"member_event_loop_{self.participant.id}", target=self._thread_func)
-        )
+        self._party_info[self.participant.id] = _ParticipantInfo(queue=Queue())
 
-    def _thread_func(self):
+    def _run(self):
         logger.info("Member thread for member %s has started" % self.participant.id)
 
         supported_methods = [
@@ -240,7 +234,9 @@ class PartyImpl(Party):
                                    method_name: _Method,
                                    mass_kwargs: Optional[List[Any]] = None, **kwargs) -> List[Any]:
         futures = self.party_communicator.broadcast(method_name=method_name.value, mass_kwargs=mass_kwargs, **kwargs)
-        completed_futures, uncompleted_futures = concurrent.futures.wait(futures, timeout=self.op_timeout)
+        futures = concurrent.futures.wait(futures, timeout=self.op_timeout)
+        completed_futures, uncompleted_futures \
+            = cast(Set[ParticipantFuture], futures[0]), cast(Set[ParticipantFuture], futures[1])
 
         if len(uncompleted_futures) > 0:
             # todo: custom exception with additional info about uncompleted tasks
@@ -248,7 +244,7 @@ class PartyImpl(Party):
                                f"Completed tasks: {len(completed_futures)}. "
                                f"Uncompleted tasks: {len(uncompleted_futures)}.")
 
-        fresults = {future.member_id: future.result() for future in completed_futures}
+        fresults = {future.participant_id: future.result() for future in completed_futures}
         return [fresults[member_id] for member_id in self.party_communicator.members]
 
     def records_uids(self) -> List[List[str]]:
