@@ -43,6 +43,10 @@ class PartyCommunicator(ABC):
     def broadcast_send(self, method_name: str, mass_kwargs: Dict[str, Any], **kwargs) -> List[Future]:
         ...
 
+    @abstractmethod
+    def run(self):
+        ...
+
 
 class Party(ABC):
     world_size: int
