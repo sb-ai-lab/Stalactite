@@ -172,6 +172,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
 
             self.participant.run(party)
 
+            self.send(send_to_id=self.participant.id, method_name=_Method.finalize.value, require_answer=False)
             event_loop.join()
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:
@@ -202,7 +203,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
                 elif event.method_name == _Method.service_heartbeat.value:
                     logger.info("Party communicator %s: received heartbeat from %s: %s"
                                 % (self.participant.id, event.id, event.data))
-                elif event.method_name == _Method.finalize:
+                elif event.method_name == _Method.finalize.value:
                     logger.info("Party communicator %s: finalized" % self.participant.id)
                     break
                 else:
