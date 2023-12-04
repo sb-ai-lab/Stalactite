@@ -192,7 +192,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
         self._event_futures: Optional[Dict[str, Future]] = None
 
     def _run(self):
-        logger.info("Member thread for member %s has started" % self.participant.id)
+        logger.info("Party communicator %s: starting event loop" % self.participant.id)
 
         supported_methods = [
             _Method.record_uids.value,
@@ -214,7 +214,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
         while True:
             event = self._party_info[self.participant.id].queue.get()
 
-            logger.debug("Received event %s" % event)
+            logger.debug("Party communicator %s: received event %s" % (self.participant.id, event))
 
             if event.method_name in supported_methods:
                 method = getattr(self.participant, event.method_name)
@@ -228,7 +228,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
             else:
                 raise ValueError(f"Unsupported method {event.method_name} (Event {event.id} from {event.from_uid})")
 
-        logger.info("Member thread for member %s has finished" % self.participant.id)
+        logger.info("Party communicator %s: finished event loop" % self.participant.id)
 
 
 class LocalPartyImpl(Party):
