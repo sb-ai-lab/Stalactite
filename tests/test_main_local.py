@@ -1,7 +1,7 @@
 import torch
 
 from stalactite.communications.local import LocalPartyImpl
-from stalactite.mocks import PartyMasterImpl, PartyMemberImpl
+from stalactite.mocks import PartyMasterImpl, MockPartyMemberImpl
 
 
 def test_one():
@@ -32,7 +32,7 @@ def test_integration_local_party():
         report_test_metrics_iteration=5,
         Y=torch.randint(0, 2, (5,))
     )
-    members = [PartyMemberImpl() for _ in range(members_count)]
+    members = [MockPartyMemberImpl() for _ in range(members_count)]
     party = LocalPartyImpl(master, members)
     party.initialize()
     party.run()

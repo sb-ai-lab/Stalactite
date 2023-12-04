@@ -5,7 +5,7 @@ import click
 import torch
 
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
-from stalactite.mocks import PartyMasterImpl, PartyMemberImpl
+from stalactite.mocks import PartyMasterImpl, MockPartyMemberImpl
 
 
 def local_master_main(world_size: int, shared_party_info: Dict[str, Any]):
@@ -24,7 +24,7 @@ def local_master_main(world_size: int, shared_party_info: Dict[str, Any]):
 
 def local_member_main(world_size: int, shared_party_info: Dict[str, Any]):
     comm = LocalMemberPartyCommunicator(
-        participant=PartyMemberImpl(),
+        participant=MockPartyMemberImpl(),
         world_size=world_size,
         shared_party_info=shared_party_info
     )

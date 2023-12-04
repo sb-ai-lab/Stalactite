@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import List
+from typing import List, Optional
 
 import torch
 
@@ -68,27 +68,40 @@ class PartyMasterImpl(PartyMaster):
         return [torch.rand(1) for _ in range(predictions.size(dim=0))]
 
 
-class PartyMemberImpl(PartyMember):
-    def initialize(self):
-        pass
-
-    def finalize(self):
-        pass
-
-    def predict(self, batch) -> DataTensor:
-        logger.debug(f"PARTY MEMBER: making predict...")
-        return torch.rand(len(batch))
+class MockPartyMemberImpl(PartyMember):
+    def __init__(self):
+        self._uids = [str(i) for i in range(100)]
+        self._uids_to_use: Optional[List[str]] = None
+        self._is_initialized = False
+        self._is_finalized = False
+        self._weights: Optional[DataTensor] = None
 
     def records_uids(self) -> List[str]:
-        pass
+        return self._uids
 
     def register_records_uids(self, uids: List[str]):
-        pass
+        self._uids_to_use = uids
+
+    def initialize(self):
+        self._weights = torch.rand()
+        self._is_initialized = True
+
+    def finalize(self):
+        self._check_if_ready()
+        self._is_finalized = True
+
+    def update_weights(self, upd: DataTensor):
+        logger.debug(f"PARTY MEMBER: updating weights...")
+        # todo: add batch here (uid part)? Q Nik
+
+    def predict(self) -> DataTensor:
+        logger.debug(f"PARTY MEMBER: making predict...")
+        return torch.rand(len(batch))
 
     def update_predict(self, batch: List[str], upd: DataTensor) -> DataTensor:
         self.update_weights(upd)
         return self.predict(batch)
 
-    def update_weights(self, upd: DataTensor):
-        logger.debug(f"PARTY MEMBER: updating weights...")
-        # todo: add batch here (uid part)? Q Nik
+    def _check_if_ready(self):
+        if not self._is_initialized:
+            raise RuntimeError("The member has not been initialized")
