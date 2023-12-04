@@ -1,19 +1,25 @@
+from __future__ import annotations
+
 import collections
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 from stalactite.base import Batcher, DataTensor, PartyDataTensor
 from stalactite.communications import Party
-from stalactite.pet import PrivacyGuard
+from stalactite.pet import PrivacyGuard, PrivacyGuardHE
 
 
-class PartyMaster(ABC):
-    epochs: int
-    report_train_metrics_iteration: int
-    report_test_metrics_iteration: int
-    Y: DataTensor
-    lr: float
-    privacy = None
+class PartyMaster:
+
+    def __init__(self, epochs: int, report_train_metrics_iteration: int,
+                 report_test_metrics_iteration: int, Y: DataTensor,
+                 lr: float, privacy: str|None = None):
+        self.epoches = epochs
+        self.report_train_metrics_iteration = report_train_metrics_iteration
+        self.report_test_metrics_iteration = report_test_metrics_iteration
+        self.Y = Y
+        self.lr = lr
+        self.privacy = None if not privacy else PrivacyGuard(privacy)
 
     def run(self):
         party = self.randezvous()
@@ -47,12 +53,12 @@ class PartyMaster(ABC):
             for i, batch in enumerate(batcher):
                 party_predictions = party.update_predict(batch, updates)
                 predictions = self.aggregate(party_predictions)
-                if self.privacy:
-                    predictions = self.privacy.decrypt(predictions)
+                # if self.privacy:
+                #     predictions = self.privacy.decrypt(predictions)
                 updates = self.compute_updates(predictions, party_predictions, party.world_size)
                 if self.privacy:
-                    updates = self.privacy.norm_clipping(updates)
                     updates = self.privacy.encrypt(updates)
+                    # self.privacy.norm_clipping(updates)
 
                 if self.report_train_metrics_iteration > 0 and i % self.report_train_metrics_iteration == 0:
                     party_predictions = party.predict()
