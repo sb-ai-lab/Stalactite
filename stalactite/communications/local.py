@@ -5,6 +5,7 @@ import time
 import uuid
 from abc import ABC
 from concurrent.futures import Future
+from copy import copy
 from dataclasses import dataclass
 from queue import Queue
 from threading import Thread
@@ -19,7 +20,7 @@ class _Method(enum.Enum):
     service_return_answer = 'service_return_answer'
     service_heartbeat = 'service_heartbeat'
 
-    record_uids = 'record_uids'
+    records_uids = 'records_uids'
     register_records_uids = 'register_records_uids'
 
     initialize = 'initialize'
@@ -55,6 +56,8 @@ class _ParticipantInfo:
 
 
 class LocalPartyCommunicator(PartyCommunicator, ABC):
+    MEMBER_DATA_FIELDNAME = '__member_data__'
+
     # todo: add docs
     # todo: introduce the single interface for that
     participant: Union[PartyMaster, PartyMember]
@@ -105,15 +108,17 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         elif mass_kwargs and len(mass_kwargs) != len(self.members):
             raise ValueError(f"Length of arguments list ({len(mass_kwargs)}) is not equal "
                              f"to the length of members ({len(self.members)})")
+        else:
+            mass_kwargs = [{self.MEMBER_DATA_FIELDNAME: args} for args in mass_kwargs]
 
         futures = []
 
-        for args, member_id in zip(mass_kwargs, self.members):
+        for mkwargs, member_id in zip(mass_kwargs, self.members):
             if member_id == self.participant.id and not include_current_participant:
                 continue
 
             event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant.id,
-                           method_name=method_name, data={'data': args, **kwargs})
+                           method_name=method_name, data={**mkwargs, **kwargs})
 
             future = self._publish_message(event, member_id)
             if future:
@@ -151,7 +156,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
         self.participant = participant
         self.world_size = world_size
         self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
-        self._event_futures: Optional[Dict[str, Future]] = None
+        self._event_futures: Optional[Dict[str, Future]] = dict()
 
     def run(self):
         try:
@@ -214,7 +219,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
         self.participant = participant
         self.world_size = world_size
         self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
-        self._event_futures: Optional[Dict[str, Future]] = None
+        self._event_futures: Optional[Dict[str, Future]] = dict()
 
     def run(self):
         try:
@@ -230,7 +235,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
         logger.info("Party communicator %s: starting event loop" % self.participant.id)
 
         supported_methods = [
-            _Method.record_uids.value,
+            _Method.records_uids.value,
             _Method.register_records_uids.value,
             _Method.initialize.value,
             _Method.finalize.value,
@@ -253,7 +258,15 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
 
             if event.method_name in supported_methods:
                 method = getattr(self.participant, event.method_name)
-                result = method(**event.data)
+
+                kwargs = copy(event.data)
+                if self.MEMBER_DATA_FIELDNAME in kwargs:
+                    mkwargs = [kwargs[self.MEMBER_DATA_FIELDNAME]]
+                    del kwargs[self.MEMBER_DATA_FIELDNAME]
+                else:
+                    mkwargs = []
+
+                result = method(*mkwargs, **kwargs)
 
                 self.send(send_to_id=event.from_uid, method_name=_Method.service_return_answer.value,
                           parent_id=event.id, result=result)
@@ -301,7 +314,7 @@ class LocalPartyImpl(Party):
         return [fresults[member_id] for member_id in self.party_communicator.members]
 
     def records_uids(self) -> List[List[str]]:
-        return cast(List[List[str]], self._sync_broadcast_to_members(method_name=_Method.record_uids))
+        return cast(List[List[str]], self._sync_broadcast_to_members(method_name=_Method.records_uids))
 
     def register_records_uids(self, uids: List[str]):
         self._sync_broadcast_to_members(method_name=_Method.register_records_uids, uids=uids)
