@@ -7,6 +7,7 @@ from abc import abstractmethod
 from concurrent.futures import Future
 from dataclasses import dataclass
 from queue import Queue
+from threading import Thread
 from typing import List, Dict, Any, Optional, Union, cast, Set
 
 from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, ParticipantFuture, Party, PartyDataTensor
@@ -148,6 +149,19 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
         self.world_size = world_size
         self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
         self._event_futures: Optional[Dict[str, Future]] = None
+
+    def run(self):
+        logger.info("Party communicator %s: running" % self.participant.id)
+        self.randezvous()
+        party = LocalPartyImpl(party_communicator=self)
+
+        event_loop = Thread(name=f"event-loop-{self.participant.id}", target=self.run)
+        event_loop.start()
+
+        self.participant.run(party)
+
+        event_loop.join()
+        logger.info("Party communicator %s: finished" % self.participant.id)
 
     def _run(self):
         logger.info("Party communicator %s: starting event loop" % self.participant.id)
