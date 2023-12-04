@@ -61,7 +61,7 @@ function sync() {
         --exclude 'kafka_2.11-*' \
         --exclude '*__pycache__*' \
         --exclude '*target*' \
-	      --exclude '*ipynb_checkpints' \
+	      --exclude '*ipynb_checkpoints' \
         --exclude '*venv' \
         --exclude 'download-cache' \
         --exclude '*.iml' \
@@ -79,6 +79,7 @@ function sync() {
         --exclude '*.rpm' \
         --exclude '*/.vagrant' \
         --exclude '*.vdi' \
+        --exclude '*git*' \
         "$from" $to
 }
 

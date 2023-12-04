@@ -30,6 +30,13 @@ else
   last_node=${main_node}+2
 fi
 
+if [[ -n $OTHER_CLIENTS ]]; then
+  other_clients="$OTHER_CLIENTS"
+else
+  other_clients=0
+fi
+
+
 
 
 
@@ -102,7 +109,7 @@ function install() {
 
 function run() {
     master_host=$(hostname)
-    world_size=$((${#servers[@]}-1))
+    world_size=$((${#servers[@]}-1+other_clients))
 
     echo "host: ${host}, port: ${port}, master_host: ${master_host}"
     # shellcheck disable=SC2068
