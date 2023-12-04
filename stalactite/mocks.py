@@ -120,16 +120,16 @@ class MockPartyMemberImpl(PartyMember):
         self._weights += upd
         logger.info("Member %s: successfully updated weights" % self.id)
 
-    def predict(self, batch: List[str]) -> DataTensor:
-        logger.info("Member %s: predicting. Batch: %s" % (self.id, batch))
+    def predict(self, uids: List[str], use_test: bool = False) -> DataTensor:
+        logger.info("Member %s: predicting. Batch: %s" % (self.id, uids))
         self._check_if_ready()
-        batch = set(batch)
-        idx = [i for i, uid in enumerate(self._uids_to_use) if uid in batch]
+        uids = set(uids)
+        idx = [i for i, uid in enumerate(self._uids_to_use) if uid in uids]
         predictions = self._data[idx, :] * self._weights
         logger.info("Member %s: made predictions." % self.id)
         return predictions
 
-    def update_predict(self, batch: List[str], upd: DataTensor) -> DataTensor:
+    def update_predict(self, upd: DataTensor, batch: List[str]) -> DataTensor:
         logger.info("Member %s: updating and predicting." % self.id)
         self._check_if_ready()
         self.update_weights(upd)

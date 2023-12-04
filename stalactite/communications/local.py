@@ -300,7 +300,7 @@ class LocalPartyImpl(Party):
     def world_size(self) -> int:
         return self.party_communicator.world_size
 
-    def _sync_broadcast_to_members(self,
+    def _sync_broadcast_to_members(self, *,
                                    method_name: _Method,
                                    mass_kwargs: Optional[List[Any]] = None, **kwargs) -> List[Any]:
         futures = self.party_communicator.broadcast(method_name=method_name.value, mass_kwargs=mass_kwargs, **kwargs)
@@ -336,13 +336,16 @@ class LocalPartyImpl(Party):
         self._sync_broadcast_to_members(method_name=_Method.finalize)
 
     def update_weights(self, upd: PartyDataTensor):
-        self._sync_broadcast_to_members(method_name=_Method.update_weights, upd=upd)
+        self._sync_broadcast_to_members(method_name=_Method.update_weights, mass_kwargs=upd)
 
-    def predict(self, use_test: bool = False) -> PartyDataTensor:
-        return cast(PartyDataTensor, self._sync_broadcast_to_members(method_name=_Method.predict, use_test=True))
+    def predict(self, uids: List[str], use_test: bool = False) -> PartyDataTensor:
+        return cast(
+            PartyDataTensor,
+            self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=True)
+        )
 
     def update_predict(self, batch: List[str], upd: PartyDataTensor) -> PartyDataTensor:
         return cast(
             PartyDataTensor,
-            self._sync_broadcast_to_members(method_name=_Method.update_predict, batch=batch, upd=PartyDataTensor)
+            self._sync_broadcast_to_members(method_name=_Method.update_predict, mass_kwargs=upd, batch=batch)
         )

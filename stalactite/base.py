@@ -90,7 +90,7 @@ class Party(ABC):
         ...
 
     @abstractmethod
-    def predict(self, use_test: bool = False) -> PartyDataTensor:
+    def predict(self, uids: List[str], use_test: bool = False) -> PartyDataTensor:
         ...
 
     @abstractmethod
@@ -135,7 +135,7 @@ class PartyMaster(ABC):
                 if self.report_train_metrics_iteration > 0 and i % self.report_train_metrics_iteration == 0:
                     logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
                                  % (self.id, i, epoch))
-                    party_predictions = party.predict()
+                    party_predictions = party.predict(batcher.uids)
                     predictions = self.aggregate(party_predictions)
                     self.report_metrics(self.target, predictions, name="Train")
 
@@ -224,9 +224,9 @@ class PartyMember(ABC):
         ...
 
     @abstractmethod
-    def predict(self, batch: List[str]) -> DataTensor:
+    def predict(self, uids: List[str], use_test: bool = False) -> DataTensor:
         ...
 
     @abstractmethod
-    def update_predict(self, batch: List[str], upd: DataTensor) -> DataTensor:
+    def update_predict(self, upd: DataTensor, batch: List[str]) -> DataTensor:
         ...
