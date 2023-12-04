@@ -148,9 +148,10 @@ class PartyMaster(ABC):
 
     def synchronize_uids(self, party: Party) -> List[str]:
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, party.world_size))
+        all_records_uids = party.records_uids()
         uids = itertools.chain(
             self.target_uids,
-            (uid for member_uids in party.records_uids() for uid in set(member_uids))
+            (uid for member_uids in all_records_uids for uid in set(member_uids))
         )
         shared_uids = sorted([uid for uid, count in collections.Counter(uids).items() if count == party.world_size + 1])
 

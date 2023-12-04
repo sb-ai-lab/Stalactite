@@ -190,6 +190,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
 
                 if event.method_name == _Method.service_return_answer.value:
                     if event.parent_id not in self._event_futures:
+                        # todo: replace with custom error
                         raise ValueError(f"No awaiting future with id {event.parent_id}."
                                          f"(Participant id {self.participant.id}. "
                                          f"Event {event.id} from {event.from_uid})")
@@ -197,8 +198,12 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
                     logger.debug("Party communicator %s: marking future %s as finished by answer of event %s"
                                  % (self.participant.id, event.parent_id, event.id))
 
+                    if 'result' not in event.data:
+                        # todo: replace with custom error
+                        raise ValueError("No result in data")
+
                     future = self._event_futures.pop(event.parent_id)
-                    future.set_result(event.data)
+                    future.set_result(event.data['result'])
                     future.done()
                 elif event.method_name == _Method.service_heartbeat.value:
                     logger.info("Party communicator %s: received heartbeat from %s: %s"
