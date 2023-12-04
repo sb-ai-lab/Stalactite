@@ -252,6 +252,10 @@ class LocalPartyImpl(Party):
         self.party_communicator = party_communicator
         self.op_timeout = op_timeout
 
+    @property
+    def world_size(self) -> int:
+        return self.party_communicator.world_size
+
     def _sync_broadcast_to_members(self,
                                    method_name: _Method,
                                    mass_kwargs: Optional[List[Any]] = None, **kwargs) -> List[Any]:
