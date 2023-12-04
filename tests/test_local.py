@@ -12,6 +12,13 @@ def test_smoke():
     members_count = 3
     epochs = 5
     # shared uids also identifies dataset size
+    # todo: target should be reworked
+    # 1. target should be supplied with record uids
+    # 2. each member should have their own data (of different sizes)
+    # 3. uids mathching should be performed with relation to uids available for targets on master
+    # 4. target is also subject for filtering on master
+    # 5. shared_uids should identify uids that shared by all participants (including master itself)
+    # and should be generated beforehand
     shared_uids_count = 100
     batch_size = 10
     model_update_dim_size = 5
