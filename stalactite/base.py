@@ -112,7 +112,7 @@ class PartyMaster(ABC):
     epochs: int
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
-    Y: DataTensor
+    target: DataTensor
 
     def run(self, party: Party):
         uids = party.synchronize_uids()
@@ -139,12 +139,12 @@ class PartyMaster(ABC):
                 if self.report_train_metrics_iteration > 0 and i % self.report_train_metrics_iteration == 0:
                     party_predictions = party.predict()
                     predictions = self.aggregate(party_predictions)
-                    self.report_metrics(self.Y, predictions, name="Train")
+                    self.report_metrics(self.target, predictions, name="Train")
 
                 if self.report_test_metrics_iteration > 0 and i % self.report_test_metrics_iteration == 0:
                     party_predictions = party.predict(use_test=True)
                     predictions = self.aggregate(party_predictions)
-                    self.report_metrics(self.Y, predictions, name="Test")
+                    self.report_metrics(self.target, predictions, name="Test")
 
     @abstractmethod
     def make_batcher(self, uids: List[str]) -> Batcher:

@@ -1,7 +1,7 @@
 import torch
 
 from stalactite.communications.local import LocalPartyImpl
-from stalactite.mocks import PartyMasterImpl, MockPartyMemberImpl
+from stalactite.mocks import MockPartyMasterImpl, MockPartyMemberImpl
 
 
 def test_one():
@@ -26,7 +26,7 @@ def test_integration_local_party():
     batches = epochs * (ds_rows//batch_size+1)
     rhs_send = members_count * batches
 
-    master = PartyMasterImpl(
+    master = MockPartyMasterImpl(
         epochs=epochs,
         report_train_metrics_iteration=5,
         report_test_metrics_iteration=5,
