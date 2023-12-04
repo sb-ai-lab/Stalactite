@@ -64,7 +64,7 @@ class MockPartyMasterImpl(PartyMaster):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        return [predictions.unsqueeze(1) * torch.rand(self._weights_dim) for _ in range(world_size)]
+        return [torch.rand(self._weights_dim) for _ in range(world_size)]
 
     def master_finalize(self, party: Party):
         logger.info("Master %s: finalizing" % self.id)
@@ -116,7 +116,7 @@ class MockPartyMemberImpl(PartyMember):
         self._check_if_ready()
         if upd.size() != self._weights.size():
             raise ValueError(f"Incorrect size of update. "
-                             f"Expected: {tuple(upd.size())}. Actual: {tuple(self._weights.size())}")
+                             f"Expected: {tuple(self._weights.size())}. Actual: {tuple(upd.size())}")
 
         self._weights += upd
         logger.info("Member %s: successfully updated weights" % self.id)
