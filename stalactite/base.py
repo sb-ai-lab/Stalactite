@@ -46,7 +46,7 @@ class PartyCommunicator(ABC):
         ...
 
     @abstractmethod
-    def send(self, send_to_id: str,  method_name: str, **kwargs) -> ParticipantFuture:
+    def send(self, send_to_id: str,  method_name: str, require_answer: bool = True, **kwargs) -> ParticipantFuture:
         ...
 
     # todo: shouldn't we replace it with message type?
@@ -55,6 +55,7 @@ class PartyCommunicator(ABC):
                   method_name: str,
                   mass_kwargs: Optional[List[Any]] = None,
                   parent_id: Optional[str] = None,
+                  require_answer: bool = True,
                   include_current_participant: bool = False,
                   **kwargs) -> List[ParticipantFuture]:
         ...

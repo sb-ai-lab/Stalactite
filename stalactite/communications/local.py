@@ -83,7 +83,8 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
 
         logger.info("Party communicator %s: randezvous has been successfully performed" % self.participant.id)
 
-    def send(self, send_to_id: str, method_name: str, parent_id: Optional[str] = None, **kwargs) -> ParticipantFuture:
+    def send(self, send_to_id: str, method_name: str, parent_id: Optional[str] = None,
+             require_answer: bool = True, **kwargs) -> ParticipantFuture:
         self._check_if_ready()
 
         if send_to_id not in self._party_info:
@@ -92,12 +93,13 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant.id,
                        method_name=method_name, data=kwargs)
 
-        return self._publish_message(event, send_to_id)
+        return self._publish_message(event, send_to_id, require_answer=require_answer)
 
     def broadcast(self,
                   method_name: str,
                   mass_kwargs: Optional[List[Any]] = None,
                   parent_id: Optional[str] = None,
+                  require_answer: bool = True,
                   include_current_participant: bool = False,
                   **kwargs) -> List[ParticipantFuture]:
         self._check_if_ready()
@@ -120,22 +122,23 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant.id,
                            method_name=method_name, data={**mkwargs, **kwargs})
 
-            future = self._publish_message(event, member_id)
+            future = self._publish_message(event, member_id, require_answer=require_answer)
             if future:
                 futures.append(future)
 
         return futures
 
-    def _publish_message(self, event: _Event, receiver_id: str) -> Optional[ParticipantFuture]:
+    def _publish_message(self, event: _Event, receiver_id: str, require_answer: bool) -> Optional[ParticipantFuture]:
         logger.debug("Party communicator %s: sending to %s event %s" % (self.participant.id, receiver_id, event))
+
+        future = ParticipantFuture(participant_id=receiver_id)
+        self._party_info[receiver_id].queue.put(event)
+
         # not all command requires feedback
-        if event.parent_id:
-            future = ParticipantFuture(participant_id=receiver_id)
+        if require_answer:
             self._event_futures[event.id] = future
         else:
-            future = None
-
-        self._party_info[receiver_id].queue.put(event)
+            future.set_result(None)
 
         logger.debug("Party communicator %s: sent to %s event %s" % (self.participant.id, receiver_id, event.id))
 
@@ -270,7 +273,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
                 result = method(*mkwargs, **kwargs)
 
                 self.send(send_to_id=event.from_uid, method_name=_Method.service_return_answer.value,
-                          parent_id=event.id, result=result)
+                          parent_id=event.id, require_answer=False, result=result)
 
                 if event.method_name == _Method.finalize.value:
                     break

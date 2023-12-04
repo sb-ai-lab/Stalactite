@@ -1,6 +1,7 @@
 import logging
 import math
 import random
+import threading
 import uuid
 from threading import Thread
 
@@ -12,6 +13,8 @@ from stalactite.mocks import MockPartyMasterImpl, MockPartyMemberImpl
 
 
 logging.basicConfig(level=logging.DEBUG)
+
+logger = logging.getLogger(__name__)
 
 
 def test_local_run():
@@ -64,20 +67,24 @@ def test_local_run():
     ]
 
     def local_master_main():
+        logger.info("Starting thread %s" % threading.current_thread().name)
         comm = LocalMasterPartyCommunicator(
             participant=master,
             world_size=members_count,
             shared_party_info=shared_party_info
         )
         comm.run()
+        logger.info("Finishing thread %s" % threading.current_thread().name)
 
     def local_member_main(member: PartyMember):
+        logger.info("Starting thread %s" % threading.current_thread().name)
         comm = LocalMemberPartyCommunicator(
             participant=member,
             world_size=members_count,
             shared_party_info=shared_party_info
         )
         comm.run()
+        logger.info("Finishing thread %s" % threading.current_thread().name)
 
     threads = [
         Thread(name=f"main_{master.id}", daemon=True, target=local_master_main),
