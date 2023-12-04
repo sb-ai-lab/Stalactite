@@ -22,9 +22,9 @@ def local_master_main(world_size: int, shared_party_info: Dict[str, Any]):
     comm.run()
 
 
-def local_member_main(world_size: int, shared_party_info: Dict[str, Any]):
+def local_member_main(member_id: str, world_size: int, shared_party_info: Dict[str, Any]):
     comm = LocalMemberPartyCommunicator(
-        participant=MockPartyMemberImpl(),
+        participant=MockPartyMemberImpl(uid=member_id),
         world_size=world_size,
         shared_party_info=shared_party_info
     )
@@ -49,7 +49,11 @@ def run(members_count: int):
     threads = [
         Thread(name="master_main", target=local_master_main, args=(members_count, shared_party_info)),
         *(
-            Thread(name=f"member_main_{i}", target=local_member_main, args=(members_count, shared_party_info))
+            Thread(
+                name=f"member_main_{i}",
+                target=local_member_main,
+                args=(f"member_{i}", members_count, shared_party_info)
+            )
             for i in range(members_count)
         )
     ]
