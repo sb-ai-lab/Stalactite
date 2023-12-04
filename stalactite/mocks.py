@@ -1,8 +1,6 @@
 import logging
-import random
 from typing import List, Optional
 
-import sklearn.metrics
 import torch
 from sklearn import metrics
 

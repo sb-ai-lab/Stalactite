@@ -1,12 +1,10 @@
 import collections
 import logging
 from abc import ABC, abstractmethod
-from asyncio import Future
 from concurrent.futures import Future
-from typing import List, Dict, Any, Optional
+from typing import List, Any, Optional
 
 import torch
-
 
 logger = logging.getLogger(__name__)
 
