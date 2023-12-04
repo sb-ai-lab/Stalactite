@@ -1,3 +1,4 @@
+import logging
 import math
 import random
 import uuid
@@ -8,6 +9,9 @@ import torch
 from stalactite.base import PartyMember
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.mocks import MockPartyMasterImpl, MockPartyMemberImpl
+
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 def test_smoke():
