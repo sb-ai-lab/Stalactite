@@ -56,14 +56,15 @@ class MockPartyMasterImpl(PartyMaster):
     def aggregate(self, party_predictions: PartyDataTensor) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
-        return torch.mean(torch.stack(party_predictions))
+        # assert all(prediction.size() == (self._batch_size for prediction in party_predictions)
+        return torch.mean(torch.stack(party_predictions, dim=1), dim=1)
 
     def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor, world_size: int) \
             -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        return [predictions + torch.rand(self._weights_dim) for _ in range(world_size)]
+        return [predictions.unsqueeze(1) * torch.rand(self._weights_dim) for _ in range(world_size)]
 
     def master_finalize(self, party: Party):
         logger.info("Master %s: finalizing" % self.id)
@@ -125,7 +126,7 @@ class MockPartyMemberImpl(PartyMember):
         self._check_if_ready()
         uids = set(uids)
         idx = [i for i, uid in enumerate(self._uids_to_use) if uid in uids]
-        predictions = self._data[idx, :] * self._weights
+        predictions = torch.sum(self._data[idx, :] * self._weights, dim=1)
         logger.info("Member %s: made predictions." % self.id)
         return predictions
 

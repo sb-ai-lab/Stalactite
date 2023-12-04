@@ -142,7 +142,7 @@ class PartyMaster(ABC):
                 if self.report_test_metrics_iteration > 0 and i % self.report_test_metrics_iteration == 0:
                     logger.debug(f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
                                  % (self.id, i, epoch))
-                    party_predictions = party.predict(use_test=True)
+                    party_predictions = party.predict(uids=batcher.uids, use_test=True)
                     predictions = self.aggregate(party_predictions)
                     self.report_metrics(self.target, predictions, name="Test")
 
