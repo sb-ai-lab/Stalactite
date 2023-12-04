@@ -48,10 +48,16 @@ def run(members_count: int):
     shared_party_info = dict()
 
     threads = [
-        Thread(name="master_main", target=local_master_main, args=("master", members_count, shared_party_info)),
+        Thread(
+            name="master_main",
+            daemon=True,
+            target=local_master_main,
+            args=("master", members_count, shared_party_info)
+        ),
         *(
             Thread(
                 name=f"member_main_{i}",
+                daemon=True,
                 target=local_member_main,
                 args=(f"member-{i}", members_count, shared_party_info)
             )

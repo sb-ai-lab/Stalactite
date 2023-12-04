@@ -80,10 +80,11 @@ def test_local_run():
         comm.run()
 
     threads = [
-        Thread(name=f"main_{master.id}", target=local_master_main),
+        Thread(name=f"main_{master.id}", daemon=True, target=local_master_main),
         *(
             Thread(
                 name=f"main_{member.id}",
+                daemon=True,
                 target=local_member_main,
                 args=(member,)
             )

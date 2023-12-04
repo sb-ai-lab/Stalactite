@@ -144,7 +144,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
         self.randezvous()
         party = LocalPartyImpl(party_communicator=self)
 
-        event_loop = Thread(name=f"event-loop-{self.participant.id}", target=self._run)
+        event_loop = Thread(name=f"event-loop-{self.participant.id}", daemon=True, target=self._run)
         event_loop.start()
 
         self.participant.run(party)
