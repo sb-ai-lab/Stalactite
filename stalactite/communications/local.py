@@ -59,15 +59,20 @@ class LocalPartyCommunicator(PartyCommunicator):
         return self._party_info is not None
 
     def randezvous(self):
+        logger.info("Party communicator %s: performing randezvous" % self.participant.id)
         self._party_info[self.participant.id] = _ParticipantInfo(queue=Queue())
 
         # todo: allow to work with timeout for randezvous operation
         while len(self._party_info) < self.world_size:
             time.sleep(0.1)
 
+        logger.info("Party communicator %s: randezvous has been successfully performed" % self.participant.id)
+
     def run(self):
+        logger.info("Party communicator %s: running" % self.participant.id)
         self.randezvous()
         self._run()
+        logger.info("Party communicator %s: finished" % self.participant.id)
 
     def send(self, send_to_id: str, method_name: str, parent_id: Optional[str] = None, **kwargs) -> ParticipantFuture:
         self._check_if_ready()
@@ -109,6 +114,7 @@ class LocalPartyCommunicator(PartyCommunicator):
         return futures
 
     def _publish_message(self, event: _Event, receiver_id: str) -> Optional[ParticipantFuture]:
+        logger.debug("Party communicator %s: sending to %s event %s" % (self.participant.id, receiver_id, event))
         # not all command requires feedback
         if event.parent_id:
             future = ParticipantFuture(participant_id=receiver_id)
@@ -118,7 +124,7 @@ class LocalPartyCommunicator(PartyCommunicator):
 
         self._party_info[receiver_id].queue.put(event)
 
-        logger.debug(f"Sent to %s event %s" % (receiver_id, event))
+        logger.debug("Party communicator %s: sent to %s event %s" % (self.participant.id, receiver_id, event.id))
 
         return future
 
@@ -144,31 +150,34 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
         self._event_futures: Optional[Dict[str, Future]] = None
 
     def _run(self):
-        logger.info("Master thread for master %s has started" % self.participant.id)
+        logger.info("Party communicator %s: starting event loop" % self.participant.id)
 
         while True:
             event = self._party_info[self.participant.id].queue.get()
 
-            logger.debug("Received event %s" % event)
+            logger.debug("Party communicator %s: received event %s" % (self.participant.id, event))
 
             if event.method_name == _Method.service_return_answer.value:
                 if event.parent_id not in self._event_futures:
                     raise ValueError(f"No awaiting future with if {event.parent_id}."
                                      f"(Event {event.id} from {event.from_uid})")
 
-                logger.debug("Marking future %s as finished by answer of event %s" % (event.parent_id, event.id))
+                logger.debug("Party communicator %s: marking future %s as finished by answer of event %s"
+                             % (self.participant.id, event.parent_id, event.id))
+
                 future = self._event_futures.pop(event.parent_id)
                 future.set_result(event.data)
                 future.done()
             elif event.method_name == _Method.service_heartbeat.value:
-                logger.info("Received heartbeat from %s: %s" % (event.id, event.data))
+                logger.info("Party communicator %s: received heartbeat from %s: %s"
+                            % (self.participant. id, event.id, event.data))
             elif event.method_name == _Method.finalize:
-                logger.info("Finalized")
+                logger.info("Party communicator %s: finalized" % self.participant.id)
                 break
             else:
                 raise ValueError(f"Unsupported method {event.method_name} (Event {event.id} from {event.from_uid})")
 
-        logger.info("Master thread for master %s has finished" % self.participant.id)
+        logger.info("Party communicator %s: finished event loop" % self.participant.id)
 
 
 class LocalMemberPartyCommunicator(LocalPartyCommunicator):

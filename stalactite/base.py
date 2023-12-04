@@ -107,44 +107,53 @@ class PartyMaster(ABC):
     target_uids: List[str]
 
     def run(self, party: Party):
+        logger.info("Running master %s" % self.id)
         uids = self.synchronize_uids(party=party)
 
-        self.master_initialize()
+        self.master_initialize(party=party)
 
         self.loop(
             batcher=self.make_batcher(uids=uids),
             party=party
         )
 
-        self.master_finalize()
+        self.master_finalize(party=party)
+        logger.info("Finished master %s" % self.id)
 
     def loop(self, batcher: Batcher, party: Party):
+        logger.info("Master %s: entering training loop" % self.id)
         updates = self.make_init_updates(party.world_size)
         for epoch in range(self.epochs):
-            logger.debug(f"PARTY MASTER: TRAIN LOOP - starting EPOCH {epoch}")
+            logger.debug(f"Master %s: train loop - starting EPOCH %s / %s" % (self.id, epoch, self.epochs))
             for i, batch in enumerate(batcher):
-                logger.debug(f"PARTY MASTER: TRAIN LOOP - starting BATCH {i}")
+                logger.debug(f"Master %s: train loop - starting batch %s on epoch %s" % (self.id, i, epoch))
                 party_predictions = party.update_predict(batch, updates)
                 predictions = self.aggregate(party_predictions)
                 updates = self.compute_updates(predictions, party_predictions, party.world_size)
 
                 if self.report_train_metrics_iteration > 0 and i % self.report_train_metrics_iteration == 0:
+                    logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
+                                 % (self.id, i, epoch))
                     party_predictions = party.predict()
                     predictions = self.aggregate(party_predictions)
                     self.report_metrics(self.target, predictions, name="Train")
 
                 if self.report_test_metrics_iteration > 0 and i % self.report_test_metrics_iteration == 0:
+                    logger.debug(f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
+                                 % (self.id, i, epoch))
                     party_predictions = party.predict(use_test=True)
                     predictions = self.aggregate(party_predictions)
                     self.report_metrics(self.target, predictions, name="Test")
 
     def synchronize_uids(self, party: Party) -> List[str]:
+        logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, party.world_size))
         uids = itertools.chain(
             self.target_uids,
             (uid for member_uids in party.records_uids() for uid in set(member_uids))
         )
         shared_uids = sorted([uid for uid, count in collections.Counter(uids).items() if count == party.world_size + 1])
 
+        logger.debug("Master %s: registering shared uids f size %s" % (self.id, len(shared_uids)))
         party.register_records_uids(shared_uids)
 
         set_shared_uids = set(shared_uids)
@@ -154,6 +163,8 @@ class PartyMaster(ABC):
         self.target = self.target[selected_tensor_idx]
         self.target_uids = shared_uids
 
+        logger.debug("Master %s: record uids has been successfully synchronized")
+
         return shared_uids
 
     @abstractmethod
@@ -161,11 +172,11 @@ class PartyMaster(ABC):
         ...
 
     @abstractmethod
-    def master_initialize(self):
+    def master_initialize(self, party: Party):
         ...
 
     @abstractmethod
-    def master_finalize(self):
+    def master_finalize(self, party: Party):
         ...
 
     @abstractmethod

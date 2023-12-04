@@ -4,7 +4,7 @@ from typing import List, Optional
 import torch
 from sklearn import metrics
 
-from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember
+from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party
 from stalactite.batching import ListBatcher
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,9 @@ class MockPartyMasterImpl(PartyMaster):
         self._weights_dim = model_update_dim_size
         self.iteration_counter = 0
 
-    def master_initialize(self):
+    def master_initialize(self, party: Party):
         logger.info("Master %s: initializing" % self.id)
+        party.initialize()
         self.is_initialized = True
 
     def make_batcher(self, uids: List[str]) -> Batcher:
@@ -64,9 +65,10 @@ class MockPartyMasterImpl(PartyMaster):
         self.iteration_counter += 1
         return [predictions + torch.rand(self._weights_dim) for _ in range(world_size)]
 
-    def master_finalize(self):
+    def master_finalize(self, party: Party):
         logger.info("Master %s: finalizing" % self.id)
         self._check_if_ready()
+        party.finalize()
         self.is_finalized = True
 
     def _check_if_ready(self):
