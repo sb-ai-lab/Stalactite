@@ -3,6 +3,7 @@ import enum
 import logging
 import time
 import uuid
+from abc import ABC
 from concurrent.futures import Future
 from dataclasses import dataclass
 from queue import Queue
@@ -29,6 +30,11 @@ class _Method(enum.Enum):
     update_predict = 'update_predict'
 
 
+class _ParticipantType(enum.Enum):
+    master = 'master'
+    member = 'member'
+
+
 @dataclass
 class _Event:
     id: str
@@ -44,10 +50,11 @@ class _Event:
 
 @dataclass(frozen=True)
 class _ParticipantInfo:
+    type: _ParticipantType
     queue: Queue
 
 
-class LocalPartyCommunicator(PartyCommunicator):
+class LocalPartyCommunicator(PartyCommunicator, ABC):
     # todo: add docs
     # todo: introduce the single interface for that
     participant: Union[PartyMaster, PartyMember]
@@ -60,11 +67,16 @@ class LocalPartyCommunicator(PartyCommunicator):
 
     def randezvous(self):
         logger.info("Party communicator %s: performing randezvous" % self.participant.id)
-        self._party_info[self.participant.id] = _ParticipantInfo(queue=Queue())
+        self._party_info[self.participant.id] = _ParticipantInfo(
+            type=_ParticipantType.master if isinstance(self.participant, PartyMaster) else _ParticipantType.member,
+            queue=Queue()
+        )
 
         # todo: allow to work with timeout for randezvous operation
-        while len(self._party_info) < self.world_size:
+        while len(self._party_info) < self.world_size + 1:
             time.sleep(0.1)
+
+        self.members = [uid for uid, pinfo in self._party_info.items() if pinfo.type == _ParticipantType.member]
 
         logger.info("Party communicator %s: randezvous has been successfully performed" % self.participant.id)
 
@@ -88,7 +100,9 @@ class LocalPartyCommunicator(PartyCommunicator):
         self._check_if_ready()
         logger.debug("Sending event (%s) for all members" % method_name)
 
-        if mass_kwargs and len(mass_kwargs) != len(self.members):
+        if not mass_kwargs:
+            mass_kwargs = [dict() for _ in self.members]
+        elif mass_kwargs and len(mass_kwargs) != len(self.members):
             raise ValueError(f"Length of arguments list ({len(mass_kwargs)}) is not equal "
                              f"to the length of members ({len(self.members)})")
 
@@ -140,17 +154,21 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
         self._event_futures: Optional[Dict[str, Future]] = None
 
     def run(self):
-        logger.info("Party communicator %s: running" % self.participant.id)
-        self.randezvous()
-        party = LocalPartyImpl(party_communicator=self)
+        try:
+            logger.info("Party communicator %s: running" % self.participant.id)
+            self.randezvous()
+            party = LocalPartyImpl(party_communicator=self)
 
-        event_loop = Thread(name=f"event-loop-{self.participant.id}", daemon=True, target=self._run)
-        event_loop.start()
+            event_loop = Thread(name=f"event-loop-{self.participant.id}", daemon=True, target=self._run)
+            event_loop.start()
 
-        self.participant.run(party)
+            self.participant.run(party)
 
-        event_loop.join()
-        logger.info("Party communicator %s: finished" % self.participant.id)
+            event_loop.join()
+            logger.info("Party communicator %s: finished" % self.participant.id)
+        except:
+            logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
+            raise
 
     def _run(self):
         try:
