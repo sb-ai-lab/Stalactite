@@ -1,4 +1,5 @@
 import collections
+import itertools
 import logging
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
@@ -95,14 +96,6 @@ class Party(ABC):
     def update_predict(self, batch: List[str], upd: PartyDataTensor) -> PartyDataTensor:
         ...
 
-    def synchronize_uids(self) -> List[str]:
-        uids = (uid for member_uids in self.records_uids() for uid in set(member_uids))
-        shared_uids = [uid for uid, count in collections.Counter(uids).items() if count == self.world_size]
-
-        self.register_records_uids(shared_uids)
-
-        return shared_uids
-
 
 class PartyMaster(ABC):
     # todo: add docs
@@ -114,7 +107,7 @@ class PartyMaster(ABC):
     target_uids: List[str]
 
     def run(self, party: Party):
-        uids = party.synchronize_uids()
+        uids = self.synchronize_uids(party=party)
 
         self.master_initialize()
 
@@ -144,6 +137,24 @@ class PartyMaster(ABC):
                     party_predictions = party.predict(use_test=True)
                     predictions = self.aggregate(party_predictions)
                     self.report_metrics(self.target, predictions, name="Test")
+
+    def synchronize_uids(self, party: Party) -> List[str]:
+        uids = itertools.chain(
+            self.target_uids,
+            (uid for member_uids in party.records_uids() for uid in set(member_uids))
+        )
+        shared_uids = sorted([uid for uid, count in collections.Counter(uids).items() if count == party.world_size + 1])
+
+        party.register_records_uids(shared_uids)
+
+        set_shared_uids = set(shared_uids)
+        uid2idx = {uid: i for i, uid in enumerate(self.target_uids) if uid in set_shared_uids}
+        selected_tensor_idx = [uid2idx[uid] for uid in shared_uids]
+
+        self.target = self.target[selected_tensor_idx]
+        self.target_uids = shared_uids
+
+        return shared_uids
 
     @abstractmethod
     def make_batcher(self, uids: List[str]) -> Batcher:
