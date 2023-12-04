@@ -201,7 +201,7 @@ class PartyMember(ABC):
         ...
 
     @abstractmethod
-    def predict(self) -> DataTensor:
+    def predict(self, batch: List[str]) -> DataTensor:
         ...
 
     @abstractmethod

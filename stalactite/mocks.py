@@ -75,6 +75,7 @@ class MockPartyMemberImpl(PartyMember):
         self._is_initialized = False
         self._is_finalized = False
         self._weights: Optional[DataTensor] = None
+        self._weights_2nd_dim = 100
 
     def records_uids(self) -> List[str]:
         return self._uids
@@ -83,20 +84,25 @@ class MockPartyMemberImpl(PartyMember):
         self._uids_to_use = uids
 
     def initialize(self):
-        self._weights = torch.rand()
+        self._weights = torch.rand(len(self._uids_to_use), self._weights_2nd_dim)
         self._is_initialized = True
 
     def finalize(self):
         self._check_if_ready()
+        self._weights = None
         self._is_finalized = True
 
     def update_weights(self, upd: DataTensor):
         logger.debug(f"PARTY MEMBER: updating weights...")
-        # todo: add batch here (uid part)? Q Nik
+        if (len(upd.size()) != 1) or len(upd.size()[0] != len(self._weights)):
+            raise ValueError(f"Incorrect size of update. "
+                             f"Expected: ({self._weights.size()[0]},). Actual: {tuple(upd.size())}")
 
-    def predict(self) -> DataTensor:
+        self._weights += upd.unsqueeze(1).repeat(1, 2)
+
+    def predict(self, batch: List[str]) -> DataTensor:
         logger.debug(f"PARTY MEMBER: making predict...")
-        return torch.rand(len(batch))
+        return torch.mean(self._weights, dim=1)
 
     def update_predict(self, batch: List[str], upd: DataTensor) -> DataTensor:
         self.update_weights(upd)
