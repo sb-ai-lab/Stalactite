@@ -14,7 +14,7 @@ from stalactite.mocks import MockPartyMasterImpl, MockPartyMemberImpl
 logging.basicConfig(level=logging.DEBUG)
 
 
-def test_smoke():
+def test_local_run():
     members_count = 3
     epochs = 5
     # shared uids also identifies dataset size
