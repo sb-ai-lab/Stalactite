@@ -186,8 +186,9 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
 
                 if event.method_name == _Method.service_return_answer.value:
                     if event.parent_id not in self._event_futures:
-                        raise ValueError(f"No awaiting future with if {event.parent_id}."
-                                         f"(Event {event.id} from {event.from_uid})")
+                        raise ValueError(f"No awaiting future with id {event.parent_id}."
+                                         f"(Participant id {self.participant.id}. "
+                                         f"Event {event.id} from {event.from_uid})")
 
                     logger.debug("Party communicator %s: marking future %s as finished by answer of event %s"
                                  % (self.participant.id, event.parent_id, event.id))
