@@ -6,7 +6,7 @@ class PrivacyGuard:
     budget: float
 
     def __init__(self, method):
-        assert method in ['DP', 'MPC', 'HE', 'TEE', 'GD']
+        assert method in ['DP', 'HE']
         self.method = method
 
     def add_gaussian_noise(self, sigma: float, shape) -> DataTensor:
@@ -15,7 +15,7 @@ class PrivacyGuard:
     def norm_clipping(self, input: DataTensor, k: float) -> DataTensor:
         ...
 
-    def norm_penalty(self):
+    def norm_penalty(self) -> DataTensor:
         ...
 
     def set_public_key(self) -> DataTensor:

@@ -48,7 +48,7 @@ class PartyMaster(ABC):
                 party_predictions = party.update_predict(batch, updates)
                 predictions = self.aggregate(party_predictions)
                 if self.privacy:
-                    predictions = self.privacy.add_gaussian_noise(predictions)
+                    predictions = self.privacy.decrypt(predictions)
                 updates = self.compute_updates(predictions, party_predictions, party.world_size)
                 if self.privacy:
                     updates = self.privacy.norm_clipping(updates)
