@@ -6,8 +6,8 @@ import numpy as np
 import torch
 import safetensors.torch
 
-from generated_code import services_pb2
-from utils.helpers import (
+from experiments.src.generated_code import services_pb2
+from experiments.src.utils.helpers import (
     Serialization,
     serialization_safetensor_time,
     serialization_proto_time,

@@ -30,3 +30,32 @@ Clients will not start an exchange until `<WORLD_SIZE>` client processes will be
 - Number of clients (2; 3; 5; 10);
 - Batch size (0.1, 0.01);
 - Network (All devices in one network / Server in one network + devices in other / All in different networks);
+
+
+## To run experiment:
+0. Set the variables in experiments/bin/expctl
+```bash
+num_rows=1000000
+num_cols=10
+batch_size=10000
+```
+1. Upload files to cluster:
+```bash
+SYNC_HOST=<hostname> HOST_NAME=<username> bash rsync-repo upload
+```
+2. On the main node:
+e.g. id_of_start_node=3, id_of_last_node=6 (node3.bdcl - server, node4/5/6.bdcl - clients)
+
+```bash
+MAIN_NODE=<id_of_start_node> LAST_NODE=<id_of_last_node> bash experiments/bin/expctl pull-on-nodes
+MAIN_NODE=<id_of_start_node> LAST_NODE=<id_of_last_node> bash experiments/bin/expctl run
+```
+
+3. Check logs
+```bash
+docker logs --follow vfl-experiments
+```
+3. Stop the server (and clients if still run)
+```bash
+MAIN_NODE=<id_of_start_node> LAST_NODE=<id_of_last_node> bash experiments/bin/expctl halt
+```

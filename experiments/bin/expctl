@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+
+set -ex
+
+set +e
+function element_in_list(){
+  element=$1
+  shift 1
+  list=("$@")
+  echo "${list[*]}" | grep -w -q $element
+  return $?
+}
+
+servers=()
+num_rows=1000000
+num_cols=10
+batch_size=10000
+
+ignore_nodes=(33)
+
+if [[ -n $MAIN_NODE ]]; then
+  main_node="$MAIN_NODE"
+else
+  main_node=$(hostname | awk -F '[^0-9]+' '{print $2}')
+fi
+
+if [[ -n $LAST_NODE ]]; then
+  last_node="$LAST_NODE"
+else
+  last_node=${main_node}+2
+fi
+
+
+
+
+echo "Server node number: ${main_node}, last client node number: ${last_node}"
+
+for (( node=$main_node; node<=$last_node; node++ ))
+do
+	element_in_list $node "${ignore_nodes[@]}"
+  if [[ $? -eq 1 ]]
+  then
+	   servers+=("node${node}.bdcl")
+	fi
+done
+set -e
+
+registry="node2.bdcl:5000"
+image="vfl-communication-experiments:latest"
+full_image="${registry}/${image}"
+container_name="vfl-experiments"
+port="50051"
+
+function _exec_remotely_with_counter () {
+    cmd=$1
+    shift 1
+
+    count=1
+    for host in "$@"
+    do
+        echo "Executing on "$host
+        rank=$((count - 1))
+        ssh $host ${cmd}" ${rank}"
+        (( count++ ))
+        echo "Executed"
+    done
+}
+
+function _exec_remotely () {
+    cmd=$1
+    shift 1
+
+    for host in "$@"
+    do
+        echo "Executing on "$host
+        ssh -t $host $cmd
+        echo "Executed"
+    done
+}
+
+function build() {
+    docker build -t "${full_image}" -f experiments/experiment.dockerfile .
+}
+
+function push() {
+    docker push "${full_image}"
+}
+
+function pull() {
+    docker pull "${full_image}"
+}
+
+function pull_on_nodes() {
+    # shellcheck disable=SC2068
+    _exec_remotely "docker pull ${full_image}" ${servers[@]}
+}
+
+function install() {
+    build
+    push
+}
+
+function run() {
+    master_host=$(hostname)
+    world_size=$((${#servers[@]}-1))
+
+    echo "host: ${host}, port: ${port}, master_host: ${master_host}"
+    # shellcheck disable=SC2068
+    _exec_remotely_with_counter "docker pull ${full_image} &&
+      docker run
+      --network='host'
+      --mount type=bind,source=/dev/shm,target=/dev/shm
+      --name=${container_name}
+      -e WORLD_SIZE=${world_size}
+      -e PORT=${port}
+      -e HOST=${master_host}
+      -e NUM_ROWS=${num_rows}
+      -e NUM_COLS=${num_cols}
+      -e BATCH_SIZE=${batch_size}
+      -d ${full_image}" ${servers[@]} # TODO
+}
+
+function halt() {
+    # shellcheck disable=SC2068
+    _exec_remotely "docker kill ${container_name} || true && docker rm ${container_name} || true" ${servers[@]}
+}
+
+function help() {
+  echo "
+  List of commands.
+    build - builds docker image with llama sources, installed requirements.
+    push - sends built docker image into the registry.
+    install - combine build and push commands.
+    pull - downloads llama docker image to a local machine.
+    pull-on-nodes - executes pull command on a set of nodes.
+    run - starts docker containers with llama on a set of nodes and performs infer.
+    halt - kills and rm docker containers with llama on a set of nodes.
+    help - prints this message.
+  "
+}
+
+function main () {
+    echo "Checking servers: ${servers[*]}"
+    echo "============================"
+
+    cmd="$1"
+
+    if [ -z "${cmd}" ]
+    then
+      echo "No command is provided."
+      help
+      exit 1
+    fi
+
+    shift 1
+
+    echo "Executing command: ${cmd}"
+
+    case "${cmd}" in
+
+    "help")
+        help
+        ;;
+
+    "build")
+        build
+        ;;
+
+    "push")
+        push
+        ;;
+
+    "pull")
+        pull
+        ;;
+
+    "pull-on-nodes")
+        pull_on_nodes
+        ;;
+
+    "install")
+        install
+        ;;
+
+    "run")
+        run
+        ;;
+
+    "halt")
+        halt
+        ;;
+
+    *)
+        echo "Unknown command: ${cmd}"
+        ;;
+
+    esac
+}
+
+main "${@}"

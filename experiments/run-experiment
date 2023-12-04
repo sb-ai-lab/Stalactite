@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+export PYTHONPATH="${PYTHONPATH}:/opt"
+RANK=$1
+echo "Rank $RANK"
+
+if [[ $RANK == 0 ]]; then
+  echo "Starting server node"
+  python /opt/experiments/src/grpc_server.py \
+    --world_size "${WORLD_SIZE}" \
+    --port "${PORT}" \
+    --batch_size "${BATCH_SIZE}" \
+    --max_message_size -1 \
+    --thread_pool_max_workers 20
+else
+  echo "Starting client node"
+  python /opt/experiments/src/grpc_task_client.py \
+    --port "${PORT}" \
+    --host "${HOST}" \
+    --max_message_size -1 \
+    --ping_interval 3 \
+    --num_rows "${NUM_ROWS}" \
+    --num_cols "${NUM_COLS}" \
+    --batch_size "${BATCH_SIZE}"
+fi

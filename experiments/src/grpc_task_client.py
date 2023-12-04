@@ -167,6 +167,7 @@ async def run_client(args):
     )
 
     async with client.start() as party:
+
         await party.add_task_to_queue(Task(task_type=ClientTask.exchange_array, data=data_proto))
         await party.add_task_to_queue(Task(task_type=ClientTask.batched_exchange_array, data=data_proto))
         await party.add_task_to_queue(Task(task_type=ClientTask.exchange_tensor, data=data_tensor))
