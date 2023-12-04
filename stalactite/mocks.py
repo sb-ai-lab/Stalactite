@@ -16,20 +16,23 @@ class MockPartyMasterImpl(PartyMaster):
                  epochs: int,
                  report_train_metrics_iteration: int,
                  report_test_metrics_iteration: int,
-                 target: DataTensor):
+                 target: DataTensor,
+                 batch_size: int,
+                 model_update_dim_size: int):
         self.id = uid
         self.epochs = epochs
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.target = target
-        self._is_initialized = False
-        self._is_finalized = False
-        self._batch_size = 10
-        self._weights_dim = 100
+        self.is_initialized = False
+        self.is_finalized = False
+        self._batch_size = batch_size
+        self._weights_dim = model_update_dim_size
+        self.iteration_counter = 0
 
     def master_initialize(self):
         logger.info("Master %s: initializing" % self.id)
-        self._is_initialized = True
+        self.is_initialized = True
 
     def make_batcher(self, uids: List[str]) -> Batcher:
         logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
@@ -56,28 +59,30 @@ class MockPartyMasterImpl(PartyMaster):
             -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
+        self.iteration_counter += 1
         return [predictions + torch.rand(self._weights_dim) for _ in range(world_size)]
 
     def master_finalize(self):
         logger.info("Master %s: finalizing" % self.id)
         self._check_if_ready()
-        self._is_finalized = True
+        self.is_finalized = True
 
     def _check_if_ready(self):
-        if not self._is_initialized and not self._is_finalized:
+        if not self.is_initialized and not self.is_finalized:
             raise RuntimeError("The member has not been initialized")
 
 
 class MockPartyMemberImpl(PartyMember):
-    def __init__(self, uid: str):
+    def __init__(self, uid: str, model_update_dim_size: int):
         self.id = uid
         self._uids = [str(i) for i in range(100)]
         self._uids_to_use: Optional[List[str]] = None
-        self._is_initialized = False
-        self._is_finalized = False
+        self.is_initialized = False
+        self.is_finalized = False
         self._weights: Optional[DataTensor] = None
-        self._weights_dim = 100
+        self._weights_dim = model_update_dim_size
         self._data: Optional[DataTensor] = None
+        self.iterations_counter = 0
 
     def records_uids(self) -> List[str]:
         logger.info("Member %s: reporting existing record uids" % self.id)
@@ -91,14 +96,14 @@ class MockPartyMemberImpl(PartyMember):
         logger.info("Member %s: initializing" % self.id)
         self._weights = torch.rand(self._weights_dim)
         self._data = torch.rand(len(self._uids_to_use), self._weights_dim)
-        self._is_initialized = True
+        self.is_initialized = True
         logger.info("Member %s: has been initialized" % self.id)
 
     def finalize(self):
         logger.info("Member %s: finalizing" % self.id)
         self._check_if_ready()
         self._weights = None
-        self._is_finalized = True
+        self.is_finalized = True
         logger.info("Member %s: has been finalized" % self.id)
 
     def update_weights(self, upd: DataTensor):
@@ -125,9 +130,10 @@ class MockPartyMemberImpl(PartyMember):
         self._check_if_ready()
         self.update_weights(upd)
         predictions = self.predict(batch)
+        self.iterations_counter += 1
         logger.info("Member %s: updated and predicted." % self.id)
         return predictions
 
     def _check_if_ready(self):
-        if not self._is_initialized and not self._is_finalized:
+        if not self.is_initialized and not self.is_finalized:
             raise RuntimeError("The member has not been initialized")
