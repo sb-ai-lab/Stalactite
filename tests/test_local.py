@@ -1,4 +1,6 @@
 import math
+import random
+import uuid
 from threading import Thread
 
 import torch
@@ -12,7 +14,6 @@ def test_smoke():
     members_count = 3
     epochs = 5
     # shared uids also identifies dataset size
-    # todo: target should be reworked
     # 1. target should be supplied with record uids
     # 2. each member should have their own data (of different sizes)
     # 3. uids mathching should be performed with relation to uids available for targets on master
@@ -22,6 +23,19 @@ def test_smoke():
     shared_uids_count = 100
     batch_size = 10
     model_update_dim_size = 5
+    # master + all members
+    num_target_records = 1000
+
+    num_dataset_records = [200 + random.randint(100, 1000) for _ in range(members_count)]
+    shared_record_uids = [str(i) for i in range(shared_uids_count)]
+    target_uids = [
+        *shared_record_uids,
+        *(str(uuid.uuid4()) for _ in range(num_target_records - len(shared_record_uids)))
+    ]
+    members_datasets_uids = [
+        [*shared_record_uids, *(str(uuid.uuid4()) for _ in range(num_records - len(shared_record_uids)))]
+        for num_records in num_dataset_records
+    ]
 
     shared_party_info = dict()
 
@@ -31,6 +45,7 @@ def test_smoke():
         report_train_metrics_iteration=5,
         report_test_metrics_iteration=5,
         target=torch.rand(shared_uids_count),
+        target_uids=target_uids,
         batch_size=batch_size,
         model_update_dim_size=model_update_dim_size
     )
@@ -38,9 +53,10 @@ def test_smoke():
     members = [
         MockPartyMemberImpl(
             uid=f"member-{i}",
-            model_update_dim_size=model_update_dim_size
+            model_update_dim_size=model_update_dim_size,
+            member_record_uids=member_uids
         )
-        for i in range(members_count)
+        for i, member_uids in enumerate(members_datasets_uids)
     ]
 
     def local_master_main():

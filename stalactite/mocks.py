@@ -17,6 +17,7 @@ class MockPartyMasterImpl(PartyMaster):
                  report_train_metrics_iteration: int,
                  report_test_metrics_iteration: int,
                  target: DataTensor,
+                 target_uids: List[str],
                  batch_size: int,
                  model_update_dim_size: int):
         self.id = uid
@@ -24,6 +25,7 @@ class MockPartyMasterImpl(PartyMaster):
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.target = target
+        self.target_uids = target_uids
         self.is_initialized = False
         self.is_finalized = False
         self._batch_size = batch_size
@@ -73,9 +75,9 @@ class MockPartyMasterImpl(PartyMaster):
 
 
 class MockPartyMemberImpl(PartyMember):
-    def __init__(self, uid: str, model_update_dim_size: int):
+    def __init__(self, uid: str, model_update_dim_size: int, member_record_uids: List[str]):
         self.id = uid
-        self._uids = [str(i) for i in range(100)]
+        self._uids = member_record_uids
         self._uids_to_use: Optional[List[str]] = None
         self.is_initialized = False
         self.is_finalized = False

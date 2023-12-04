@@ -111,6 +111,7 @@ class PartyMaster(ABC):
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
     target: DataTensor
+    target_uids: List[str]
 
     def run(self, party: Party):
         uids = party.synchronize_uids()
