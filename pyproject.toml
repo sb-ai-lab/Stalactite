@@ -11,8 +11,19 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.9"
 torch = "^2.1.1"
-grpcio = "^1.59.3"
+pytest = "^7.4.3"
+click = "^8.1.7"
+numpy = "^1.26.2"
+scikit-learn = "^1.3.2"
 
+[tool.poetry.scripts]
+stalactite = "stalactite.main:cli"
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "DEBUG"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 
 [build-system]
 requires = ["poetry-core"]
