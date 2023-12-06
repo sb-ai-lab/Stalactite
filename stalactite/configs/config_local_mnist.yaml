@@ -16,7 +16,7 @@ data:
   features_data_preprocessors: [PILImageToTensor(features_key), FullDataTensor(features_key), RemoveZeroStdColumns, SkLearnStandardScaler]
   label_data_preprocessors: [FullDataTensor(label_key), ]
   data_partition_parts: 3
-  features_key: "image_part_0"
+  features_key: "image_part_"
   label_key: "label"
 
 model:

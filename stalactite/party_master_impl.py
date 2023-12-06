@@ -4,10 +4,11 @@ from typing import List, Optional
 import torch
 from sklearn import metrics
 
-from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party
+from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party, ComputeAccuracy
 from stalactite.batching import ListBatcher
 
 logger = logging.getLogger(__name__)
+
 
 class PartyMasterImpl(PartyMaster):
     def __init__(self,
@@ -44,26 +45,35 @@ class PartyMasterImpl(PartyMaster):
     def make_init_updates(self, world_size: int) -> PartyDataTensor:
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        return [torch.rand(self._weights_dim) for _ in range(world_size)]
+        return [torch.rand(self._batch_size) for _ in range(world_size)]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
         logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
                     f"Predictions size: {predictions.size()}" % self.id)
         error = metrics.mean_absolute_error(y, predictions)
-        logger.info(f"Master %s: mock metrics (MAE): {error}" % error)
+        acc = ComputeAccuracy().compute(y, predictions)
+        logger.info(f"Master %s: metrics (MAE): {error}" % error)
+        logger.info(f"Master %s: metrics (Accuracy): {acc}" % acc)
 
     def aggregate(self, party_predictions: PartyDataTensor) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
-        # assert all(prediction.size() == (self._batch_size for prediction in party_predictions)
-        return torch.mean(torch.stack(party_predictions, dim=1), dim=1)
+        return torch.sum(torch.stack(party_predictions, dim=1), dim=1)
 
-    def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor, world_size: int) \
-            -> List[DataTensor]:
+    def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor, world_size: int,
+                        batch: List[str]) -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        return [torch.rand(self._weights_dim) for _ in range(world_size)]
+
+        y = self.target[self._batch_size*(self.iteration_counter-1):self._batch_size*self.iteration_counter]
+        updates = []
+        for member_id in range(world_size):
+            party_predictions_for_upd = [p for i, p in enumerate(party_predictions) if i != member_id]
+            member_pred = torch.sum(torch.stack(party_predictions_for_upd), dim=0)
+            member_update = y - torch.reshape(member_pred, (-1,))
+            updates.append(member_update)
+        return updates
 
     def master_finalize(self, party: Party):
         logger.info("Master %s: finalizing" % self.id)

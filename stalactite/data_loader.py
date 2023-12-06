@@ -56,22 +56,11 @@ def load_yaml_config(yaml_path):
             return yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             raise ValueError("Yaml error - check yaml file")
-def init():
-    # # Windows/Linux/MacOS compatability issues on multi-processing
-    # # https://github.com/pytorch/pytorch/issues/3492
-    # if multiprocessing.get_start_method() != "spawn":
-    #     # force all platforms (Windows/Linux/MacOS) to use the same way (spawn) for multiprocessing
-    #     multiprocessing.set_start_method("spawn", force=True)
-    #
-    # # https://stackoverflow.com/questions/53014306/error-15-initializing-libiomp5-dylib-but-found-libiomp5-dylib-already-initial
-    # os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
-    #
-    # collect_env()  # print env data
-    # # import pdb; pdb.set_trace()
 
-    # cmd_params = vars(add_args())
+
+def init():
+
     config = AttrDict(load_yaml_config("configs/config_local_mnist.yaml"))
-    # config.cmd_params = cmd_params
 
     seed = config.common.random_seed
     random.seed(seed)
@@ -80,51 +69,22 @@ def init():
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
 
-    # if config.common.training_type == TRAINING_TYPE_SIMULATION and hasattr(config.common, "backend") \
-    #         and config.common.backend.lower() == BACKEND_MPI:
-    #     connection_params, common_params = init_simulation_mpi(attr())
-    #
-    #     config.common.update(common_params)
-    #     config.model.role = config.common.role
-    #     config.connection = connection_params
-
     if config.common.training_type == "simulation" and hasattr(config.common, "backend") \
             and config.common.backend.lower() == "sp":
 
         tmp_args = init_simulation_sp(attr())
         joint_config = AttrDict({})
         for ii in range(config.common.parties_num):
-            joint_config[ii] = AttrDict(load_yaml_config("configs/config_local_mnist.yaml")) # copy.deepcopy(config)
+            joint_config[ii] = AttrDict(load_yaml_config("configs/config_local_mnist.yaml"))
 
             joint_config[ii].common.update(vars(tmp_args))
             joint_config[ii].model.role = joint_config[ii].common.role
+            joint_config[ii].data.features_key = joint_config[ii].data.features_key + str(ii)
 
         joint_config['joint_config'] = True
         joint_config['parties'] = list(range(config.common.parties_num))
         joint_config['backend'] = config.common.backend.lower()
         config = joint_config
-    #     print("single process simulation")
-    #     tmp_args = init_simulation_sp(attr())
-    #     # print(config)
-    #     joint_config = AttrDict({})
-    #     joint_config["common"] = config["common"]
-    #     joint_config["data"] = config["data"]
-    #     joint_config["common"]['parties'] = list(range(config.common.parties_num))
-    #
-    #     for ii in range(config.common.parties_num):
-    #         # joint_config[ii] == AttrDict(load_yaml_config("configs/config_local_mnist.yaml"))
-    #         # joint_config[ii] = copy.deepcopy(config)
-    #         joint_config[ii] = AttrDict(load_yaml_config("configs/config_local_mnist.yaml"))
-    #         joint_config[ii].common.update(vars(tmp_args))
-    #         joint_config[ii].model.role = joint_config[ii].common.role
-    #
-    #     joint_config['joint_config'] = True
-    #     # joint_config['parties'] = list(range(config.common.parties_num))
-    #     joint_config['backend'] = config.common.backend.lower()
-    #     config = joint_config
-    # else:
-    #     raise ValueError("Other parameters are not supported currently!")
-    # # config['parties'] = list(range(config.common.parties_num))
 
     return config
 
