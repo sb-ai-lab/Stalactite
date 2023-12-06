@@ -4,6 +4,7 @@ from collections import defaultdict
 from concurrent import futures
 import logging
 import time
+import json
 from typing import AsyncIterator
 
 import grpc
@@ -25,6 +26,9 @@ from utils import (
     prototensor_exchange,
     safetensor_batch_exchange,
     prototensor_batch_exchange,
+    ClientTask,
+    collect_results_stream,
+    collect_results_unary,
 )
 
 parser = argparse.ArgumentParser()
@@ -35,6 +39,13 @@ sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 logger.addHandler(sh)
 
+
+TASK2SUMMARY = {
+    ClientTask.batched_exchange_tensor: collect_results_stream,
+    ClientTask.exchange_tensor: collect_results_unary,
+    ClientTask.batched_exchange_array: collect_results_stream,
+    ClientTask.exchange_array: collect_results_unary,
+}
 
 class CommunicationManager:
     def __init__(self, world_size: int, disconnect_idle_client_time: float = 6., batch_size: int = 100):
@@ -70,12 +81,35 @@ class CommunicationManager:
                     self.connections.pop(conn_id)
                     logger.info(f"Client {conn_id} disconnected")
 
+    async def _add_to_prometheus(self, client_timings: dict) -> None:
+        task_type = client_timings.get('task_type')
+        total_time = client_timings.get('total_time')
+        awaiting_time = client_timings.get('awaiting_time')
+        deserialization_time = client_timings.get('deserialization_time')
+        serialization = client_timings.get('serialization')
+
+        TASK2SUMMARY[task_type].labels(time_type='total_time', serialization=serialization).observe(total_time)
+        if 'batched' in task_type:
+            [
+                TASK2SUMMARY[task_type].labels(time_type='deserialization_time', serialization=serialization).observe(t)
+                for t in deserialization_time
+            ]
+        else:
+            TASK2SUMMARY[task_type].labels(time_type='deserialization_time', serialization=serialization)\
+                .observe(deserialization_time)
+        if awaiting_time is not None:
+            TASK2SUMMARY[task_type].labels(time_type='awaiting_time', serialization=serialization)\
+                .observe(awaiting_time)
+
     async def process_ping(self, request: services_pb2.Ping) -> services_pb2.Ping:
         """
         Process ping request from client. Send status indicating whether client should start.
         """
         client_name = request.data
         logger.debug(f"Got ping from client {client_name}")
+        if request.additional_info:
+            client_timings = json.loads(request.additional_info)
+            await self._add_to_prometheus(client_timings) # TODO
         async with self._lock:
             self.connections[client_name] = time.time()
 

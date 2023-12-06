@@ -30,6 +30,7 @@ message SafetensorDataProto {
 
 message Ping {
   string data = 1;
+  optional string additional_info = 2;
 }
 
 

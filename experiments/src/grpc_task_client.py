@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import logging
 import time
 from typing import AsyncIterator
@@ -8,7 +9,6 @@ from contextlib import asynccontextmanager
 
 import grpc
 import torch
-from prometheus_client import start_http_server
 
 from generated_code import services_pb2, services_pb2_grpc
 from utils import (
@@ -21,7 +21,6 @@ from utils import (
     Task,
     ExperimentalData,
 )
-
 
 parser = argparse.ArgumentParser()
 
@@ -61,6 +60,8 @@ class GRpcClient:
         self._iteration = 1
         self._pings_task = None
 
+        self.task_timings_queue = asyncio.Queue()
+
         logger.info(f"Initialized {self._uuid} client: ({server_host}:{server_port})")
 
     async def add_task_to_queue(self, task: Task):
@@ -76,11 +77,9 @@ class GRpcClient:
             )
             self._pings_task = asyncio.create_task(self.process_pongs(server_response_iterator=pingpong_responses))
             self._run_task = asyncio.create_task(self.run_task())
+
             yield self
-            await self._run_task
-            # await self.run_task(ClientTask.exchange)
-        # except KeyboardInterrupt:
-        #     pass
+
         finally:
             await self._run_task
             await self._close()
@@ -95,7 +94,11 @@ class GRpcClient:
 
     @property
     def ping_message(self):
-        return services_pb2.Ping(data=self.client_name)
+        message = services_pb2.Ping(data=self.client_name)
+        if not self.task_timings_queue.empty():
+            timings = self.task_timings_queue.get_nowait()
+            message.additional_info = json.dumps(timings)
+        return message
 
     async def ping_messages_generator(self):
         while True:
@@ -119,9 +122,12 @@ class GRpcClient:
 
     async def _process_task(self, task: Task):
         start = time.time()
+        await asyncio.sleep(1.)
         future = task.start_rpc(stub=self._stub, client_name=self.client_name, client_iteration=self.iteration)
         result = await task.collect_results_rpc(future)
+
         full_time = time.time() - start
+        await self.task_timings_queue.put(task.rpc_timings)
         logger.info(format_important_logging(
             f"Got aggregation result from server: result shape {result.shape}, result[0, 0] {result[0, 0]}\n"
             f"Full execution time: {round(full_time, 4)} sec"
@@ -134,7 +140,10 @@ class GRpcClient:
             task = await self._task_queue.get()
             if task.type == ClientTask.finish:
                 logger.info('Got task `ClientTask.finish`. Terminating')
-                return
+                while True:
+                    if self.task_timings_queue.empty():
+                        return
+                    await asyncio.sleep(1)
             await self._process_task(task)
 
     async def _close(self):
@@ -167,12 +176,10 @@ async def run_client(args):
     )
 
     async with client.start() as party:
-
         await party.add_task_to_queue(Task(task_type=ClientTask.exchange_array, data=data_proto))
         await party.add_task_to_queue(Task(task_type=ClientTask.batched_exchange_array, data=data_proto))
         await party.add_task_to_queue(Task(task_type=ClientTask.exchange_tensor, data=data_tensor))
         await party.add_task_to_queue(Task(task_type=ClientTask.batched_exchange_tensor, data=data_tensor))
-
         await party.add_task_to_queue(Task(task_type=ClientTask.finish))
 
 
@@ -190,7 +197,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    start_http_server(args.port_prometheus)
     try:
         asyncio.get_event_loop().run_until_complete(run_client(args))
     except KeyboardInterrupt:

@@ -12,11 +12,6 @@ from experiments.src.utils.helpers import (
     ClientTask,
     format_important_logging,
     Serialization,
-    generate_data,
-    safetensor_collect_results_unary,
-    safetensor_collect_results_stream,
-    prototensor_collect_results_unary,
-    prototensor_collect_results_stream,
 )
 
 parser = argparse.ArgumentParser()
@@ -54,19 +49,19 @@ class ExperimentalData:
         self.batch_size = batch_size
         self.serialization = serialization
 
-    @generate_data.time()
+    # @generate_data.time()
     def generate_data(self) -> torch.Tensor:
         return torch.rand(self.num_rows, self.num_columns, dtype=self.dtype)
 
     def batch_generate_data(self) -> Generator[BatchedData, None, None]:
         total_batches = int(np.ceil(self.num_rows / self.batch_size))
         for batch in range(total_batches):
-            with generate_data.time():
-                yield BatchedData(
-                    data=torch.rand(self.batch_size, self.num_columns, dtype=self.dtype),
-                    batch=batch,
-                    total_batches=total_batches,
-                )
+            # with generate_data.time():
+            yield BatchedData(
+                data=torch.rand(self.batch_size, self.num_columns, dtype=self.dtype),
+                batch=batch,
+                total_batches=total_batches,
+            )
 
 
 class Task:
@@ -76,6 +71,17 @@ class Task:
 
         if self.task_type != ClientTask.finish and self.data is None:
             raise ValueError('Data is required if task type is not ClientTask.finish')
+
+        if self.task_type != ClientTask.finish:
+            self.reset_timings()
+
+
+    @property
+    def rpc_timings(self):
+        return self._timings
+
+    def reset_timings(self):
+        self._timings = {'task_type': self.type, 'serialization': self.data.serialization}
 
     @property
     def type(self) -> ClientTask:
@@ -136,13 +142,10 @@ class Task:
         result = torch.tensor([])
         if self.task_type in (ClientTask.exchange_tensor, ClientTask.exchange_array):
             start = time.time()
-            time_collection_method = safetensor_collect_results_unary if self.task_type == ClientTask.exchange_tensor \
-                else prototensor_collect_results_unary
-            with time_collection_method.time():
-                data = await future
-                breakpoint = time.time()
-                serialization = Serialization.safetensors if self.task_type == ClientTask.exchange_tensor else Serialization.protobuf
-                result = load_data(data, serialization=serialization)
+            data = await future
+            breakpoint = time.time()
+            serialization = Serialization.safetensors if self.task_type == ClientTask.exchange_tensor else Serialization.protobuf
+            result = load_data(data, serialization=serialization)
             end = time.time()
             total_time = end - start
             awaiting_time = breakpoint - start
@@ -152,20 +155,26 @@ class Task:
                 f" - coro awaited for {round(awaiting_time, 4)} sec;\n"
                 f" - deserialization time {round(deserialization_time, 4)}"
             ))
+            self._timings['total_time'] = total_time
+            self._timings['awaiting_time'] = awaiting_time
+            self._timings['deserialization_time'] = deserialization_time
         elif self.task_type in (ClientTask.batched_exchange_tensor, ClientTask.batched_exchange_array):
+            self._timings['deserialization_time'] = []
             start = time.time()
             serialization = Serialization.safetensors if self.task_type == ClientTask.batched_exchange_tensor \
                 else Serialization.protobuf
-            time_collection_method = safetensor_collect_results_stream \
-                if self.task_type == ClientTask.batched_exchange_tensor else prototensor_collect_results_stream
-            with time_collection_method.time():
-                async for batch in future:
-                    data_batch = load_data(batch, serialization=serialization)
-                    result = torch.cat([result, data_batch])
+
+            async for batch in future:
+                breakpoint = time.time()
+                data_batch = load_data(batch, serialization=serialization)
+                self._timings['deserialization_time'].append(time.time() - breakpoint)
+                result = torch.cat([result, data_batch])
+
             end = time.time()
             logger.info(format_important_logging(
                 f"Result got in {round(end - start, 4)} sec: \n"
             ))
+            self._timings['total_time'] = end - start
         else:
             return
         return result

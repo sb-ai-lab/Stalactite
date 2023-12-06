@@ -21,10 +21,12 @@ class SafetensorDataProto(_message.Message):
     def __init__(self, data: _Optional[bytes] = ..., iteration: _Optional[int] = ..., client_id: _Optional[str] = ..., batch: _Optional[int] = ..., total_batches: _Optional[int] = ...) -> None: ...
 
 class Ping(_message.Message):
-    __slots__ = ["data"]
+    __slots__ = ["data", "additional_info"]
     DATA_FIELD_NUMBER: _ClassVar[int]
+    ADDITIONAL_INFO_FIELD_NUMBER: _ClassVar[int]
     data: str
-    def __init__(self, data: _Optional[str] = ...) -> None: ...
+    additional_info: str
+    def __init__(self, data: _Optional[str] = ..., additional_info: _Optional[str] = ...) -> None: ...
 
 class TensorProto(_message.Message):
     __slots__ = ["dims", "data_type", "float_data", "int32_data", "byte_data", "string_data", "double_data", "int64_data", "status", "iteration", "client_id", "batch", "total_batches"]

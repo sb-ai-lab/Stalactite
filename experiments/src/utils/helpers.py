@@ -11,15 +11,21 @@ safetensor_batch_exchange = Summary(
 prototensor_batch_exchange = Summary('ExchangeNumpyDataStreamStream_sec', 'Batched bidirectional proto exchange time')
 
 # ====== Client-side metrics ======
-generate_data = Summary('torch_rand_tensor_generation_sec', 'Data generation time')
-safetensor_collect_results_unary = Summary('exchange_tensor_sec', 'Coroutine awaiting exchange_tensor task time')
-safetensor_collect_results_stream = Summary(
-    'batched_exchange_tensor_sec', 'Coroutine awaiting batched_exchange_tensor task time'
+# generate_data = Summary('torch_rand_tensor_generation_sec', 'Data generation time')
+collect_results_unary = Summary(
+    'exchange_sec', 'Coroutine awaiting exchange task time', ['time_type', 'serialization']
 )
-prototensor_collect_results_unary = Summary('exchange_array_sec', 'Coroutine awaiting exchange_array task time')
-prototensor_collect_results_stream = Summary(
-    'batched_exchange_array_sec', 'Coroutine awaiting batched_exchange_array task time'
+collect_results_stream = Summary(
+    'batched_exchange_sec', 'Coroutine awaiting batched_exchange task time', ['time_type', 'serialization']
 )
+# prototensor_collect_results_unary = Summary(
+#     'exchange_array_sec', 'Coroutine awaiting exchange_array task time', ['time_type']
+# )
+# prototensor_collect_results_stream = Summary(
+#     'batched_exchange_array_sec', 'Coroutine awaiting batched_exchange_array task time', ['time_type']
+# )
+
+
 
 # ====== Loading function metrics ======
 
@@ -46,17 +52,17 @@ deserialization_proto_time = Histogram(
 
 
 
-class Serialization(enum.Enum):
-    safetensors = 0
-    protobuf = 1
+class Serialization(str, enum.Enum):
+    safetensors = 'safetensors'
+    protobuf = 'protobuf'
 
 
-class ClientTask(enum.Enum):
-    batched_exchange_tensor = 0
-    exchange_tensor = 1
-    batched_exchange_array = 2
-    exchange_array = 3
-    finish = 4
+class ClientTask(str, enum.Enum):
+    batched_exchange_tensor = 'batched_exchange_tensor'
+    exchange_tensor = 'exchange_tensor'
+    batched_exchange_array = 'batched_exchange_array'
+    exchange_array = 'exchange_array'
+    finish = 'finish'
 
 
 class PingResponse(str, enum.Enum):
