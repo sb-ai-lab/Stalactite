@@ -21,5 +21,6 @@ else
     --ping_interval 3 \
     --num_rows "${NUM_ROWS}" \
     --num_cols "${NUM_COLS}" \
-    --batch_size "${BATCH_SIZE}"
+    --batch_size "${BATCH_SIZE}" \
+    --port_prometheus "909${RANK}"
 fi

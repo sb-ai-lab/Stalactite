@@ -18,6 +18,8 @@ batch_size=10000
 
 ignore_nodes=(33)
 
+other_hosts=("gpusrv" "gpusrv" "gpusrv")
+
 if [[ -n $MAIN_NODE ]]; then
   main_node="$MAIN_NODE"
 else
@@ -30,13 +32,11 @@ else
   last_node=${main_node}+2
 fi
 
-if [[ -n $OTHER_CLIENTS ]]; then
-  other_clients="$OTHER_CLIENTS"
-else
-  other_clients=0
-fi
-
-
+#if [[ -n $OTHER_CLIENTS ]]; then
+#  other_clients="$OTHER_CLIENTS"
+#else
+#  other_clients=0
+#fi
 
 
 
@@ -73,6 +73,21 @@ function _exec_remotely_with_counter () {
     done
 }
 
+function _exec_remotely_with_counter_yc () {
+    cmd=$1
+    shift 1
+
+    count=1
+    for host in "$@"
+    do
+        echo "Executing on "$host
+        rank=$((count))
+        ssh $host ${cmd}" ${rank}"
+        (( count++ ))
+        echo "Executed"
+    done
+}
+
 function _exec_remotely () {
     cmd=$1
     shift 1
@@ -100,6 +115,8 @@ function pull() {
 function pull_on_nodes() {
     # shellcheck disable=SC2068
     _exec_remotely "docker pull ${full_image}" ${servers[@]}
+    # shellcheck disable=SC2068
+    _exec_remotely "docker pull ${full_image}" ${other_hosts[@]}
 }
 
 function install() {
@@ -109,7 +126,7 @@ function install() {
 
 function run() {
     master_host=$(hostname)
-    world_size=$((${#servers[@]}-1+other_clients))
+    world_size=$((${#servers[@]}-1+${#other_hosts[@]}))
 
     echo "host: ${host}, port: ${port}, master_host: ${master_host}"
     # shellcheck disable=SC2068
@@ -125,11 +142,26 @@ function run() {
       -e NUM_COLS=${num_cols}
       -e BATCH_SIZE=${batch_size}
       -d ${full_image}" ${servers[@]} # TODO
-}
+
+    # shellcheck disable=SC2068
+    _exec_remotely_with_counter_yc "docker pull ${full_image} &&
+      docker run
+      --network='host'
+      --mount type=bind,source=/dev/shm,target=/dev/shm
+      -e WORLD_SIZE=${world_size}
+      -e PORT=${port}
+      -e HOST=${master_host}
+      -e NUM_ROWS=${num_rows}
+      -e NUM_COLS=${num_cols}
+      -e BATCH_SIZE=${batch_size}
+      -d ${full_image}" ${other_hosts[@]}
+} # --name=${container_name}
 
 function halt() {
     # shellcheck disable=SC2068
     _exec_remotely "docker kill ${container_name} || true && docker rm ${container_name} || true" ${servers[@]}
+    # shellcheck disable=SC2068
+    _exec_remotely "docker kill ${container_name} || true && docker rm ${container_name} || true" ${other_hosts[@]}
 }
 
 function help() {
