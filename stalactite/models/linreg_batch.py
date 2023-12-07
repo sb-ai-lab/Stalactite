@@ -3,7 +3,8 @@ import logging
 import torch
 
 from .elm import solve_ols_svd
-logger = logging.getLogger("my_logger")
+
+logger = logging.getLogger(__name__)
 
 
 class LinearRegressionBatch(torch.nn.Module):

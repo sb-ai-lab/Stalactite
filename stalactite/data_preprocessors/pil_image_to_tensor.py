@@ -6,6 +6,7 @@ from .base_preprocessor import DataPreprocessor
 to_tensor = transforms.ToTensor()
 to_image = transforms.ToPILImage()
 
+
 class PILImageToTensor(DataPreprocessor):
     def __init__(self, input_feature_name=None):
         super().__init__()

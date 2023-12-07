@@ -60,7 +60,7 @@ def load_yaml_config(yaml_path):
 
 def init():
 
-    config = AttrDict(load_yaml_config("configs/config_local_mnist.yaml"))
+    config = AttrDict(load_yaml_config("../experiments/configs/config_local_mnist.yaml"))
 
     seed = config.common.random_seed
     random.seed(seed)
@@ -75,7 +75,7 @@ def init():
         tmp_args = init_simulation_sp(attr())
         joint_config = AttrDict({})
         for ii in range(config.common.parties_num):
-            joint_config[ii] = AttrDict(load_yaml_config("configs/config_local_mnist.yaml"))
+            joint_config[ii] = AttrDict(load_yaml_config("../experiments/configs/config_local_mnist.yaml"))
 
             joint_config[ii].common.update(vars(tmp_args))
             joint_config[ii].model.role = joint_config[ii].common.role
@@ -167,9 +167,9 @@ class DataPreprocessor:
     def __init__(self, dataset, data_params, member_id):
         self.dataset = dataset
         self.data_params = data_params
-        self.preprocessors_params = {}  # todo: refactor it {"image_part_0": 0}
+        self.preprocessors_params = {}
         self.data_preprocessed = False
-        self.member_id = member_id # todo: refactor
+        self.member_id = member_id
 
     def preprocess(self):
         """

@@ -3,14 +3,17 @@ from typing import List, Optional
 
 import torch
 import scipy as sp
+from datasets.dataset_dict import DatasetDict
 
 from stalactite.base import DataTensor, PartyMember
+from stalactite.data_loader import AttrDict
 
 logger = logging.getLogger(__name__)
 
 
 class PartyMemberImpl(PartyMember):
-    def __init__(self, uid: str, model_update_dim_size: int, member_record_uids: List[str], model, dataset, data_params):
+    def __init__(self, uid: str, model_update_dim_size: int, member_record_uids: List[str], model: torch.nn.Module,
+                 dataset: DatasetDict, data_params: AttrDict):
         self.id = uid
         self._uids = member_record_uids
         self._uids_to_use: Optional[List[str]] = None
@@ -48,7 +51,7 @@ class PartyMemberImpl(PartyMember):
 
     def _prepare_data(self, uids: List[str]):
 
-        tensor_idx = [int(x) for x in uids] #todo: do it somewhere else
+        tensor_idx = [int(x) for x in uids]  # todo: do it somewhere else
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx]
         U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
         return U, S, Vh

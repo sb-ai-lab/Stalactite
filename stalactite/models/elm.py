@@ -20,7 +20,6 @@ def solve_ols_svd(U, S, Vh, Y, lamda=0.0):
     if (lamda is None) or (lamda > 1.0) or (lamda < 0.0):  # no lamda optimization happened or wrong optim results
         num_rank = np.count_nonzero(S > S[0] * machine_epsilon)  # numerical rank
 
-        # S.shape = (S.shape[0], 1) #todo: why this happens?
         coeffs = np.dot(Vh.T, np.multiply(1.0 / S, np.dot(U.T, Y)))
 
     else:
@@ -28,7 +27,6 @@ def solve_ols_svd(U, S, Vh, Y, lamda=0.0):
         S2 = np.power(S, 2)
         S2 = S2 + n_points * lamda  # parameter lambda normalized with respect to number of points !!!
         S = S / S2
-        # S.shape = (S.shape[0], 1) #todo: why this happens?
         coeffs = np.dot(Vh.T, np.multiply(S, np.dot(U.T, Y)))
 
         num_rank = None  # numerical rank is None because regularization is used

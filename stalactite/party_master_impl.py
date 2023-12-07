@@ -4,7 +4,8 @@ from typing import List, Optional
 import torch
 from sklearn import metrics
 
-from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party, ComputeAccuracy
+from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party
+from stalactite.metrics import ComputeAccuracy
 from stalactite.batching import ListBatcher
 
 logger = logging.getLogger(__name__)
@@ -60,8 +61,8 @@ class PartyMasterImpl(PartyMaster):
         self._check_if_ready()
         return torch.sum(torch.stack(party_predictions, dim=1), dim=1)
 
-    def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor, world_size: int,
-                        batch: List[str]) -> List[DataTensor]:
+    def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor,
+                        world_size: int) -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
