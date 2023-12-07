@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 class ComputeAccuracy:
@@ -27,3 +28,22 @@ class ComputeAccuracy:
         # accuracy = accuracy_score(true_label.numpy(), predictions.numpy())
         accuracy = torch.sum(true_label == predictions) / true_label.shape[0]
         return float(accuracy)
+
+
+class ComputeAccuracy_numpy():
+    def __init__(self, force_to_binary=True):
+        self.force_to_binary = force_to_binary
+        self.name = 'Accuracy'
+
+    def compute(self, true_label, predictions):
+        predictions = predictions.copy()
+        true_label = true_label.copy()
+
+        if self.force_to_binary:
+            predictions[predictions < 0] = -1
+            predictions[predictions > 0] = 1
+        # import pdb; pdb.set_trace()
+        # accuracy = accuracy_score(true_label.squeeze(), predictions.squeeze())
+        accuracy = np.sum(true_label.squeeze() == predictions.squeeze()) / true_label.squeeze().shape[0]
+        return accuracy
+

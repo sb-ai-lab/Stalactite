@@ -360,7 +360,7 @@ class LocalPartyImpl(Party):
     def predict(self, uids: List[str], use_test: bool = False) -> PartyDataTensor:
         return cast(
             PartyDataTensor,
-            self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=True)
+            self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=True) #todo: see here we need a use_test working
         )
 
     def update_predict(

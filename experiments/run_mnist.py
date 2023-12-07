@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 def main():
 
     members_count = 3
-    epochs = 1
+    epochs = 3
 
-    shared_uids_count = 10000
-    ds_sample = 10000
-    batch_size = 1000
+    shared_uids_count = 1000
+    ds_sample = 1000
+    batch_size = 100
 
     num_dataset_records = [200 + random.randint(100, 1000) for _ in range(members_count)]
     shared_record_uids = [str(i) for i in range(shared_uids_count)]

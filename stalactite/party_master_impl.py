@@ -1,7 +1,9 @@
 import logging
+import uuid
 from typing import List, Optional
 
 import torch
+import mlflow
 from sklearn import metrics
 
 from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party
@@ -20,7 +22,8 @@ class PartyMasterImpl(PartyMaster):
                  target: DataTensor,
                  target_uids: List[str],
                  batch_size: int,
-                 model_update_dim_size: int):
+                 model_update_dim_size: int,
+                 run_mlflow: bool = False):
         self.id = uid
         self.epochs = epochs
         self.report_train_metrics_iteration = report_train_metrics_iteration
@@ -32,6 +35,7 @@ class PartyMasterImpl(PartyMaster):
         self._batch_size = batch_size
         self._weights_dim = model_update_dim_size
         self.iteration_counter = 0
+        self.run_mlflow = run_mlflow
 
     def master_initialize(self, party: Party):
         logger.info("Master %s: initializing" % self.id)
@@ -49,12 +53,19 @@ class PartyMasterImpl(PartyMaster):
         return [torch.rand(self._batch_size) for _ in range(world_size)]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
-        logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
-                    f"Predictions size: {predictions.size()}" % self.id)
-        error = metrics.mean_absolute_error(y, predictions)
-        acc = ComputeAccuracy().compute(y, predictions)
-        logger.info(f"Master %s: metrics (MAE): {error}" % error)
-        logger.info(f"Master %s: metrics (Accuracy): {acc}" % acc)
+            logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
+                        f"Predictions size: {predictions.size()}" % self.id)
+            train_mae = metrics.mean_absolute_error(y, predictions)
+            train_acc = ComputeAccuracy().compute(y, predictions)
+            logger.info(f"Master %s: metrics (MAE): {train_mae}" % train_mae)
+            logger.info(f"Master %s: metrics (Accuracy): {train_acc}" % train_acc)
+            if self.run_mlflow:
+                step = self.iteration_counter
+                mlflow.log_metric("train_mse", train_mae, step=step)
+                mlflow.log_metric("train_acc", train_acc, step=step)
+
+                mlflow.log_metric("val_mse", 0, step=step)
+                mlflow.log_metric("val_acc", 0, step=step)
 
     def aggregate(self, party_predictions: PartyDataTensor) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
@@ -62,12 +73,13 @@ class PartyMasterImpl(PartyMaster):
         return torch.sum(torch.stack(party_predictions, dim=1), dim=1)
 
     def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor,
-                        world_size: int) -> List[DataTensor]:
+                        world_size: int, iter_in_batch:int) -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
+        # y = self.target[self._batch_size*(self.iteration_counter-1):self._batch_size*self.iteration_counter]
+        y = self.target[self._batch_size*iter_in_batch:self._batch_size*(iter_in_batch+1)]
 
-        y = self.target[self._batch_size*(self.iteration_counter-1):self._batch_size*self.iteration_counter]
         updates = []
         for member_id in range(world_size):
             party_predictions_for_upd = [p for i, p in enumerate(party_predictions) if i != member_id]
