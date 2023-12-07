@@ -51,8 +51,7 @@ class PartyMemberImpl(PartyMember):
 
     def _prepare_data(self, uids: List[str]):
 
-        tensor_idx = [int(x) for x in uids]  # todo: do it somewhere else
-        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx]
+        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
         U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
         return U, S, Vh
 
