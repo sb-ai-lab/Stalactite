@@ -20,6 +20,7 @@ class PartyMasterImpl(PartyMaster):
                  report_train_metrics_iteration: int,
                  report_test_metrics_iteration: int,
                  target: DataTensor,
+                 test_target: DataTensor,
                  target_uids: List[str],
                  batch_size: int,
                  model_update_dim_size: int,
@@ -29,6 +30,7 @@ class PartyMasterImpl(PartyMaster):
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.target = target
+        self.test_target =test_target
         self.target_uids = target_uids
         self.is_initialized = False
         self.is_finalized = False
@@ -55,17 +57,15 @@ class PartyMasterImpl(PartyMaster):
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
             logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
                         f"Predictions size: {predictions.size()}" % self.id)
-            train_mae = metrics.mean_absolute_error(y, predictions)
-            train_acc = ComputeAccuracy().compute(y, predictions)
-            logger.info(f"Master %s: metrics (MAE): {train_mae}" % train_mae)
-            logger.info(f"Master %s: metrics (Accuracy): {train_acc}" % train_acc)
+            mae = metrics.mean_absolute_error(y, predictions)
+            acc = ComputeAccuracy().compute(y, predictions)
+            logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
+            logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
+
             if self.run_mlflow:
                 step = self.iteration_counter
-                mlflow.log_metric("train_mse", train_mae, step=step)
-                mlflow.log_metric("train_acc", train_acc, step=step)
-
-                mlflow.log_metric("val_mse", 0, step=step)
-                mlflow.log_metric("val_acc", 0, step=step)
+                mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
+                mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
 
     def aggregate(self, party_predictions: PartyDataTensor) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))

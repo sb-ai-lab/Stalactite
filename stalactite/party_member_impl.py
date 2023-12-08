@@ -66,7 +66,11 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: predicting. Batch: %s" % (self.id, uids))
         self._check_if_ready()
         tensor_idx = [int(x) for x in uids]  # todo: do it somewhere else
-        X = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx]
+        if use_test:
+            logger.info("Member %s: using test data" % self.id)
+            X = self._dataset[self._data_params.test_split][self._data_params.features_key]
+        else:
+            X = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx]
         predictions = self._model.predict(X)
         logger.info("Member %s: made predictions." % self.id)
         return predictions
