@@ -1,10 +1,10 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import torch
 from sklearn import metrics
 
-from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party
+from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party, RecordsBatch
 from stalactite.batching import ListBatcher
 
 logger = logging.getLogger(__name__)
@@ -42,10 +42,10 @@ class MockPartyMasterImpl(PartyMaster):
         self._check_if_ready()
         return ListBatcher(uids=uids, batch_size=self._batch_size)
 
-    def make_init_updates(self, world_size: int) -> PartyDataTensor:
+    def make_init_updates(self, world_size: int) -> Tuple[PartyDataTensor, RecordsBatch]:
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        return [torch.rand(self._weights_dim) for _ in range(world_size)]
+        return [torch.rand(self._weights_dim) for _ in range(world_size)], None
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
         logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
@@ -130,7 +130,7 @@ class MockPartyMemberImpl(PartyMember):
         logger.info("Member %s: made predictions." % self.id)
         return predictions
 
-    def update_predict(self, upd: DataTensor, batch: List[str]) -> DataTensor:
+    def update_predict(self, upd: DataTensor, batch: RecordsBatch, previous_batch: RecordsBatch) -> DataTensor:
         logger.info("Member %s: updating and predicting." % self.id)
         self._check_if_ready()
         self.update_weights(upd)

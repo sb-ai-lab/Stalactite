@@ -3,7 +3,7 @@ import itertools
 import logging
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Tuple
 
 import torch
 
@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 DataTensor = torch.Tensor
 # in reality, it will be a DataTensor but with one more dimension
 PartyDataTensor = List[torch.Tensor]
+
+RecordsBatch = List[str]
 
 
 class Batcher(ABC):
@@ -94,7 +96,8 @@ class Party(ABC):
         ...
 
     @abstractmethod
-    def update_predict(self, batch: List[str], upd: PartyDataTensor) -> PartyDataTensor:
+    def update_predict(self, batch: RecordsBatch, previous_batch: RecordsBatch, upd: PartyDataTensor) \
+            -> PartyDataTensor:
         ...
 
 
@@ -123,14 +126,15 @@ class PartyMaster(ABC):
 
     def loop(self, batcher: Batcher, party: Party):
         logger.info("Master %s: entering training loop" % self.id)
-        updates = self.make_init_updates(party.world_size)
+        updates, previous_batch = self.make_init_updates(party.world_size)
         for epoch in range(self.epochs):
             logger.debug(f"Master %s: train loop - starting EPOCH %s / %s" % (self.id, epoch, self.epochs))
             for i, batch in enumerate(batcher):
                 logger.debug(f"Master %s: train loop - starting batch %s on epoch %s" % (self.id, i, epoch))
-                party_predictions = party.update_predict(batch, updates)
+                party_predictions = party.update_predict(batch, previous_batch, updates)
                 predictions = self.aggregate(party_predictions)
                 updates = self.compute_updates(predictions, party_predictions, party.world_size)
+                previous_batch = batch
 
                 if self.report_train_metrics_iteration > 0 and i % self.report_train_metrics_iteration == 0:
                     logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
@@ -182,7 +186,7 @@ class PartyMaster(ABC):
         ...
 
     @abstractmethod
-    def make_init_updates(self, world_size: int) -> PartyDataTensor:
+    def make_init_updates(self, world_size: int) -> Tuple[PartyDataTensor, RecordsBatch]:
         ...
 
     @abstractmethod
@@ -228,5 +232,5 @@ class PartyMember(ABC):
         ...
 
     @abstractmethod
-    def update_predict(self, upd: DataTensor, batch: List[str]) -> DataTensor:
+    def update_predict(self, upd: DataTensor, previous_batch: RecordsBatch, batch: RecordsBatch) -> DataTensor:
         ...

@@ -11,7 +11,8 @@ from queue import Queue
 from threading import Thread
 from typing import List, Dict, Any, Optional, Union, cast, Set
 
-from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, ParticipantFuture, Party, PartyDataTensor
+from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, ParticipantFuture, Party, PartyDataTensor, \
+    RecordsBatch
 
 logger = logging.getLogger(__name__)
 
@@ -344,8 +345,14 @@ class LocalPartyImpl(Party):
             self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=True)
         )
 
-    def update_predict(self, batch: List[str], upd: PartyDataTensor) -> PartyDataTensor:
+    def update_predict(self, batch: RecordsBatch, previous_batch: RecordsBatch, upd: PartyDataTensor) \
+            -> PartyDataTensor:
         return cast(
             PartyDataTensor,
-            self._sync_broadcast_to_members(method_name=_Method.update_predict, mass_kwargs=upd, batch=batch)
+            self._sync_broadcast_to_members(
+                method_name=_Method.update_predict,
+                mass_kwargs=upd,
+                batch=batch,
+                previous_batch=previous_batch
+            )
         )
