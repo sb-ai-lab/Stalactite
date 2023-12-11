@@ -99,6 +99,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
     def broadcast(self,
                   method_name: str,
                   mass_kwargs: Optional[List[Any]] = None,
+                  participating_members: Optional[List[str]] = None,
                   parent_id: Optional[str] = None,
                   require_answer: bool = True,
                   include_current_participant: bool = False,
@@ -106,17 +107,23 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         self._check_if_ready()
         logger.debug("Sending event (%s) for all members" % method_name)
 
+        members = participating_members or self.members
+
+        unknown_members = set(members).difference(self.members)
+        if len(unknown_members) > 0:
+            raise ValueError(f"Unknown members: {unknown_members}. Existing members: {self.members}")
+
         if not mass_kwargs:
-            mass_kwargs = [dict() for _ in self.members]
-        elif mass_kwargs and len(mass_kwargs) != len(self.members):
+            mass_kwargs = [dict() for _ in members]
+        elif mass_kwargs and len(mass_kwargs) != len(members):
             raise ValueError(f"Length of arguments list ({len(mass_kwargs)}) is not equal "
-                             f"to the length of members ({len(self.members)})")
+                             f"to the length of members ({len(members)})")
         else:
             mass_kwargs = [{self.MEMBER_DATA_FIELDNAME: args} for args in mass_kwargs]
 
         futures = []
 
-        for mkwargs, member_id in zip(mass_kwargs, self.members):
+        for mkwargs, member_id in zip(mass_kwargs, members):
             if member_id == self.participant.id and not include_current_participant:
                 continue
 
@@ -301,10 +308,21 @@ class LocalPartyImpl(Party):
     def world_size(self) -> int:
         return self.party_communicator.world_size
 
+    @property
+    def members(self) -> List[str]:
+        return self.party_communicator.members
+
     def _sync_broadcast_to_members(self, *,
                                    method_name: _Method,
-                                   mass_kwargs: Optional[List[Any]] = None, **kwargs) -> List[Any]:
-        futures = self.party_communicator.broadcast(method_name=method_name.value, mass_kwargs=mass_kwargs, **kwargs)
+                                   mass_kwargs: Optional[List[Any]] = None,
+                                   participating_members: Optional[List[str]] = None,
+                                   **kwargs) -> List[Any]:
+        futures = self.party_communicator.broadcast(
+            method_name=method_name.value,
+            participating_members=participating_members,
+            mass_kwargs=mass_kwargs,
+            **kwargs
+        )
 
         logger.debug("Party broadcast: waiting for answer to event %s (waiting for %s secs)"
                      % (method_name, self.op_timeout or "inf"))
@@ -345,13 +363,19 @@ class LocalPartyImpl(Party):
             self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=True)
         )
 
-    def update_predict(self, batch: RecordsBatch, previous_batch: RecordsBatch, upd: PartyDataTensor) \
-            -> PartyDataTensor:
+    def update_predict(
+            self,
+            participating_members: List[str],
+            batch: RecordsBatch,
+            previous_batch: RecordsBatch,
+            upd: PartyDataTensor
+    ) -> PartyDataTensor:
         return cast(
             PartyDataTensor,
             self._sync_broadcast_to_members(
                 method_name=_Method.update_predict,
                 mass_kwargs=upd,
+                participating_members=participating_members,
                 batch=batch,
                 previous_batch=previous_batch
             )

@@ -1,9 +1,11 @@
+
 import collections
 import itertools
 import logging
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
-from typing import List, Any, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Any, Optional, Iterator
 
 import torch
 
@@ -17,12 +19,22 @@ PartyDataTensor = List[torch.Tensor]
 RecordsBatch = List[str]
 
 
+@dataclass(frozen=True)
+class TrainingIteration:
+    seq_num: int
+    subiter_seq_num: int
+    epoch: int
+    batch: RecordsBatch
+    previous_batch: Optional[RecordsBatch]
+    participating_members: List[str]
+
+
 class Batcher(ABC):
     # todo: add docs
     uids: List[str]
 
     @abstractmethod
-    def __iter__(self):
+    def __iter__(self) -> Iterator[TrainingIteration]:
         ...
 
 
@@ -56,6 +68,7 @@ class PartyCommunicator(ABC):
     def broadcast(self,
                   method_name: str,
                   mass_kwargs: Optional[List[Any]] = None,
+                  participating_members: Optional[List[str]] = None,
                   parent_id: Optional[str] = None,
                   require_answer: bool = True,
                   include_current_participant: bool = False,
@@ -70,6 +83,7 @@ class PartyCommunicator(ABC):
 class Party(ABC):
     # todo: add docs
     world_size: int
+    members: List[str]
 
     @abstractmethod
     def records_uids(self) -> List[List[str]]:
@@ -96,8 +110,13 @@ class Party(ABC):
         ...
 
     @abstractmethod
-    def update_predict(self, batch: RecordsBatch, previous_batch: RecordsBatch, upd: PartyDataTensor) \
-            -> PartyDataTensor:
+    def update_predict(
+            self,
+            participating_members: List[str],
+            batch: RecordsBatch,
+            previous_batch: RecordsBatch,
+            upd: PartyDataTensor
+    ) -> PartyDataTensor:
         ...
 
 
@@ -117,7 +136,7 @@ class PartyMaster(ABC):
         self.master_initialize(party=party)
 
         self.loop(
-            batcher=self.make_batcher(uids=uids),
+            batcher=self.make_batcher(uids=uids, party=party),
             party=party
         )
 
@@ -126,29 +145,33 @@ class PartyMaster(ABC):
 
     def loop(self, batcher: Batcher, party: Party):
         logger.info("Master %s: entering training loop" % self.id)
-        updates, previous_batch = self.make_init_updates(party.world_size)
-        for epoch in range(self.epochs):
-            logger.debug(f"Master %s: train loop - starting EPOCH %s / %s" % (self.id, epoch, self.epochs))
-            for i, batch in enumerate(batcher):
-                logger.debug(f"Master %s: train loop - starting batch %s on epoch %s" % (self.id, i, epoch))
-                party_predictions = party.update_predict(batch, previous_batch, updates)
-                predictions = self.aggregate(party_predictions)
-                updates = self.compute_updates(predictions, party_predictions, party.world_size)
-                previous_batch = batch
+        updates = self.make_init_updates(party.world_size)
 
-                if self.report_train_metrics_iteration > 0 and i % self.report_train_metrics_iteration == 0:
-                    logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
-                                 % (self.id, i, epoch))
-                    party_predictions = party.predict(batcher.uids)
-                    predictions = self.aggregate(party_predictions)
-                    self.report_metrics(self.target, predictions, name="Train")
+        for titer in batcher:
+            logger.debug(f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
+                         % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch))
 
-                if self.report_test_metrics_iteration > 0 and i % self.report_test_metrics_iteration == 0:
-                    logger.debug(f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
-                                 % (self.id, i, epoch))
-                    party_predictions = party.predict(uids=batcher.uids, use_test=True)
-                    predictions = self.aggregate(party_predictions)
-                    self.report_metrics(self.target, predictions, name="Test")
+            party_predictions = party.update_predict(
+                titer.participating_members, titer.batch, titer.previous_batch, updates
+            )
+            predictions = self.aggregate(titer.participating_members, party_predictions)
+            updates = self.compute_updates(
+                titer.participating_members, predictions, party_predictions, party.world_size
+            )
+
+            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
+                logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
+                             % (self.id, titer.seq_num, titer.epoch))
+                party_predictions = party.predict(batcher.uids)
+                predictions = self.aggregate(party.members, party_predictions)
+                self.report_metrics(self.target, predictions, name="Train")
+
+            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
+                logger.debug(f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
+                             % (self.id, titer.seq_num, titer.epoch))
+                party_predictions = party.predict(uids=batcher.uids, use_test=True)
+                predictions = self.aggregate(party.members, party_predictions)
+                self.report_metrics(self.target, predictions, name="Test")
 
     def synchronize_uids(self, party: Party) -> List[str]:
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, party.world_size))
@@ -174,7 +197,7 @@ class PartyMaster(ABC):
         return shared_uids
 
     @abstractmethod
-    def make_batcher(self, uids: List[str]) -> Batcher:
+    def make_batcher(self, uids: List[str], party: Party) -> Batcher:
         ...
 
     @abstractmethod
@@ -186,16 +209,21 @@ class PartyMaster(ABC):
         ...
 
     @abstractmethod
-    def make_init_updates(self, world_size: int) -> Tuple[PartyDataTensor, RecordsBatch]:
+    def make_init_updates(self, world_size: int) -> PartyDataTensor:
         ...
 
     @abstractmethod
-    def aggregate(self, party_predictions: PartyDataTensor) -> DataTensor:
+    def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor) -> DataTensor:
         ...
 
     @abstractmethod
-    def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor, world_size: int) \
-            -> List[DataTensor]:
+    def compute_updates(
+            self,
+            participating_members: List[str],
+            predictions: DataTensor,
+            party_predictions: PartyDataTensor,
+            world_size: int
+    ) -> List[DataTensor]:
         ...
 
     @abstractmethod
