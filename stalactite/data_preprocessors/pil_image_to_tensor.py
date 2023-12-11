@@ -20,7 +20,7 @@ class PILImageToTensor(DataPreprocessor):
         return self._transform(inp_data)
     
     def _transform(self, inp_data):
-        res = inp_data.map( partial(self._convert_to_tensor, feature_name=self.input_feature_name,
+        res = inp_data.map(partial(self._convert_to_tensor, feature_name=self.input_feature_name,
                                     feature_name_new = f'{self.input_feature_name}_new'), 
                                     remove_columns=[self.input_feature_name,] ) #, input_columns=self.input_feature_name )
         
