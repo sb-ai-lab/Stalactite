@@ -15,16 +15,18 @@ class ListBatcher(Batcher):
             iter_num = 0
             previous_batch: Optional[RecordsBatch] = None
             for epoch_num in range(self.epochs):
+                iter_in_batch = 0
                 for i in range(0, len(self.uids), self.batch_size):
                     batch = self.uids[i: i + self.batch_size]
                     yield TrainingIteration(
                         seq_num=iter_num,
-                        subiter_seq_num=0,
+                        subiter_seq_num=iter_in_batch,
                         epoch=epoch_num,
                         batch=batch,
                         previous_batch=previous_batch,
                         participating_members=self.members
                     )
                     iter_num += 1
+                    iter_in_batch += 1
                     previous_batch = batch
         return _iter_func()

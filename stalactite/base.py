@@ -127,6 +127,7 @@ class PartyMaster(ABC):
     report_test_metrics_iteration: int
     target: DataTensor
     target_uids: List[str]
+    test_target: DataTensor
 
     def run(self, party: Party):
         logger.info("Running master %s" % self.id)
@@ -155,7 +156,7 @@ class PartyMaster(ABC):
             )
             predictions = self.aggregate(titer.participating_members, party_predictions)
             updates = self.compute_updates(
-                titer.participating_members, predictions, party_predictions, party.world_size
+                titer.participating_members, predictions, party_predictions, party.world_size, titer.subiter_seq_num
             )
 
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
@@ -170,7 +171,7 @@ class PartyMaster(ABC):
                              % (self.id, titer.seq_num, titer.epoch))
                 party_predictions = party.predict(uids=batcher.uids, use_test=True)
                 predictions = self.aggregate(party.members, party_predictions)
-                self.report_metrics(self.target, predictions, name="Test")
+                self.report_metrics(self.test_target, predictions, name="Test")
 
     def synchronize_uids(self, party: Party) -> List[str]:
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, party.world_size))
@@ -221,7 +222,8 @@ class PartyMaster(ABC):
             participating_members: List[str],
             predictions: DataTensor,
             party_predictions: PartyDataTensor,
-            world_size: int
+            world_size: int,
+            subiter_seq_num: int
     ) -> List[DataTensor]:
         ...
 

@@ -185,7 +185,7 @@ def main(dataset_name: str):
     )
 
     mlflow.set_tracking_uri(mlflow_tracking_uri)
-    mlflow.set_experiment(os.environ.get("EXPERIMENT", "local_vert2"))
+    mlflow.set_experiment(os.environ.get("EXPERIMENT", "local_vert_updated"))
     # models input dims for 1, 2, 3 and 5 members
     # input_dims_list = [[619], [309, 310], [206, 206, 207], [], [123, 123, 123, 123, 127]]
     input_dims_list = [[619], [304, 315], [204, 250, 165], [], [108, 146, 150, 147, 68]]

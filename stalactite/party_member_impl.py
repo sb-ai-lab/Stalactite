@@ -5,7 +5,7 @@ import torch
 import scipy as sp
 from datasets.dataset_dict import DatasetDict
 
-from stalactite.base import DataTensor, PartyMember
+from stalactite.base import DataTensor, PartyMember, RecordsBatch
 from stalactite.data_loader import AttrDict
 
 logger = logging.getLogger(__name__)
@@ -75,10 +75,12 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: made predictions." % self.id)
         return predictions
 
-    def update_predict(self, upd: DataTensor, batch: List[str]) -> DataTensor:
+    def update_predict(self, upd: DataTensor, previous_batch: RecordsBatch, batch: RecordsBatch) -> DataTensor:
+
         logger.info("Member %s: updating and predicting." % self.id)
         self._check_if_ready()
-        self.update_weights(uids=batch, upd=upd)
+        uids = previous_batch if previous_batch is not None else batch
+        self.update_weights(uids=uids, upd=upd)
         predictions = self.predict(batch)
         self.iterations_counter += 1
         logger.info("Member %s: updated and predicted." % self.id)

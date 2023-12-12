@@ -44,10 +44,10 @@ class PartyMasterImpl(PartyMaster):
         party.initialize()
         self.is_initialized = True
 
-    def make_batcher(self, uids: List[str]) -> Batcher:
+    def make_batcher(self, uids: List[str], party: Party) -> Batcher:
         logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
-        return ListBatcher(uids=uids, batch_size=self._batch_size)
+        return ListBatcher(epochs=self.epochs, members=party.members, uids=uids, batch_size=self._batch_size)
 
     def make_init_updates(self, world_size: int) -> PartyDataTensor:
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
@@ -67,18 +67,25 @@ class PartyMasterImpl(PartyMaster):
                 mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
                 mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
 
-    def aggregate(self, party_predictions: PartyDataTensor) -> DataTensor:
+    def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
         return torch.sum(torch.stack(party_predictions, dim=1), dim=1)
 
-    def compute_updates(self, predictions: DataTensor, party_predictions: PartyDataTensor,
-                        world_size: int, iter_in_batch:int) -> List[DataTensor]:
+    def compute_updates(self,
+                        participating_members: List[str],
+                        predictions: DataTensor,
+                        party_predictions: PartyDataTensor,
+                        world_size: int,
+                        subiter_seq_num: int) -> List[DataTensor]:
+
+        # :(self, predictions: DataTensor, party_predictions: PartyDataTensor,
+        #                 world_size: int, iter_in_batch:int) -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
         # y = self.target[self._batch_size*(self.iteration_counter-1):self._batch_size*self.iteration_counter]
-        y = self.target[self._batch_size*iter_in_batch:self._batch_size*(iter_in_batch+1)]
+        y = self.target[self._batch_size*subiter_seq_num:self._batch_size*(subiter_seq_num+1)] #todo: make it in batcher
 
         updates = []
         for member_id in range(world_size):
