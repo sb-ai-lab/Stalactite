@@ -3,7 +3,7 @@ common:
   backend: "sp"
   algorithm: vert_fl
   random_seed: 0
-  parties_num: 5 #this is my arg!
+  parties_num: 2 #this is my arg!
 
 data:
   data_dir: /home/dmitriy/data/
