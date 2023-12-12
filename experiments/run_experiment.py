@@ -17,7 +17,7 @@ from stalactite.data_loader import load, init, DataPreprocessor
 from stalactite.batching import ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.party_member_impl import PartyMemberImpl
-from stalactite.party_master_impl import PartyMasterImpl
+from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
 
@@ -86,7 +86,8 @@ def run_single_member(exp_uid: str, datasets_list, member_id: int, ds_size, inpu
                 mlflow.log_metric("test_acc", test_acc, step=step)
 
 
-def run_vfl(exp_uid: str, params, datasets_list, members_count: int, ds_size, input_dims, batch_size, epochs, split):
+def run_vfl(exp_uid: str, params, datasets_list, members_count: int, ds_size, input_dims, batch_size, epochs,
+            split, is_consequently):
     with mlflow.start_run():
 
         log_params = {
@@ -96,7 +97,8 @@ def run_vfl(exp_uid: str, params, datasets_list, members_count: int, ds_size, in
             "mode": "vfl",
             "members_count": members_count,
             "exp_uid": exp_uid,
-            "split": split
+            "split": split,
+            "is_consequently": is_consequently
 
         }
         mlflow.log_params(log_params)
@@ -111,19 +113,33 @@ def run_vfl(exp_uid: str, params, datasets_list, members_count: int, ds_size, in
             for num_records in num_dataset_records
         ]
         shared_party_info = dict()
-
-        master = PartyMasterImpl(
-            uid="master",
-            epochs=epochs,
-            report_train_metrics_iteration=1,
-            report_test_metrics_iteration=1,
-            target=targets,
-            test_target=test_targets,
-            target_uids=target_uids,
-            batch_size=batch_size,
-            model_update_dim_size=0,
-            run_mlflow=True
-        )
+        if is_consequently:
+            master = PartyMasterImplConsequently(
+                uid="master",
+                epochs=epochs,
+                report_train_metrics_iteration=1,
+                report_test_metrics_iteration=1,
+                target=targets,
+                test_target=test_targets,
+                target_uids=target_uids,
+                batch_size=batch_size,
+                model_update_dim_size=0,
+                run_mlflow=True
+            )
+        else:
+            assert False
+            master = PartyMasterImpl(
+                uid="master",
+                epochs=epochs,
+                report_train_metrics_iteration=1,
+                report_test_metrics_iteration=1,
+                target=targets,
+                test_target=test_targets,
+                target_uids=target_uids,
+                batch_size=batch_size,
+                model_update_dim_size=0,
+                run_mlflow=True
+            )
 
         members = [
             PartyMemberImpl(
@@ -191,6 +207,8 @@ def main(dataset_name: str):
     input_dims_list = [[619], [304, 315], [204, 250, 165], [], [108, 146, 150, 147, 68]]
 
     ds_size = int(os.environ.get("DS_SIZE", 1000))
+    is_consequently = bool(os.environ.get("IS_CONSEQUENTLY"))
+
     batch_size = int(os.environ.get("BATCH_SIZE", 500))
     epochs = int(os.environ.get("EPOCHS", 1))
     mode = os.environ.get("MODE", "single")
@@ -231,7 +249,7 @@ def main(dataset_name: str):
         run_vfl(
             exp_uid=exp_uid, params=params, datasets_list=datasets_list, members_count=members_count,
             batch_size=batch_size, ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1],
-            split=0
+            split=0, is_consequently=is_consequently
             )
     else:
         raise ValueError(f"Unrecognized mode: {mode}. Please choose one of the following: single or vfl")

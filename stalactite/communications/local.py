@@ -340,6 +340,8 @@ class LocalPartyImpl(Party):
         logger.debug("Party broadcast for event %s has succesfully finished" % method_name)
 
         fresults = {future.participant_id: future.result() for future in completed_futures}
+        if participating_members:
+            return [fresults[member_id] for member_id in participating_members]
         return [fresults[member_id] for member_id in self.party_communicator.members]
 
     def records_uids(self) -> List[List[str]]:
