@@ -7,8 +7,6 @@ from threading import Thread
 
 import torch
 import mlflow
-import datasets
-import numpy as np
 import scipy as sp
 from sklearn.metrics import mean_absolute_error
 
@@ -28,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_single_member(exp_uid: str, datasets_list, member_id: int, ds_size, input_dims, batch_size, epochs,
-                      split):
+                      split, members_count):
     with mlflow.start_run():
 
         log_params = {
@@ -38,7 +36,8 @@ def run_single_member(exp_uid: str, datasets_list, member_id: int, ds_size, inpu
             "mode": "single",
             "member_id": member_id,
             "exp_uid": exp_uid,
-            "split": split
+            "split": split,
+            "members_count": members_count
 
         }
         mlflow.log_params(log_params)
@@ -52,38 +51,38 @@ def run_single_member(exp_uid: str, datasets_list, member_id: int, ds_size, inpu
         Y_test = dataset["train_val"]["label"]
 
         model = LinearRegressionBatch(input_dim=input_dims[member_id], output_dim=1, reg_lambda=0.5)
-        batcher = ListBatcher(batch_size=batch_size, uids=[str(x) for x in range(ds_size)])
+        batcher = ListBatcher(epochs=epochs, members=[str(x) for x in range(10)], uids=[str(x) for x in range(ds_size)], batch_size=batch_size)
 
         step = 0
-        for epoch in range(epochs):
-            for i, batch in enumerate(batcher):
-                step += 1
-                logger.debug(f"batch: {i}")
-                tensor_idx = [int(x) for x in batch]
-                X_train = dataset["train_train"][f"image_part_{member_id}"][tensor_idx]
-                Y_train = dataset["train_train"]["label"][tensor_idx]
+        for i, titer in enumerate(batcher):
+            step += 1
+            logger.debug(f"batch: {i}")
+            batch = titer.batch
+            tensor_idx = [int(x) for x in batch]
+            X_train = dataset["train_train"][f"image_part_{member_id}"][tensor_idx]
+            Y_train = dataset["train_train"]["label"][tensor_idx]
 
-                U, S, Vt = sp.linalg.svd(X_train, full_matrices=False, overwrite_a=False, check_finite=False)
-                model.update_weights(data_U=U, data_S=S, data_Vh=Vt, rhs=Y_train)
+            U, S, Vt = sp.linalg.svd(X_train, full_matrices=False, overwrite_a=False, check_finite=False)
+            model.update_weights(data_U=U, data_S=S, data_Vh=Vt, rhs=Y_train)
 
-                train_predictions = model.predict(X_train_all)
-                train_predictions = torch.mean(torch.stack((train_predictions,), dim=1), dim=1)
+            train_predictions = model.predict(X_train_all)
+            train_predictions = torch.mean(torch.stack((train_predictions,), dim=1), dim=1)
 
-                test_predictions = model.predict(X_test)
-                test_predictions = torch.mean(torch.stack((test_predictions,), dim=1), dim=1)
+            test_predictions = model.predict(X_test)
+            test_predictions = torch.mean(torch.stack((test_predictions,), dim=1), dim=1)
 
-                train_mae = mean_absolute_error(Y_train_all.numpy(), train_predictions.numpy())
-                test_mae = mean_absolute_error(Y_test.numpy(), test_predictions.numpy())
+            train_mae = mean_absolute_error(Y_train_all.numpy(), train_predictions.numpy())
+            test_mae = mean_absolute_error(Y_test.numpy(), test_predictions.numpy())
 
-                acc = ComputeAccuracy_numpy()
-                train_acc = acc.compute(true_label=Y_train_all.numpy(), predictions=train_predictions.numpy())
-                test_acc = acc.compute(true_label=Y_test.numpy(), predictions=test_predictions.numpy())
+            acc = ComputeAccuracy_numpy()
+            train_acc = acc.compute(true_label=Y_train_all.numpy(), predictions=train_predictions.numpy())
+            test_acc = acc.compute(true_label=Y_test.numpy(), predictions=test_predictions.numpy())
 
-                mlflow.log_metric("train_mae", train_mae, step=step)
-                mlflow.log_metric("train_acc", train_acc, step=step)
+            mlflow.log_metric("train_mae", train_mae, step=step)
+            mlflow.log_metric("train_acc", train_acc, step=step)
 
-                mlflow.log_metric("test_mae", test_mae, step=step)
-                mlflow.log_metric("test_acc", test_acc, step=step)
+            mlflow.log_metric("test_mae", test_mae, step=step)
+            mlflow.log_metric("test_acc", test_acc, step=step)
 
 
 def run_vfl(exp_uid: str, params, datasets_list, members_count: int, ds_size, input_dims, batch_size, epochs,
@@ -127,7 +126,6 @@ def run_vfl(exp_uid: str, params, datasets_list, members_count: int, ds_size, in
                 run_mlflow=True
             )
         else:
-            assert False
             master = PartyMasterImpl(
                 uid="master",
                 epochs=epochs,
@@ -193,9 +191,8 @@ def run_vfl(exp_uid: str, params, datasets_list, members_count: int, ds_size, in
             thread.join()
 
 
-def main(dataset_name: str):
+def main():
 
-    k = int(os.environ.get("K", 100))
     mlflow_tracking_uri = os.environ.get(
         "MLFLOW_TRACKING_URI", "http://node16.bdcl:9876"
     )
@@ -203,29 +200,17 @@ def main(dataset_name: str):
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(os.environ.get("EXPERIMENT", "local_vert_updated"))
     # models input dims for 1, 2, 3 and 5 members
-    # input_dims_list = [[619], [309, 310], [206, 206, 207], [], [123, 123, 123, 123, 127]]
     input_dims_list = [[619], [304, 315], [204, 250, 165], [], [108, 146, 150, 147, 68]]
 
     ds_size = int(os.environ.get("DS_SIZE", 1000))
-    is_consequently = bool(os.environ.get("IS_CONSEQUENTLY"))
+    is_consequently = bool(int(os.environ.get("IS_CONSEQUENTLY")))
 
     batch_size = int(os.environ.get("BATCH_SIZE", 500))
     epochs = int(os.environ.get("EPOCHS", 1))
     mode = os.environ.get("MODE", "single")
     members_count = int(os.environ.get("MEMBERS_COUNT", 3))
-    # split_numbers = [x for x in range(5)]
-    if mode == "single":
-        pass
-        # split_numbers = [0]
-    # for split_number in split_numbers:
-    #     logger.info("Split number {}".format(split_number))
-    #     datasets_list = []
-    #     for m in range(members_count):
-    #         ds = datasets.load_from_disk(f"/home/dmitriy/data/mnist_binary_parts{members_count}/split_{split_number}/part_{m}")
-    #         datasets_list.append(ds)
 
     params = init()
-    # parties_num: 5
     for m in range(members_count):
         params[m].data.dataset = f"mnist_binary38_parts{members_count}"
     dataset, _ = load(params)
@@ -242,7 +227,8 @@ def main(dataset_name: str):
             logger.info("starting experiment for member: " + str(member_id))
             run_single_member(
                 exp_uid=exp_uid, datasets_list=datasets_list, member_id=member_id, batch_size=batch_size,
-                ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1], split=0
+                ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1], split=0,
+                members_count=members_count
             )
 
     elif mode.lower() == "vfl":
@@ -256,5 +242,4 @@ def main(dataset_name: str):
 
 
 if __name__ == "__main__":
-    dataset = os.environ.get("DATASET", "MNIST")
-    main(dataset_name=dataset)
+    main()

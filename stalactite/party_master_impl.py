@@ -1,6 +1,5 @@
 import logging
-import uuid
-from typing import List, Optional
+from typing import List
 
 import torch
 import mlflow
@@ -79,19 +78,15 @@ class PartyMasterImpl(PartyMaster):
                         world_size: int,
                         subiter_seq_num: int) -> List[DataTensor]:
 
-        # :(self, predictions: DataTensor, party_predictions: PartyDataTensor,
-        #                 world_size: int, iter_in_batch:int) -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        # y = self.target[self._batch_size*(self.iteration_counter-1):self._batch_size*self.iteration_counter]
-        y = self.target[self._batch_size*subiter_seq_num:self._batch_size*(subiter_seq_num+1)] #todo: make it in batcher
-
+        y = self.target[self._batch_size*subiter_seq_num:self._batch_size*(subiter_seq_num+1)]
         updates = []
         participating_members = [int(p.split('-')[-1]) for p in participating_members]
         for member_id in participating_members:
             party_predictions_for_upd = [p for i, p in enumerate(party_predictions) if i != member_id]
-            member_pred = torch.mean(torch.stack(party_predictions_for_upd), dim=0) #todo: for debug
+            member_pred = torch.mean(torch.stack(party_predictions_for_upd), dim=0)
             member_update = y - torch.reshape(member_pred, (-1,))
             updates.append(member_update)
         return updates
@@ -121,10 +116,6 @@ class PartyMasterImplConsequently(PartyMasterImpl):
                 party_predictions = party.update_predict(
                     titer.participating_members, titer.batch, titer.previous_batch, updates
                 )
-                predictions = self.aggregate(titer.participating_members, party_predictions)
-                # updates = self.compute_updates(
-                #     titer.participating_members, predictions, party_predictions, party.world_size, titer.subiter_seq_num
-                # )
 
             members_to_update = titer.participating_members
             for member_name in members_to_update:
@@ -134,12 +125,13 @@ class PartyMasterImplConsequently(PartyMasterImpl):
                     [member_name], titer.batch, titer.previous_batch, [updates[member_id]]
                 )
                 party_predictions[member_id] =member_predictions[0]
-                # useless
+                # useless aggr
                 predictions = self.aggregate(titer.participating_members, party_predictions)
                 member_updates = self.compute_updates(
                     [member_name], predictions, party_predictions, party.world_size, titer.subiter_seq_num
                 )
                 updates[member_id] = member_updates[0]
+
 
                 if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
                     logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
