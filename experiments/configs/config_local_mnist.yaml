@@ -1,54 +1,13 @@
 common:
-  training_type: "simulation"
-  backend: "sp"
-  algorithm: vert_fl
   random_seed: 0
-  parties_num: 3 #this is my arg!
+  parties_num: 3
 
 data:
   data_dir: /home/dmitriy/data/
-  dataset: "mnist_binary38_parts3"
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
-  features_prefix: "image" # column name prefix for features. Actual prefix may include party index. Detects "features_key" based on that.
-  label_prefix: "label" # column name of labels
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
   features_data_preprocessors: [PILImageToTensor(features_key), FullDataTensor(features_key), RemoveZeroStdColumns, SkLearnStandardScaler]
   label_data_preprocessors: [FullDataTensor(label_key), ]
-  data_partition_parts: 3
   features_key: "image_part_"
   label_key: "label"
-
-model:
-  client_model: "linreg_batch"
-  client_embedding_dim: 1
-  reg_lambda: 0.265435
-  server_model: "sum"
-
-train:
-  #federated_optimizer: "classical_vertical"
-  #client_id_list: "[]"
-  #client_num_in_total: 1000
-  #client_num_per_round: 10
-  #comm_round: 200
-  epochs: 100
-  batch_size: None
-  #client_optimizer: sgd
-  #learning_rate: 0.03
-  #weight_decay: 0.001
-
-validation:
-  frequency_of_the_test: 1
-
-device:
-  using_gpu: true
-  gpu_id: 0
-
-tracking:
-  # the default log path is at ~/fedml-client/fedml/logs/ and ~/fedml-server/fedml/logs/
-  enable_wandb: false
-  wandb_key: 034f7f2e055f7c54c93fb9b333d46a9f9282d4d0
-  wandb_entity: alexgrig
-  wandb_project: fedml2
-  run_name: fedml_torch_vertical_mnist_lr_2
-  using_mlops: false

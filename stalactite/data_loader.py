@@ -69,22 +69,21 @@ def init():
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
 
-    if config.common.training_type == "simulation" and hasattr(config.common, "backend") \
-            and config.common.backend.lower() == "sp":
 
-        tmp_args = init_simulation_sp(attr())
-        joint_config = AttrDict({})
-        for ii in range(config.common.parties_num):
-            joint_config[ii] = AttrDict(load_yaml_config("../experiments/configs/config_local_mnist.yaml"))
 
-            joint_config[ii].common.update(vars(tmp_args))
-            joint_config[ii].model.role = joint_config[ii].common.role
-            joint_config[ii].data.features_key = joint_config[ii].data.features_key + str(ii)
+    tmp_args = init_simulation_sp(attr())
+    joint_config = AttrDict({})
+    for ii in range(config.common.parties_num):
+        joint_config[ii] = AttrDict(load_yaml_config("../experiments/configs/config_local_mnist.yaml"))
 
-        joint_config['joint_config'] = True
-        joint_config['parties'] = list(range(config.common.parties_num))
-        joint_config['backend'] = config.common.backend.lower()
-        config = joint_config
+        joint_config[ii].common.update(vars(tmp_args))
+        # joint_config[ii].model.role = joint_config[ii].common.role
+        joint_config[ii].data.features_key = joint_config[ii].data.features_key + str(ii)
+
+    joint_config['joint_config'] = True
+    joint_config['parties'] = list(range(config.common.parties_num))
+    # joint_config['backend'] = config.common.backend.lower()
+    config = joint_config
 
     return config
 
@@ -92,16 +91,14 @@ def init():
 def load(args):
     data = {}
     data_params_update = {}
-    # import pdb; pdb.set_trace()
-    if args.backend.lower() == 'sp':
-        for ii in args['parties']:
-            params = args[ii].data
-            part_path = Path(params.data_dir) / params.dataset / f'{params.dataset_part_prefix}{ii}'
-            ds = load_splitted_part(part_path, split_feature_prefix='image', new_name_split_feature=None)
-            data[ii] = ds
-            stat_dict_update = compute_dataset_info_params(ds, params.features_prefix, params.label_prefix) # произведение элементов шейпа сэпмпла?
-            data_params_update[ii] = stat_dict_update
-        return data, data_params_update
+    for ii in args['parties']:
+        params = args[ii].data
+        part_path = Path(params.data_dir) / params.dataset / f'{params.dataset_part_prefix}{ii}'
+        ds = load_splitted_part(part_path, split_feature_prefix='image', new_name_split_feature=None)
+        data[ii] = ds
+        stat_dict_update = compute_dataset_info_params(ds, params.features_prefix, params.label_prefix) # произведение элементов шейпа сэпмпла?
+        data_params_update[ii] = stat_dict_update
+    return data, data_params_update
 
 
 def load_splitted_part(part_path, split_feature_prefix='image', new_name_split_feature=None):
