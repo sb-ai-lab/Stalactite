@@ -14,7 +14,7 @@ class LinearRegressionBatch(torch.nn.Module):
         Args:
             input_dim (int): input dimension
             output_dim (int): output dimension
-            reg_lambda (float): L2 regularizer per 1-sample. That is - regularizer on the sacale of
+            reg_lambda (float): L2 regularizer per 1-sample. That is - regularizer on the scale of
                 MSE error.
         """
         super(LinearRegressionBatch, self).__init__()
@@ -51,7 +51,6 @@ class LinearRegressionBatch(torch.nn.Module):
 
     def predict(self, X_pred):
         Y_pred = self.forward(X_pred)
-
         return Y_pred
 
     def get_weights(self, ):

@@ -5,7 +5,7 @@ import torch
 import mlflow
 from sklearn import metrics
 
-from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, PartyMember, Party
+from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, Party
 from stalactite.metrics import ComputeAccuracy
 from stalactite.batching import ListBatcher
 
@@ -29,7 +29,7 @@ class PartyMasterImpl(PartyMaster):
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.target = target
-        self.test_target =test_target
+        self.test_target = test_target
         self.target_uids = target_uids
         self.is_initialized = False
         self.is_finalized = False
@@ -54,17 +54,17 @@ class PartyMasterImpl(PartyMaster):
         return [torch.rand(self._batch_size) for _ in range(world_size)]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
-            logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
-                        f"Predictions size: {predictions.size()}" % self.id)
-            mae = metrics.mean_absolute_error(y, predictions)
-            acc = ComputeAccuracy().compute(y, predictions)
-            logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
-            logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
+        logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
+                    f"Predictions size: {predictions.size()}" % self.id)
+        mae = metrics.mean_absolute_error(y, predictions)
+        acc = ComputeAccuracy().compute(y, predictions)
+        logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
+        logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
 
-            if self.run_mlflow:
-                step = self.iteration_counter
-                mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
-                mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
+        if self.run_mlflow:
+            step = self.iteration_counter
+            mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
+            mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
 
     def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
@@ -124,14 +124,13 @@ class PartyMasterImplConsequently(PartyMasterImpl):
                 member_predictions = party.update_predict(
                     [member_name], titer.batch, titer.previous_batch, [updates[member_id]]
                 )
-                party_predictions[member_id] =member_predictions[0]
+                party_predictions[member_id] = member_predictions[0]
                 # useless aggr
                 predictions = self.aggregate(titer.participating_members, party_predictions)
                 member_updates = self.compute_updates(
                     [member_name], predictions, party_predictions, party.world_size, titer.subiter_seq_num
                 )
                 updates[member_id] = member_updates[0]
-
 
                 if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
                     logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"

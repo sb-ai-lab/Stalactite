@@ -253,7 +253,7 @@ class PartyMember(ABC):
         ...
 
     @abstractmethod
-    def update_weights(self, upd: DataTensor):
+    def update_weights(self, uids: List[str], upd: DataTensor):
         ...
 
     @abstractmethod
@@ -263,5 +263,3 @@ class PartyMember(ABC):
     @abstractmethod
     def update_predict(self, upd: DataTensor, previous_batch: RecordsBatch, batch: RecordsBatch) -> DataTensor:
         ...
-
-
