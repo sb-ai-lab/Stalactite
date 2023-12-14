@@ -253,11 +253,11 @@ class PartyMember(ABC):
         ...
 
     @abstractmethod
-    def update_weights(self, uids: List[str], upd: DataTensor):
+    def update_weights(self, uids: RecordsBatch, upd: DataTensor):
         ...
 
     @abstractmethod
-    def predict(self, uids: List[str], use_test: bool = False) -> DataTensor:
+    def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
         ...
 
     @abstractmethod

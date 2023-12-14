@@ -49,20 +49,20 @@ class PartyMemberImpl(PartyMember):
         self.is_finalized = True
         logger.info("Member %s: has been finalized" % self.id)
 
-    def _prepare_data(self, uids: List[str]):
+    def _prepare_data(self, uids: RecordsBatch):
 
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
         U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
         return U, S, Vh
 
-    def update_weights(self, uids: List[str], upd: DataTensor):
+    def update_weights(self, uids: RecordsBatch, upd: DataTensor):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         U, S, Vh = self._prepare_data(uids)
         self._model.update_weights(data_U=U, data_S=S, data_Vh=Vh, rhs=upd)
         logger.info("Member %s: successfully updated weights" % self.id)
 
-    def predict(self, uids: List[str], use_test: bool = False) -> DataTensor:
+    def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
         logger.info("Member %s: predicting. Batch: %s" % (self.id, uids))
         self._check_if_ready()
         tensor_idx = [int(x) for x in uids]  # todo: do it somewhere else
