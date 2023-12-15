@@ -163,14 +163,14 @@ class PartyMaster(ABC):
                 logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
                              % (self.id, titer.seq_num, titer.epoch))
                 party_predictions = party.predict(batcher.uids)
-                predictions = self.aggregate(party.members, party_predictions)
+                predictions = self.aggregate(party.members, party_predictions, infer=True)
                 self.report_metrics(self.target, predictions, name="Train")
 
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
                 logger.debug(f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
                              % (self.id, titer.seq_num, titer.epoch))
                 party_predictions = party.predict(uids=batcher.uids, use_test=True)
-                predictions = self.aggregate(party.members, party_predictions)
+                predictions = self.aggregate(party.members, party_predictions, infer=True)
                 self.report_metrics(self.test_target, predictions, name="Test")
 
     def synchronize_uids(self, party: Party) -> List[str]:
@@ -213,7 +213,8 @@ class PartyMaster(ABC):
         ...
 
     @abstractmethod
-    def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor) -> DataTensor:
+    def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor,
+                  infer: bool = False) -> DataTensor:
         ...
 
     @abstractmethod

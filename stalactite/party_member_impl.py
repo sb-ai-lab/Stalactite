@@ -65,12 +65,11 @@ class PartyMemberImpl(PartyMember):
     def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
         logger.info("Member %s: predicting. Batch: %s" % (self.id, uids))
         self._check_if_ready()
-        tensor_idx = [int(x) for x in uids]  # todo: do it somewhere else
         if use_test:
             logger.info("Member %s: using test data" % self.id)
             X = self._dataset[self._data_params.test_split][self._data_params.features_key]
         else:
-            X = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx]
+            X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
         predictions = self._model.predict(X)
         logger.info("Member %s: made predictions." % self.id)
         return predictions

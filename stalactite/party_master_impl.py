@@ -7,7 +7,7 @@ from sklearn import metrics
 
 from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, Party
 from stalactite.metrics import ComputeAccuracy
-from stalactite.batching import ListBatcher
+from stalactite.batching import ListBatcher, ConsecutiveListBatcher
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,8 @@ class PartyMasterImpl(PartyMaster):
         self._weights_dim = model_update_dim_size
         self.iteration_counter = 0
         self.run_mlflow = run_mlflow
+        self.party_predictions = dict()
+        self.updates = dict()
 
     def master_initialize(self, party: Party):
         logger.info("Master %s: initializing" % self.id)
@@ -66,9 +68,15 @@ class PartyMasterImpl(PartyMaster):
             mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
             mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
 
-    def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor) -> DataTensor:
+    def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor,
+                  infer=False) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
+        if not infer:
+            for member_id, member_prediction in zip(participating_members, party_predictions):
+                self.party_predictions[member_id] = member_prediction
+            party_predictions = list(self.party_predictions.values())
+
         return torch.sum(torch.stack(party_predictions, dim=1), dim=1)
 
     def compute_updates(self,
@@ -82,14 +90,16 @@ class PartyMasterImpl(PartyMaster):
         self._check_if_ready()
         self.iteration_counter += 1
         y = self.target[self._batch_size*subiter_seq_num:self._batch_size*(subiter_seq_num+1)]
-        updates = []
-        participating_members = [int(p.split('-')[-1]) for p in participating_members]
+
         for member_id in participating_members:
-            party_predictions_for_upd = [p for i, p in enumerate(party_predictions) if i != member_id]
-            member_pred = torch.mean(torch.stack(party_predictions_for_upd), dim=0)
-            member_update = y - torch.reshape(member_pred, (-1,))
-            updates.append(member_update)
-        return updates
+            party_predictions_for_upd = [v for k, v in self.party_predictions.items() if k != member_id]
+            if len(party_predictions_for_upd) == 0:
+                party_predictions_for_upd = [torch.rand(predictions.size())]
+            pred_for_member_upd = torch.mean(torch.stack(party_predictions_for_upd), dim=0)
+            member_update = y - torch.reshape(pred_for_member_upd, (-1,))
+            self.updates[member_id] = member_update
+
+        return [self.updates[member_id] for member_id in participating_members]
 
     def master_finalize(self, party: Party):
         logger.info("Master %s: finalizing" % self.id)
@@ -103,45 +113,8 @@ class PartyMasterImpl(PartyMaster):
 
 
 class PartyMasterImplConsequently(PartyMasterImpl):
-    def loop(self, batcher: Batcher, party: Party):
-        logger.info("Master %s: entering training loop" % self.id)
-        updates = self.make_init_updates(party.world_size)
 
-        for titer in batcher:
-            logger.debug(f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                         % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch))
-
-            if titer.seq_num == 0:
-                logger.info("making first update")
-                party_predictions = party.update_predict(
-                    titer.participating_members, titer.batch, titer.previous_batch, updates
-                )
-
-            members_to_update = titer.participating_members
-            for member_name in members_to_update:
-                member_id = int(member_name.split("-")[-1])
-                # predict from one member
-                member_predictions = party.update_predict(
-                    [member_name], titer.batch, titer.previous_batch, [updates[member_id]]
-                )
-                party_predictions[member_id] = member_predictions[0]
-                # useless aggr
-                predictions = self.aggregate(titer.participating_members, party_predictions)
-                member_updates = self.compute_updates(
-                    [member_name], predictions, party_predictions, party.world_size, titer.subiter_seq_num
-                )
-                updates[member_id] = member_updates[0]
-
-                if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
-                    logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
-                                 % (self.id, titer.seq_num, titer.epoch))
-                    party_predictions_for_metrics = party.predict(batcher.uids)
-                    predictions = self.aggregate(party.members, party_predictions_for_metrics)
-                    self.report_metrics(self.target, predictions, name="Train")
-
-                if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
-                    logger.debug(f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
-                                 % (self.id, titer.seq_num, titer.epoch))
-                    party_predictions_for_metrics = party.predict(uids=batcher.uids, use_test=True)
-                    predictions = self.aggregate(party.members, party_predictions_for_metrics)
-                    self.report_metrics(self.test_target, predictions, name="Test")
+    def make_batcher(self, uids: List[str], party: Party) -> Batcher:
+        logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
+        self._check_if_ready()
+        return ConsecutiveListBatcher(epochs=self.epochs, members=party.members, uids=uids, batch_size=self._batch_size)

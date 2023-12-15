@@ -4,11 +4,13 @@ import uuid
 import random
 import threading
 from threading import Thread
+from typing import List
 
 import torch
 import mlflow
 import scipy as sp
 from sklearn.metrics import mean_absolute_error
+from datasets import DatasetDict
 
 from stalactite.models.linreg_batch import LinearRegressionBatch
 from stalactite.data_loader import load, init, DataPreprocessor
@@ -25,8 +27,9 @@ logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 
 
-def run_single_member(exp_uid: str, datasets_list, member_id: int, ds_size, input_dims, batch_size, epochs,
-                      split, members_count):
+def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id: int, ds_size: int,
+                      input_dims: List[int], batch_size: int, epochs: int,
+                      members_count: int):
     with mlflow.start_run():
 
         log_params = {
@@ -36,7 +39,6 @@ def run_single_member(exp_uid: str, datasets_list, member_id: int, ds_size, inpu
             "mode": "single",
             "member_id": member_id,
             "exp_uid": exp_uid,
-            "split": split,
             "members_count": members_count
 
         }
@@ -85,8 +87,9 @@ def run_single_member(exp_uid: str, datasets_list, member_id: int, ds_size, inpu
             mlflow.log_metric("test_acc", test_acc, step=step)
 
 
-def run_vfl(exp_uid: str, params, datasets_list, members_count: int, ds_size, input_dims, batch_size, epochs,
-            split, is_consequently):
+def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_count: int, ds_size: int,
+            input_dims: List[int], batch_size: int, epochs: int,
+            is_consequently: bool):
     with mlflow.start_run():
 
         log_params = {
@@ -96,7 +99,6 @@ def run_vfl(exp_uid: str, params, datasets_list, members_count: int, ds_size, in
             "mode": "vfl",
             "members_count": members_count,
             "exp_uid": exp_uid,
-            "split": split,
             "is_consequently": is_consequently
 
         }
@@ -227,7 +229,7 @@ def main():
             logger.info("starting experiment for member: " + str(member_id))
             run_single_member(
                 exp_uid=exp_uid, datasets_list=datasets_list, member_id=member_id, batch_size=batch_size,
-                ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1], split=0,
+                ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1],
                 members_count=members_count
             )
 
@@ -235,7 +237,7 @@ def main():
         run_vfl(
             exp_uid=exp_uid, params=params, datasets_list=datasets_list, members_count=members_count,
             batch_size=batch_size, ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1],
-            split=0, is_consequently=is_consequently
+            is_consequently=is_consequently
             )
     else:
         raise ValueError(f"Unrecognized mode: {mode}. Please choose one of the following: single or vfl")
