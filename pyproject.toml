@@ -15,6 +15,7 @@ pytest = "^7.4.3"
 click = "^8.1.7"
 numpy = "^1.26.2"
 scikit-learn = "^1.3.2"
+jupyter = "^1.0.0"
 
 [tool.poetry.scripts]
 stalactite = "stalactite.main:cli"
