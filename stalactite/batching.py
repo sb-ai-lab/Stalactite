@@ -32,12 +32,7 @@ class ListBatcher(Batcher):
         return _iter_func()
 
 
-class ConsecutiveListBatcher(Batcher):
-    def __init__(self, epochs: int, members: List[str], uids: List[str], batch_size: int):
-        self.epochs = epochs
-        self.members = members
-        self.uids = uids
-        self.batch_size = batch_size
+class ConsecutiveListBatcher(ListBatcher):
 
     def __iter__(self) -> Iterator[TrainingIteration]:
         def _iter_func():
