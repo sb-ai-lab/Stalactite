@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 class MockPartyMasterImpl(PartyMaster):
     def __init__(self,
                  uid: str,
-
                  epochs: int,
                  report_train_metrics_iteration: int,
                  report_test_metrics_iteration: int,
@@ -27,6 +26,7 @@ class MockPartyMasterImpl(PartyMaster):
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.target = target
         self.target_uids = target_uids
+        self.test_target = target
         self.is_initialized = False
         self.is_finalized = False
         self._batch_size = batch_size
@@ -54,7 +54,8 @@ class MockPartyMasterImpl(PartyMaster):
         error = metrics.mean_absolute_error(y, predictions)
         logger.info(f"Master %s: mock metrics (MAE): {error}" % error)
 
-    def aggregate(self,  participating_members: List[str], party_predictions: PartyDataTensor) -> DataTensor:
+    def aggregate(self,  participating_members: List[str], party_predictions: PartyDataTensor,
+                  infer: bool = False) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
         return torch.mean(torch.stack(party_predictions, dim=1), dim=1)
@@ -64,7 +65,8 @@ class MockPartyMasterImpl(PartyMaster):
             participating_members: List[str],
             predictions: DataTensor,
             party_predictions: PartyDataTensor,
-            world_size: int) \
+            world_size: int,
+            subiter_seq_num: int) \
             -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
@@ -116,7 +118,7 @@ class MockPartyMemberImpl(PartyMember):
         self.is_finalized = True
         logger.info("Member %s: has been finalized" % self.id)
 
-    def update_weights(self, upd: DataTensor):
+    def update_weights(self, uids: RecordsBatch, upd: DataTensor):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         if upd.size() != self._weights.size():
@@ -138,7 +140,7 @@ class MockPartyMemberImpl(PartyMember):
     def update_predict(self, upd: DataTensor, batch: RecordsBatch, previous_batch: RecordsBatch) -> DataTensor:
         logger.info("Member %s: updating and predicting." % self.id)
         self._check_if_ready()
-        self.update_weights(upd)
+        self.update_weights(previous_batch, upd)
         predictions = self.predict(batch)
         self.iterations_counter += 1
         logger.info("Member %s: updated and predicted." % self.id)

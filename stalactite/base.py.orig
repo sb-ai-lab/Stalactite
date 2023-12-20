@@ -148,9 +148,6 @@ class PartyMaster(ABC):
         updates = self.make_init_updates(party.world_size)
 
         for titer in batcher:
-            logger.debug(f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                         % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch))
-
             party_predictions = party.update_predict(
                 titer.participating_members, titer.batch, titer.previous_batch, updates
             )
@@ -161,6 +158,7 @@ class PartyMaster(ABC):
                 titer.participating_members, predictions, party_predictions, party.world_size, titer.subiter_seq_num
             )
 
+<<<<<<< Updated upstream
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
                 logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
                              % (self.id, titer.seq_num, titer.epoch))
@@ -174,6 +172,8 @@ class PartyMaster(ABC):
                 party_predictions = party.predict(uids=batcher.uids, use_test=True)
                 predictions = self.aggregate(party.members, party_predictions, infer=True)
                 self.report_metrics(self.test_target, predictions, name="Test")
+=======
+>>>>>>> Stashed changes
 
     def synchronize_uids(self, party: Party) -> List[str]:
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, party.world_size))
