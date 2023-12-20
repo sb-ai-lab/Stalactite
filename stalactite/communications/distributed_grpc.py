@@ -5,8 +5,10 @@ import enum
 import time
 import uuid
 from abc import ABC, abstractmethod
+from copy import copy
 from queue import Queue, Empty
-from dataclasses import dataclass
+import pickle
+from dataclasses import dataclass, field
 import logging
 from typing import Optional, Dict, Union, AsyncIterator, List, Any, Iterator, Coroutine, cast
 import threading
@@ -25,9 +27,9 @@ from stalactite.base import (
     PartyDataTensor,
     RecordsBatch,
 )
-from stalactite.communications.helpers import ParticipantType, _Method
+from stalactite.communications.helpers import ParticipantType, _Method, METHOD_VALUES
 from stalactite.communications.grpc_utils.generated_code import communicator_pb2, communicator_pb2_grpc
-from stalactite.communications.grpc_utils.utils import Status, ClientStatus, EventTask
+from stalactite.communications.grpc_utils.utils import Status, ClientStatus # , EventTask
 from stalactite.communications.grpc_utils.grpc_servicer import GRpcCommunicatorServicer
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,18 @@ logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 logger.addHandler(sh)
+
+@dataclass
+class MethodMessage:
+    tensor_kwargs: dict[str, torch.Tensor] = field(default_factory=dict)
+    # str_list_kwargs: dict[str, list[str]] = field(default_factory=dict)
+    other_kwargs: dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class SerializedMethodMessage:
+    tensor_kwargs: dict[str, bytes] = field(default_factory=dict)
+    # str_list_kwargs: dict[str, communicator_pb2.UidsList] = field(default_factory=dict)
+    other_kwargs: dict[str, bytes] = field(default_factory=dict)
 
 
 class MessageTypes(str, enum.Enum):
@@ -48,11 +62,11 @@ class ParticipantTasks:
     queue: Queue
 
 
-@dataclass
-class MessageMaps:
-    str_kwargs: dict[str, str] | None
-    numeric_kwargs: dict[str, int | float] | None
-    bytes_kwargs: dict[str, bytes] | None
+# @dataclass
+# class MessageMaps:
+#     str_kwargs: dict[str, str] | None
+#     numeric_kwargs: dict[str, int | float] | None
+#     bytes_kwargs: dict[str, bytes] | None
 
 
 def load_data(serialized_tensor: bytes) -> torch.Tensor:
@@ -63,30 +77,72 @@ def save_data(tensor: torch.Tensor):
     return safetensors.torch.save(tensors={'tensor': tensor})
 
 
-def split_kwargs(kwargs: dict) -> MessageMaps:
-    numeric_kwargs, str_kwargs, other_kwargs = dict(), dict(), dict()
-    for key, value in kwargs.items():
-        if isinstance(value, str):
-            str_kwargs[key] = value
-        elif isinstance(value, (int, float)):
-            numeric_kwargs[key] = value
-        else:
-            if isinstance(value, torch.Tensor):
-                other_kwargs[key] = save_data(value)
-            else:
-                raise ValueError(f'Unknown kwarg field type. Keyword arg name: {key}, type: {type(value)}')
-    return MessageMaps(str_kwargs=str_kwargs, numeric_kwargs=numeric_kwargs, bytes_kwargs=other_kwargs)
+# def split_kwargs(kwargs: dict) -> MessageMaps:
+#     print('split_kwargs', kwargs)
+#     numeric_kwargs, str_kwargs, other_kwargs = dict(), dict(), dict()
+#     for key, value in kwargs.items():
+#         if isinstance(value, str):
+#             str_kwargs[key] = value
+#         elif isinstance(value, (int, float)):
+#             numeric_kwargs[key] = value
+#         else:
+#             if isinstance(value, torch.Tensor):
+#                 other_kwargs[key] = save_data(value)
+#             else:
+#                 raise ValueError(f'Unknown kwarg field type. Keyword arg name: {key}, type: {type(value)}')
+#     return MessageMaps(str_kwargs=str_kwargs, numeric_kwargs=numeric_kwargs, bytes_kwargs=other_kwargs)
 
 
-def gather_kwargs(kwargs: MessageMaps) -> dict:
-    other_kwargs = dict()
-    for k, v in kwargs.bytes_kwargs.items():
-        other_kwargs[k] = load_data(v)
-    return {
-        **kwargs.numeric_kwargs,
-        **kwargs.str_kwargs,
-        **other_kwargs,
-    }
+def prepare_kwargs(kwargs: MethodMessage) -> SerializedMethodMessage:
+    serialized_tensors = {}
+    for key, value in kwargs.tensor_kwargs.items():
+        assert isinstance(value, torch.Tensor), 'MethodMessage.tensor_kwargs can contain only torch.Tensor-s as values'
+        serialized_tensors[key] = save_data(value)
+    other_kwargs = {}
+    for key, value in kwargs.other_kwargs.items():
+        if isinstance(value, torch.Tensor):
+            logger.warning(
+                f'Got kwarg {key} as the field in MethodMessage.other_kwargs, '
+                'while it should be passed in MethodMessage.tensor_kwargs'
+            )
+        other_kwargs[key] = pickle.dumps(value)
+    # str_list_kwargs = {}
+    # for key, value in kwargs.str_list_kwargs.items():
+    #     if not isinstance(value, list):
+    #         raise TypeError('MethodMessage.str_list_kwargs must all be lists')
+    #     str_list_kwargs[key] = communicator_pb2.UidsList(uids=value)
+
+    return SerializedMethodMessage(
+        tensor_kwargs=serialized_tensors,
+        other_kwargs=other_kwargs,
+        # str_list_kwargs=str_list_kwargs,
+    )
+
+# def gather_kwargs(kwargs: MessageMaps) -> dict:
+#     print('gather_kwargs', kwargs)
+#
+#     other_kwargs = dict()
+#     for k, v in kwargs.bytes_kwargs.items():
+#         other_kwargs[k] = load_data(v)
+#     return {
+#         **kwargs.numeric_kwargs,
+#         **kwargs.str_kwargs,
+#         **other_kwargs,
+#     }
+
+def collect_kwargs(message_kwargs: SerializedMethodMessage) -> dict:
+    print('message_kwargs', message_kwargs)
+    tensor_kwargs = {}
+    for key, value in message_kwargs.tensor_kwargs.items():
+        tensor_kwargs[key] = load_data(value)
+    other_kwargs = {}
+    for key, value in message_kwargs.other_kwargs.items():
+        other_kwargs[key] = pickle.loads(value)
+    # str_list_kwargs = {}
+    # for key, value in message_kwargs.str_list_kwargs.items():
+    #     str_list_kwargs[key] = list(value.uids)
+    # return {**tensor_kwargs, **other_kwargs, **str_list_kwargs}
+    return {**tensor_kwargs, **other_kwargs}
 
 
 class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
@@ -142,17 +198,17 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
     def is_ready(self) -> bool:
         return self.server_thread.running()
 
-    def _get_tasks_from_main_queue(self) -> EventTask | None:
+    def _get_tasks_from_main_queue(self) -> communicator_pb2.MainMessage | None:
         try:
             return self.servicer.main_tasks_queue.get_nowait()
         except asyncio.QueueEmpty:
             return None
 
-    def _put_to_main_tasks_queue(self, event: EventTask) -> None:
-        self.servicer.main_tasks_queue.put_nowait(event)
+    def _put_to_main_tasks_queue(self, task_message: communicator_pb2.MainMessage) -> None:
+        self.servicer.main_tasks_queue.put_nowait(task_message)
 
-    def _put_to_server_tasks_queue(self, event: EventTask, send_to_id: str) -> None:
-        self.servicer.tasks_queue[send_to_id].put_nowait(event)
+    def _put_to_server_tasks_queue(self, task_message: communicator_pb2.MainMessage, send_to_id: str) -> None:
+        self.servicer.tasks_queue[send_to_id].put_nowait(task_message)
 
     @property
     def _server_tasks_futures(self) -> dict[str, ParticipantFuture]:
@@ -161,35 +217,64 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
     def _add_server_task_future(self, task_id: str, future: ParticipantFuture) -> None:
         self.servicer.tasks_futures[task_id] = future
 
-    def send(self, send_to_id: str, method_name: str, require_answer: bool = True, **kwargs) -> ParticipantFuture:
-        task_id = kwargs.pop('task_id', str(uuid.uuid4()))  # TODO ?
-        parent_id = kwargs.pop('parent_id', None)  # TODO ?
-        message_maps = split_kwargs(kwargs)
-
+    def send(
+            self,
+            send_to_id: str,
+            method_name: str,
+            require_answer: bool = True,
+            task_id: str | None = None,
+            parent_id: str | None = None,
+            message: MethodMessage | None = None,
+            **kwargs
+    ) -> ParticipantFuture:
+        if kwargs:
+            logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
+        task_id = str(uuid.uuid4()) if task_id is None else task_id
+        message_kwargs = prepare_kwargs(message)
         future = ParticipantFuture(participant_id=send_to_id)
 
-        task = EventTask(
-            from_id=self.master_id,
-            send_to_id=send_to_id,
+        # task = EventTask(
+        #     from_id=self.master_id,
+        #     send_to_id=send_to_id,
+        #     task_id=task_id,
+        #     parent_id=parent_id,
+        #     message=communicator_pb2.MainMessage(
+        #         message_type=MessageTypes.server_task,
+        #         status=self.status,
+        #         require_answer=require_answer,
+        #         task_id=task_id,
+        #         parent_id=parent_id,
+        #         from_uid=self.master_id,
+        #         method_name=method_name,
+        #         tensor_kwargs=message_kwargs.tensor_kwargs,
+        #         other_kwargs=message_kwargs.other_kwargs,
+        #         str_list_kwargs=message_kwargs.str_list_kwargs,
+        #         # str_kwargs=message_maps.str_kwargs,
+        #         # numeric_kwargs=message_maps.numeric_kwargs,
+        #         # bytes_kwargs=message_maps.bytes_kwargs,
+        #     )
+        # )
+        task_message = communicator_pb2.MainMessage(
+            message_type=MessageTypes.server_task,
+            status=self.status,
+            require_answer=require_answer,
             task_id=task_id,
             parent_id=parent_id,
-            message=communicator_pb2.MainMessage(
-                message_type=MessageTypes.server_task,
-                status=self.status,
-                require_answer=require_answer,
-                task_id=task_id,
-                parent_id=parent_id,
-                from_uid=self.master_id,
-                method_name=method_name,
-                str_kwargs=message_maps.str_kwargs,
-                numeric_kwargs=message_maps.numeric_kwargs,
-                bytes_kwargs=message_maps.bytes_kwargs,
-            )
+            from_uid=self.master_id,
+            method_name=method_name,
+            tensor_kwargs=message_kwargs.tensor_kwargs,
+            other_kwargs=message_kwargs.other_kwargs,
+            # str_list_kwargs=message_kwargs.str_list_kwargs,
+            # str_kwargs=message_maps.str_kwargs,
+            # numeric_kwargs=message_maps.numeric_kwargs,
+            # bytes_kwargs=message_maps.bytes_kwargs,
         )
+
         if self.master_id == send_to_id:
-            self._put_to_main_tasks_queue(task)
+            # self._put_to_main_tasks_queue(task.message)
+            self._put_to_main_tasks_queue(task_message)
         else:
-            self._put_to_server_tasks_queue(task, send_to_id=send_to_id)
+            self._put_to_server_tasks_queue(task_message, send_to_id=send_to_id)
 
         # not all command requires feedback
         if require_answer:
@@ -200,41 +285,54 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
         logger.debug("Party communicator %s: sent to %s event %s" % (self.participant.id, send_to_id, task_id))
         return future
 
-    def broadcast(self,
-                  method_name: str,
-                  mass_kwargs: Optional[List[Any]] = None,
-                  participating_members: Optional[List[str]] = None,
-                  parent_id: Optional[str] = None,
-                  require_answer: bool = True,
-                  include_current_participant: bool = False,
-                  **kwargs) -> List[ParticipantFuture]:
+    def broadcast(
+        self,
+        method_name: str,
+        mass_kwargs: Optional[List[torch.Tensor]] = None,
+        participating_members: Optional[List[str]] = None,
+        parent_id: Optional[str] = None,
+        require_answer: bool = True,
+        include_current_participant: bool = False,
+        message: MethodMessage | None = None,
+        **kwargs
+    ) -> List[ParticipantFuture]:
+        if kwargs:
+            logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
         logger.debug("Sending event (%s) to all members" % method_name)
         members = participating_members or self.members
         unknown_members = set(members).difference(self.members)
         if len(unknown_members) > 0:
             raise ValueError(f"Unknown members: {unknown_members}. Existing members: {self.members}")
 
-        for mkwargs in mass_kwargs:
-            if not isinstance(mkwargs, torch.Tensor):
-                raise ValueError(f"Only `list[torch.Tensor]` can be sent as `mass_kwargs` in broadcast operation.")
+        if mass_kwargs is not None:
+            for mkwargs in mass_kwargs:
+                if not isinstance(mkwargs, torch.Tensor):
+                    raise ValueError(f"Only `list[torch.Tensor]` can be sent as `mass_kwargs` in broadcast operation.")
 
-        if not mass_kwargs:
+        if mass_kwargs is None:
             mass_kwargs = [dict() for _ in members]
         elif mass_kwargs and len(mass_kwargs) != len(members):
-            raise ValueError(f"Length of arguments list ({len(mass_kwargs)}) is not equal "
-                             f"to the length of members ({len(members)})")
+            raise ValueError(
+                f"Length of arguments list ({len(mass_kwargs)}) is not equal to the length of members ({len(members)})"
+            )
         else:
             mass_kwargs = [{self.MEMBER_DATA_FIELDNAME: args} for args in mass_kwargs]
+
         bc_futures = []
         for mkwargs, member_id in zip(mass_kwargs, members):
             if member_id == self.participant.id and not include_current_participant:
                 continue
+            if message is not None:
+                client_msg = copy(message)
+                client_msg.tensor_kwargs.update(mkwargs)
+            else:
+                client_msg = MethodMessage()
             future = self.send(
                 send_to_id=member_id,
                 method_name=method_name,
                 require_answer=require_answer,
                 parent_id=parent_id,
-                **{**mkwargs, **kwargs}
+                message=client_msg,
             )
             bc_futures.append(future)
         return bc_futures
@@ -267,8 +365,7 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
             event_loop = threading.Thread(target=self._run, daemon=True)
             event_loop.start()
             time.sleep(2)
-            self.participant.run(party) # TODO
-            # self.send(send_to_id=self.members[0], method_name=_Method.finalize, require_answer=False)
+            self.participant.run(party)
             self.send(send_to_id=self.master_id, method_name=_Method.finalize, require_answer=False)
             time.sleep(30)
             event_loop.join()
@@ -287,46 +384,39 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
                 if task is not None:
                     logger.debug("Party communicator %s: received event %s" % (self.participant.id, task.task_id))
 
-                    event = task.message
-                    event_data = gather_kwargs(
-                        MessageMaps(
-                            str_kwargs=dict(event.str_kwargs),
-                            numeric_kwargs=dict(event.numeric_kwargs),
-                            bytes_kwargs=dict(event.bytes_kwargs)
+                    event_data = collect_kwargs(
+                        SerializedMethodMessage(
+                            tensor_kwargs=dict(task.tensor_kwargs),
+                            other_kwargs=dict(task.other_kwargs),
+                            # str_list_kwargs=dict(task.str_list_kwargs)
                         )
                     )
 
-                    if event.method_name == _Method.service_return_answer.value:
-                        if event.parent_id not in self._server_tasks_futures:
+                    if task.method_name == _Method.service_return_answer.value:
+                        if task.parent_id not in self._server_tasks_futures:
                             # todo: replace with custom error
-                            raise ValueError(f"No awaiting future with id {event.parent_id}."
+                            raise ValueError(f"No awaiting future with id {task.parent_id}."
                                              f"(Participant id {self.participant.id}. "
-                                             f"Event {event.task_id} from {event.from_uid})")
+                                             f"Event {task.task_id} from {task.from_uid})")
 
                         logger.debug(
                             "Party communicator %s: marking future %s as finished by answer of event %s"
-                            % (self.participant.id, event.parent_id, event.task_id)
+                            % (self.participant.id, task.parent_id, task.task_id)
                         )
 
                         if 'result' not in event_data:
                             # todo: replace with custom error
                             raise ValueError("No result in data")
 
-                        future = self._server_tasks_futures.pop(event.parent_id)
+                        future = self._server_tasks_futures.pop(task.parent_id)
                         future.set_result(event_data['result'])
                         future.done()
-                    elif event.method_name == _Method.service_heartbeat.value:
-                        # TODO heartbeats are not tasks?
-                        logger.info(
-                            "Party communicator %s: received heartbeat from %s: %s"
-                            % (self.participant.id, event.task_id, event_data)
-                        )
-                    elif event.method_name == _Method.finalize.value:
+                    elif task.method_name == _Method.finalize.value:
                         logger.info("Party communicator %s: finalized" % self.participant.id)
                         break
                     else:
                         raise ValueError(
-                            f"Unsupported method {event.method_name} (Event {event.task_id} from {event.from_uid})"
+                            f"Unsupported method {task.method_name} (Event {task.task_id} from {task.from_uid})"
                         )
 
             logger.info("Party communicator %s: finished event loop" % self.participant.id)
@@ -351,20 +441,33 @@ class GRpcParty(Party):
     def members(self) -> List[str]:
         return self.party_communicator.members
 
-    def _sync_broadcast_to_members(self, *,
-                                   method_name: _Method,
-                                   mass_kwargs: Optional[List[Any]] = None,
-                                   participating_members: Optional[List[str]] = None,
-                                   **kwargs) -> List[Any]:
+    def _sync_broadcast_to_members(
+        self, *,
+        method_name: _Method,
+        mass_kwargs: Optional[List[Any]] = None,
+        participating_members: Optional[List[str]] = None,
+        parent_id: str | None = None,
+        require_answer: bool = True,
+        include_current_participant: bool = False,
+        message: MethodMessage | None = None,
+        **kwargs
+    ) -> List[Any]:
+        logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
+
         futures = self.party_communicator.broadcast(
             method_name=method_name,
             participating_members=participating_members,
             mass_kwargs=mass_kwargs,
-            **kwargs
+            parent_id=parent_id,
+            require_answer=require_answer,
+            include_current_participant=include_current_participant,
+            message=message
         )
 
-        logger.debug("Party broadcast: waiting for answer to event %s (waiting for %s secs)"
-                     % (method_name, self.op_timeout or "inf"))
+        logger.debug(
+            "Party broadcast: waiting for answer to event %s (waiting for %s secs)"
+            % (method_name, self.op_timeout or "inf")
+        )
 
         futures = concurrent.futures.wait(futures, timeout=self.op_timeout)
         completed_futures, uncompleted_futures \
@@ -385,7 +488,10 @@ class GRpcParty(Party):
         return cast(List[List[str]], self._sync_broadcast_to_members(method_name=_Method.records_uids))
 
     def register_records_uids(self, uids: List[str]):
-        self._sync_broadcast_to_members(method_name=_Method.register_records_uids, uids=uids)
+        self._sync_broadcast_to_members(
+            method_name=_Method.register_records_uids,
+            message=MethodMessage(other_kwargs={'uids': uids})
+        )
 
     def initialize(self):
         self._sync_broadcast_to_members(method_name=_Method.initialize)
@@ -394,12 +500,18 @@ class GRpcParty(Party):
         self._sync_broadcast_to_members(method_name=_Method.finalize)
 
     def update_weights(self, upd: PartyDataTensor):
-        self._sync_broadcast_to_members(method_name=_Method.update_weights, mass_kwargs=upd)
+        self._sync_broadcast_to_members(
+            method_name=_Method.update_weights,
+            mass_kwargs=upd,
+        )
 
     def predict(self, uids: List[str], use_test: bool = False) -> PartyDataTensor:
         return cast(
             PartyDataTensor,
-            self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=True)
+            self._sync_broadcast_to_members(
+                method_name=_Method.predict,
+                message=MethodMessage(other_kwargs={'uids': uids, 'use_test': True})
+            )
         )
 
     def update_predict(
@@ -415,12 +527,9 @@ class GRpcParty(Party):
                 method_name=_Method.update_predict,
                 mass_kwargs=upd,
                 participating_members=participating_members,
-                batch=batch,
-                previous_batch=previous_batch
+                message=MethodMessage(other_kwargs={'batch': batch, 'previous_batch': previous_batch})
             )
         )
-
-
 
 class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
     MEMBER_DATA_FIELDNAME = '__member_data__'
@@ -512,7 +621,19 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
     def _add_task_future(self, task_id: str, future: ParticipantFuture) -> None:
         self.tasks_futures[task_id] = future
 
-    def send(self, send_to_id: str, method_name: str, require_answer: bool = True, **kwargs) -> ParticipantFuture:
+    def send(
+            self,
+            send_to_id: str,
+            method_name: str,
+            require_answer: bool = True,
+            task_id: str | None = None,
+            parent_id: str | None = None,
+            message: MethodMessage | None = None,
+            **kwargs
+    ) -> ParticipantFuture:
+        if kwargs:
+            logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
+
         if not self.is_ready:
             raise RuntimeError("Cannot proceed because communicator is not ready. "
                                "Perhaps, rendezvous has not been called or was unsuccessful")
@@ -520,34 +641,49 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
         if send_to_id not in (self._master_id, self.client_id):
             raise RuntimeError('GRpcMemberPartyCommunicator cannot send to other Members')
 
-        task_id = kwargs.pop('task_id', str(uuid.uuid4())) # TODO remove duplicated code
-        parent_id = kwargs.pop('parent_id', None)
-        message_maps = split_kwargs(kwargs)
-
+        task_id = str(uuid.uuid4()) if task_id is None else task_id
+        message_kwargs = prepare_kwargs(message)
         future = ParticipantFuture(participant_id=send_to_id)
 
-        task = EventTask(
-            from_id=self.client_id,
-            send_to_id=send_to_id,
+        # task = EventTask(
+        #     from_id=self.client_id,
+        #     send_to_id=send_to_id,
+        #     task_id=task_id,
+        #     parent_id=parent_id,
+        #     message=communicator_pb2.MainMessage(
+        #         message_type=MessageTypes.client_task,
+        #         status=ClientStatus.alive,
+        #         require_answer=require_answer,
+        #         task_id=task_id,
+        #         parent_id=parent_id,
+        #         from_uid=self.client_id,
+        #         method_name=method_name,
+        #         tensor_kwargs=message_kwargs.tensor_kwargs,
+        #         other_kwargs=message_kwargs.other_kwargs,
+        #         str_list_kwargs=message_kwargs.str_list_kwargs,
+        #         # str_kwargs=message_maps.str_kwargs,
+        #         # numeric_kwargs=message_maps.numeric_kwargs,
+        #         # bytes_kwargs=message_maps.bytes_kwargs,
+        #     )
+        # )
+        task_message = communicator_pb2.MainMessage(
+            message_type=MessageTypes.client_task,
+            status=ClientStatus.alive,
+            require_answer=require_answer,
             task_id=task_id,
             parent_id=parent_id,
-            message=communicator_pb2.MainMessage(
-                message_type=MessageTypes.client_task,
-                status=ClientStatus.alive,
-                require_answer=require_answer,
-                task_id=task_id,
-                parent_id=parent_id,
-                from_uid=self.client_id,
-                method_name=method_name,
-                str_kwargs=message_maps.str_kwargs,
-                numeric_kwargs=message_maps.numeric_kwargs,
-                bytes_kwargs=message_maps.bytes_kwargs,
-            )
+            from_uid=self.client_id,
+            method_name=method_name,
+            tensor_kwargs=message_kwargs.tensor_kwargs,
+            other_kwargs=message_kwargs.other_kwargs,
+            # str_list_kwargs=message_kwargs.str_list_kwargs,
         )
         if send_to_id == self._master_id:
-            self._stub.UnaryExchange(task.message, timeout=self.sent_task_timout)
+            # self._stub.UnaryExchange(task.message, timeout=self.sent_task_timout)
+            self._stub.UnaryExchange(task_message, timeout=self.sent_task_timout)
         else:
-            self.server_tasks_queue.put(task.message)
+            # self.server_tasks_queue.put(task.message)
+            self.server_tasks_queue.put(task_message)
 
         # not all command requires feedback
         if require_answer:
@@ -591,27 +727,39 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
         while True:
             task = self.server_tasks_queue.get()
             logger.debug("Party communicator %s: received event %s" % (self.participant.id, task.task_id))
+
             method = getattr(self.participant, task.method_name, None)
             if method is None:
                 raise ValueError(f"Unsupported method {task.method_name} (Event {task.task_id} from {task.from_uid})")
-            kwargs = gather_kwargs(
-                MessageMaps(
-                    bytes_kwargs=dict(task.bytes_kwargs),
-                    str_kwargs=dict(task.str_kwargs),
-                    numeric_kwargs=dict(task.numeric_kwargs),
+
+            kwargs = collect_kwargs(
+                SerializedMethodMessage(
+                    tensor_kwargs=dict(task.tensor_kwargs),
+                    other_kwargs=dict(task.other_kwargs),
+                    # str_list_kwargs=dict(task.str_list_kwargs),
                 )
             )
+            mkwargs = kwargs.pop(self.MEMBER_DATA_FIELDNAME, None)
+            if mkwargs is not None:
+                if isinstance(mkwargs, torch.Tensor):
+                    mkwargs = [mkwargs]
+                else:
+                    raise ValueError('Mass kwargs must be torch.Tensor')
+            else:
+                mkwargs = []
 
-            # TODO mkwargs
-            # if self.MEMBER_DATA_FIELDNAME in kwargs:
-            #     mkwargs = [kwargs[self.MEMBER_DATA_FIELDNAME]]
-            #     del kwargs[self.MEMBER_DATA_FIELDNAME]
-            # else:
-            mkwargs = []
             result = method(*mkwargs, **kwargs)  # TODO put CPU heavy tasks in another thread?
+            client_msg = MethodMessage()
+            setattr(client_msg, METHOD_VALUES[task.method_name], {'result': result})
 
-            self.send(send_to_id=task.from_uid, method_name=_Method.service_return_answer,
-                      parent_id=task.task_id, require_answer=False, result=result)
+            self.send(
+                send_to_id=task.from_uid,
+                method_name=_Method.service_return_answer,
+                parent_id=task.task_id,
+                require_answer=False,
+                message=client_msg
+            )
+
 
             if task.method_name == _Method.finalize.value:
                 break
