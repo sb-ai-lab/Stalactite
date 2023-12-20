@@ -17,7 +17,6 @@ from stalactite.communications.helpers import ParticipantType, _Method
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class _Event:
     id: str
@@ -38,7 +37,6 @@ class _ParticipantInfo:
 
 
 class LocalPartyCommunicator(PartyCommunicator, ABC):
-    """ Base local communicator class. """
     MEMBER_DATA_FIELDNAME = '__member_data__'
 
     # todo: add docs
@@ -49,11 +47,9 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
 
     @property
     def is_ready(self) -> bool:
-        """ Whether the communicator is ready. """
         return self._party_info is not None
 
     def randezvous(self):
-        """ Wait until all the participants of the party are initialized. """
         logger.info("Party communicator %s: performing randezvous" % self.participant.id)
         self._party_info[self.participant.id] = _ParticipantInfo(
             type=ParticipantType.master if isinstance(self.participant, PartyMaster) else ParticipantType.member,
@@ -70,15 +66,6 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
 
     def send(self, send_to_id: str, method_name: str, parent_id: Optional[str] = None,
              require_answer: bool = True, **kwargs) -> ParticipantFuture:
-        """
-        Send task to VFL member or master.
-
-        :param send_to_id: Identifier of the VFL agent receiver
-        :param method_name: Method name to execute on participant
-        :param require_answer: True if the task requires answer to sent back to sender
-        :param parent_id: Unique identifier of the parent task
-        :param kwargs: Keyword arguments to send
-        """
         self._check_if_ready()
 
         if send_to_id not in self._party_info:
@@ -97,17 +84,6 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
                   require_answer: bool = True,
                   include_current_participant: bool = False,
                   **kwargs) -> List[ParticipantFuture]:
-        """
-        Broadcast tasks to VFL agents.
-
-        :param method_name: Method name to execute on participant
-        :param mass_kwargs: List of the torch.Tensors to send to each member in `participating_members`, respectively
-        :param participating_members: List of the members to which the task will be broadcasted
-        :param parent_id: Unique identifier of the parent task
-        :param require_answer: True if the task requires answer to sent back to sender
-        :param include_current_participant: True if the task should be performed by the VFL master too
-        :param kwargs: Keyword arguments to send
-        """
         self._check_if_ready()
         logger.debug("Sending event (%s) for all members" % method_name)
 
@@ -141,7 +117,6 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return futures
 
     def _publish_message(self, event: _Event, receiver_id: str, require_answer: bool) -> Optional[ParticipantFuture]:
-        """ Create a future for the Event. """
         logger.debug("Party communicator %s: sending to %s event %s" % (self.participant.id, receiver_id, event))
 
         future = ParticipantFuture(participant_id=receiver_id)
@@ -158,41 +133,23 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return future
 
     def _check_if_ready(self):
-        """ Raise an exception if the communicator was not initialized properly. """
         if not self.is_ready:
             raise RuntimeError("Cannot proceed because communicator is not ready. "
                                "Perhaps, randezvous has not been called or was unsuccessful")
 
 
 class LocalMasterPartyCommunicator(LocalPartyCommunicator):
-    """ Local Master communicator class.
-    This class is used as the communicator for master in local (single-process) VFL setup.
-    """
-
-    def __init__(
-            self,
-            participant: PartyMaster,
-            world_size: int,
-            shared_party_info: Optional[Dict[str, _ParticipantInfo]]
-    ):
-        """
-        Initialize master communicator with parameters.
-
-        :param participant: PartyMaster instance
-        :param world_size: Number of VFL member agents
-        :param shared_party_info: Dictionary with agents _ParticipantInfo
-        """
+    # todo: add docs
+    def __init__(self,
+                 participant: PartyMaster,
+                 world_size: int,
+                 shared_party_info: Optional[Dict[str, _ParticipantInfo]]):
         self.participant = participant
         self.world_size = world_size
-
         self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
         self._event_futures: Optional[Dict[str, Future]] = dict()
 
     def run(self):
-        """
-        Run the VFL master.
-        Wait until rendezvous is finished and start sending, receiving and processing tasks from the main loop.
-        """
         try:
             logger.info("Party communicator %s: running" % self.participant.id)
             self.randezvous()
@@ -211,7 +168,6 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
             raise
 
     def _run(self):
-        """ Process tasks scheduled in the queue for VFL master. """
         try:
             logger.info("Party communicator %s: starting event loop" % self.participant.id)
 
@@ -253,33 +209,17 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
 
 
 class LocalMemberPartyCommunicator(LocalPartyCommunicator):
-    """ gRPC Member communicator class.
-    This class is used as the communicator for member in local (single-process) VFL setup.
-    """
-
-    def __init__(
-            self,
-            participant: PartyMember,
-            world_size: int,
-            shared_party_info: Optional[Dict[str, _ParticipantInfo]]
-    ):
-        """
-        Initialize member communicator with parameters.
-
-        :param participant: PartyMember instance
-        :param world_size: Number of VFL member agents
-        :param shared_party_info: Dictionary with agents _ParticipantInfo
-        """
+    # todo: add docs
+    def __init__(self,
+                 participant: PartyMember,
+                 world_size: int,
+                 shared_party_info: Optional[Dict[str, _ParticipantInfo]]):
         self.participant = participant
         self.world_size = world_size
         self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
         self._event_futures: Optional[Dict[str, Future]] = dict()
 
     def run(self):
-        """
-        Run the VFL member.
-        Perform rendezvous. Start main events processing loop.
-        """
         try:
             logger.info("Party communicator %s: running" % self.participant.id)
             self.randezvous()
@@ -290,7 +230,6 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
             raise
 
     def _run(self):
-        """ Process tasks scheduled in the queue for VFL member. """
         logger.info("Party communicator %s: starting event loop" % self.participant.id)
 
         supported_methods = [
@@ -339,44 +278,25 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
 
 
 class LocalPartyImpl(Party):
-    """ Helper Party class for tasks scheduling. """
-
+    # todo: add docs
     # todo: add logging to the methods
     def __init__(self, party_communicator: PartyCommunicator, op_timeout: Optional[float] = None):
-        """
-        Initialize LocalPartyImpl with the communicator.
-
-        :param party_communicator: VFL master communicator instance
-        :param op_timeout: Maximum time to perform tasks in seconds
-        """
         self.party_communicator = party_communicator
         self.op_timeout = op_timeout
 
     @property
     def world_size(self) -> int:
-        """ Return number of the VFL members. """
         return self.party_communicator.world_size
 
     @property
     def members(self) -> List[str]:
-        """ Return list of the VFL members. """
         return self.party_communicator.members
 
-    def _sync_broadcast_to_members(
-            self, *,
-            method_name: _Method,
-            mass_kwargs: Optional[List[Any]] = None,
-            participating_members: Optional[List[str]] = None,
-            **kwargs
-    ) -> List[Any]:
-        """
-        Broadcast tasks to VFL agents using master communicator.
-
-        :param method_name: Method name to execute on participant
-        :param mass_kwargs: List of the torch.Tensors to send to each member in `participating_members`, respectively
-        :param participating_members: List of the members to which the task will be broadcasted
-        :param kwargs: Keyword arguments to send
-        """
+    def _sync_broadcast_to_members(self, *,
+                                   method_name: _Method,
+                                   mass_kwargs: Optional[List[Any]] = None,
+                                   participating_members: Optional[List[str]] = None,
+                                   **kwargs) -> List[Any]:
         futures = self.party_communicator.broadcast(
             method_name=method_name.value,
             participating_members=participating_members,
@@ -398,35 +318,29 @@ class LocalPartyImpl(Party):
                                f"Uncompleted tasks: {len(uncompleted_futures)}.")
 
         logger.debug("Party broadcast for event %s has succesfully finished" % method_name)
-        participating_members = participating_members if participating_members else self.party_communicator.members
+
         fresults = {future.participant_id: future.result() for future in completed_futures}
-        return [fresults[member_id] for member_id in participating_members]
+        return [fresults[member_id] for member_id in self.party_communicator.members]
 
     def records_uids(self) -> List[List[str]]:
-        """ Collect records uids from VFL members. """
         return cast(List[List[str]], self._sync_broadcast_to_members(method_name=_Method.records_uids))
 
     def register_records_uids(self, uids: List[str]):
-        """ Register records uids in VFL agents. """
         self._sync_broadcast_to_members(method_name=_Method.register_records_uids, uids=uids)
 
     def initialize(self):
-        """ Initialize party communicators. """
         self._sync_broadcast_to_members(method_name=_Method.initialize)
 
     def finalize(self):
-        """ Finalize party communicators. """
         self._sync_broadcast_to_members(method_name=_Method.finalize)
 
     def update_weights(self, upd: PartyDataTensor):
-        """ Update model`s weights on agents. """
         self._sync_broadcast_to_members(method_name=_Method.update_weights, mass_kwargs=upd)
 
     def predict(self, uids: List[str], use_test: bool = False) -> PartyDataTensor:
-        """ Make predictions using VFL agents` models. """
         return cast(
             PartyDataTensor,
-            self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=use_test)
+            self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=True)
         )
 
     def update_predict(
@@ -436,12 +350,11 @@ class LocalPartyImpl(Party):
             previous_batch: RecordsBatch,
             upd: PartyDataTensor
     ) -> PartyDataTensor:
-        """ Perform update_predict operation on the VFL agents. """
         return cast(
             PartyDataTensor,
             self._sync_broadcast_to_members(
                 method_name=_Method.update_predict,
-                mass_kwargs=upd[:len(participating_members)],
+                mass_kwargs=upd,
                 participating_members=participating_members,
                 batch=batch,
                 previous_batch=previous_batch

@@ -16,17 +16,6 @@ class _Method(str, enum.Enum):
     update_predict = 'update_predict'
 
 
-METHOD_VALUES = {
-    _Method.records_uids: 'other_kwargs',
-    _Method.register_records_uids: 'other_kwargs',
-    _Method.initialize: 'other_kwargs',
-    _Method.finalize: 'other_kwargs',
-    _Method.update_weights: 'other_kwargs',
-    _Method.predict: 'tensor_kwargs',
-    _Method.update_predict: 'tensor_kwargs',
-}
-
-
 class ParticipantType(enum.Enum):
     master = 'master'
     member = 'member'
