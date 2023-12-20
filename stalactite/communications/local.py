@@ -318,9 +318,9 @@ class LocalPartyImpl(Party):
                                f"Uncompleted tasks: {len(uncompleted_futures)}.")
 
         logger.debug("Party broadcast for event %s has succesfully finished" % method_name)
-
+        participating_members = participating_members if participating_members else self.party_communicator.members
         fresults = {future.participant_id: future.result() for future in completed_futures}
-        return [fresults[member_id] for member_id in self.party_communicator.members]
+        return [fresults[member_id] for member_id in participating_members]
 
     def records_uids(self) -> List[List[str]]:
         return cast(List[List[str]], self._sync_broadcast_to_members(method_name=_Method.records_uids))
@@ -340,7 +340,7 @@ class LocalPartyImpl(Party):
     def predict(self, uids: List[str], use_test: bool = False) -> PartyDataTensor:
         return cast(
             PartyDataTensor,
-            self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=True)
+            self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=use_test)
         )
 
     def update_predict(
@@ -354,7 +354,7 @@ class LocalPartyImpl(Party):
             PartyDataTensor,
             self._sync_broadcast_to_members(
                 method_name=_Method.update_predict,
-                mass_kwargs=upd,
+                mass_kwargs=upd[:len(participating_members)],
                 participating_members=participating_members,
                 batch=batch,
                 previous_batch=previous_batch
