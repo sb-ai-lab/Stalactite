@@ -62,11 +62,13 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
 
         self._lock = asyncio.Lock()
 
-        self._server_tasks_queues: dict[str, asyncio.Queue[EventTask]] = defaultdict(lambda: asyncio.Queue())
+        self._server_tasks_queues: dict[str, asyncio.Queue[communicator_pb2.MainMessage]] = defaultdict(
+            lambda: asyncio.Queue()
+        )
 
 
         #???????????
-        self._main_tasks_queue: asyncio.Queue[EventTask] = asyncio.Queue()
+        self._main_tasks_queue: asyncio.Queue[communicator_pb2.MainMessage] = asyncio.Queue()
 
 
 
@@ -128,6 +130,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
     async def UnaryExchange(
             self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
     ) -> communicator_pb2.MainMessage:
+        print('CLIENT REQUEST', request.tensor_kwargs, request.other_kwargs)
         await self.main_tasks_queue.put(request)
         return communicator_pb2.MainMessage(
             message_type='ack',
@@ -160,11 +163,11 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
             tasks_queue = self._server_tasks_queues.get(client_id)
             if tasks_queue is not None:
                 try:
-                    task = tasks_queue.get_nowait()
-                    if task.send_to_id != client_id:
-                        raise RuntimeError(f'Tried to sent task with receiver id: {task.send_to_id} to {client_id}')
-                    await context.write(task.message)
-                    logger.debug(f'Sent task {task.message} to {task.send_to_id} ({task.task_id})')
+                    task_message = tasks_queue.get_nowait()
+                    # if task_message.send_to_id != client_id:
+                    #     raise RuntimeError(f'Tried to sent task with receiver id: {task_message.send_to_id} to {client_id}')
+                    await context.write(task_message)
+                    logger.debug(f'Sent task {task_message} to {client_id} ({task_message.task_id})')
                 except asyncio.QueueEmpty:
                     await asyncio.sleep(1.)
             else:

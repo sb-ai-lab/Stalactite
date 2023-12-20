@@ -13,29 +13,25 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12\x63ommunicator.proto\"(\n\x02HB\x12\x12\n\nagent_name\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\"\xc4\x04\n\x0bMainMessage\x12\x14\n\x0cmessage_type\x18\x01 \x01(\t\x12\x1b\n\x0erequire_answer\x18\x02 \x01(\x08H\x00\x88\x01\x01\x12\x13\n\x06status\x18\x03 \x01(\tH\x01\x88\x01\x01\x12\x14\n\x07task_id\x18\x04 \x01(\tH\x02\x88\x01\x01\x12\x16\n\tparent_id\x18\x05 \x01(\tH\x03\x88\x01\x01\x12\x15\n\x08\x66rom_uid\x18\x06 \x01(\tH\x04\x88\x01\x01\x12\x18\n\x0bmethod_name\x18\x07 \x01(\tH\x05\x88\x01\x01\x12\x37\n\x0enumeric_kwargs\x18\x08 \x03(\x0b\x32\x1f.MainMessage.NumericKwargsEntry\x12/\n\nstr_kwargs\x18\t \x03(\x0b\x32\x1b.MainMessage.StrKwargsEntry\x12\x33\n\x0c\x62ytes_kwargs\x18\n \x03(\x0b\x32\x1d.MainMessage.BytesKwargsEntry\x1a\x34\n\x12NumericKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x02:\x02\x38\x01\x1a\x30\n\x0eStrKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a\x32\n\x10\x42ytesKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x0c:\x02\x38\x01\x42\x11\n\x0f_require_answerB\t\n\x07_statusB\n\n\x08_task_idB\x0c\n\n_parent_idB\x0b\n\t_from_uidB\x0e\n\x0c_method_name2\x8c\x01\n\x0c\x43ommunicator\x12\x1b\n\tHeartbeat\x12\x03.HB\x1a\x03.HB\"\x00(\x01\x30\x01\x12\x30\n\x0c\x42idiExchange\x12\x0c.MainMessage\x1a\x0c.MainMessage\"\x00(\x01\x30\x01\x12-\n\rUnaryExchange\x12\x0c.MainMessage\x1a\x0c.MainMessage\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12\x63ommunicator.proto\"(\n\x02HB\x12\x12\n\nagent_name\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\"\xde\x03\n\x0bMainMessage\x12\x14\n\x0cmessage_type\x18\x01 \x01(\t\x12\x1b\n\x0erequire_answer\x18\x02 \x01(\x08H\x00\x88\x01\x01\x12\x13\n\x06status\x18\x03 \x01(\tH\x01\x88\x01\x01\x12\x14\n\x07task_id\x18\x04 \x01(\tH\x02\x88\x01\x01\x12\x16\n\tparent_id\x18\x05 \x01(\tH\x03\x88\x01\x01\x12\x15\n\x08\x66rom_uid\x18\x06 \x01(\tH\x04\x88\x01\x01\x12\x18\n\x0bmethod_name\x18\x07 \x01(\tH\x05\x88\x01\x01\x12\x35\n\rtensor_kwargs\x18\x08 \x03(\x0b\x32\x1e.MainMessage.TensorKwargsEntry\x12\x33\n\x0cother_kwargs\x18\t \x03(\x0b\x32\x1d.MainMessage.OtherKwargsEntry\x1a\x33\n\x11TensorKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x0c:\x02\x38\x01\x1a\x32\n\x10OtherKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x0c:\x02\x38\x01\x42\x11\n\x0f_require_answerB\t\n\x07_statusB\n\n\x08_task_idB\x0c\n\n_parent_idB\x0b\n\t_from_uidB\x0e\n\x0c_method_name2\x8c\x01\n\x0c\x43ommunicator\x12\x1b\n\tHeartbeat\x12\x03.HB\x1a\x03.HB\"\x00(\x01\x30\x01\x12\x30\n\x0c\x42idiExchange\x12\x0c.MainMessage\x1a\x0c.MainMessage\"\x00(\x01\x30\x01\x12-\n\rUnaryExchange\x12\x0c.MainMessage\x1a\x0c.MainMessage\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'communicator_pb2', _globals)
 if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
-  _MAINMESSAGE_NUMERICKWARGSENTRY._options = None
-  _MAINMESSAGE_NUMERICKWARGSENTRY._serialized_options = b'8\001'
-  _MAINMESSAGE_STRKWARGSENTRY._options = None
-  _MAINMESSAGE_STRKWARGSENTRY._serialized_options = b'8\001'
-  _MAINMESSAGE_BYTESKWARGSENTRY._options = None
-  _MAINMESSAGE_BYTESKWARGSENTRY._serialized_options = b'8\001'
+  _MAINMESSAGE_TENSORKWARGSENTRY._options = None
+  _MAINMESSAGE_TENSORKWARGSENTRY._serialized_options = b'8\001'
+  _MAINMESSAGE_OTHERKWARGSENTRY._options = None
+  _MAINMESSAGE_OTHERKWARGSENTRY._serialized_options = b'8\001'
   _globals['_HB']._serialized_start=22
   _globals['_HB']._serialized_end=62
   _globals['_MAINMESSAGE']._serialized_start=65
-  _globals['_MAINMESSAGE']._serialized_end=645
-  _globals['_MAINMESSAGE_NUMERICKWARGSENTRY']._serialized_start=406
-  _globals['_MAINMESSAGE_NUMERICKWARGSENTRY']._serialized_end=458
-  _globals['_MAINMESSAGE_STRKWARGSENTRY']._serialized_start=460
-  _globals['_MAINMESSAGE_STRKWARGSENTRY']._serialized_end=508
-  _globals['_MAINMESSAGE_BYTESKWARGSENTRY']._serialized_start=510
-  _globals['_MAINMESSAGE_BYTESKWARGSENTRY']._serialized_end=560
-  _globals['_COMMUNICATOR']._serialized_start=648
-  _globals['_COMMUNICATOR']._serialized_end=788
+  _globals['_MAINMESSAGE']._serialized_end=543
+  _globals['_MAINMESSAGE_TENSORKWARGSENTRY']._serialized_start=355
+  _globals['_MAINMESSAGE_TENSORKWARGSENTRY']._serialized_end=406
+  _globals['_MAINMESSAGE_OTHERKWARGSENTRY']._serialized_start=408
+  _globals['_MAINMESSAGE_OTHERKWARGSENTRY']._serialized_end=458
+  _globals['_COMMUNICATOR']._serialized_start=546
+  _globals['_COMMUNICATOR']._serialized_end=686
 # @@protoc_insertion_point(module_scope)
