@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+
+service Communicator {
+  rpc Heartbeat(stream HB) returns (stream HB) {}
+  // Bidirectional ping-pong to keep the connection alive
+  rpc BidiExchange(stream MainMessage) returns (stream MainMessage) {}
+  // Custom serialization of the tensors
+  rpc UnaryExchange(MainMessage) returns (MainMessage) {}
+}
+
+
+message HB{
+  string agent_name = 1;
+  string status = 2;
+}
+
+
+message MainMessage {
+  string message_type = 1;
+  optional bool require_answer = 2; // data.get('require_answer')
+  optional string status = 3; // client.status | master.status
+
+  optional string task_id = 4; // Event.id
+  optional string parent_id = 5; // Event.parent_id
+  optional string from_uid = 6; // Event.from_uid
+  optional string method_name = 7; // Event.method_name
+  map<string, float> numeric_kwargs = 8; // Event.data
+  map<string, string> str_kwargs = 9; // Event.data
+  map<string, bytes> bytes_kwargs = 10; // Event.data
+}
+
+
