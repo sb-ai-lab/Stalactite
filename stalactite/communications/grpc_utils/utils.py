@@ -4,11 +4,14 @@ import logging
 import pickle
 from queue import Queue
 from typing import Any
+import concurrent
 
 import grpc
 import torch
 import safetensors.torch
 
+from stalactite.communications.grpc_utils.generated_code import communicator_pb2
+from stalactite.base import ParticipantFuture
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +48,12 @@ class MessageTypes(str, enum.Enum):
 class ParticipantTasks:
     context: grpc.aio.ServicerContext
     queue: Queue
+
+@dataclass
+class PreparedTask:
+    task_id: str
+    task_message: communicator_pb2
+    task_future: ParticipantFuture
 
 
 def load_data(serialized_tensor: bytes) -> torch.Tensor:
