@@ -16,6 +16,10 @@ click = "^8.1.7"
 numpy = "^1.26.2"
 scikit-learn = "^1.3.2"
 jupyter = "^1.0.0"
+mlflow = "^2.9.2"
+datasets = "^2.15.0"
+pyyaml = "^6.0.1"
+torchvision = "^0.16.2"
 
 [tool.poetry.scripts]
 stalactite = "stalactite.main:cli"
