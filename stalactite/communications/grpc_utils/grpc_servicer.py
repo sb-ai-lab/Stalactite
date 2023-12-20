@@ -1,40 +1,18 @@
 import asyncio
-import concurrent
 from collections import defaultdict
-import enum
-import time
-import uuid
-from abc import ABC, abstractmethod
-# from queue import Queue, Empty
-from dataclasses import dataclass
 import logging
-from typing import Optional, Dict, Union, AsyncIterator, List, Any
-import threading
+from typing import AsyncIterator
 from concurrent import futures
 
 import grpc
-import torch
-import safetensors.torch
-
-from stalactite.base import (
-    PartyMaster,
-    PartyMember,
-    PartyCommunicator,
-    ParticipantFuture,
-    Party,
-    PartyDataTensor,
-    RecordsBatch,
-)
-
 from stalactite.communications.grpc_utils.generated_code import communicator_pb2, communicator_pb2_grpc
-from stalactite.communications.grpc_utils.utils import Status, EventTask
+from stalactite.communications.grpc_utils.utils import Status, MessageTypes
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 logger.addHandler(sh)
-
 
 
 class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
@@ -65,15 +43,8 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         self._server_tasks_queues: dict[str, asyncio.Queue[communicator_pb2.MainMessage]] = defaultdict(
             lambda: asyncio.Queue()
         )
-
-
-        #???????????
         self._main_tasks_queue: asyncio.Queue[communicator_pb2.MainMessage] = asyncio.Queue()
-
-
-
         self._tasks_futures = dict()
-
         self._client_contexts = dict()
 
     @property
@@ -130,10 +101,9 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
     async def UnaryExchange(
             self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
     ) -> communicator_pb2.MainMessage:
-        print('CLIENT REQUEST', request.tensor_kwargs, request.other_kwargs)
         await self.main_tasks_queue.put(request)
         return communicator_pb2.MainMessage(
-            message_type='ack',
+            message_type=MessageTypes.acknowledgment,
             task_id=request.task_id,
         )
 
@@ -164,10 +134,8 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
             if tasks_queue is not None:
                 try:
                     task_message = tasks_queue.get_nowait()
-                    # if task_message.send_to_id != client_id:
-                    #     raise RuntimeError(f'Tried to sent task with receiver id: {task_message.send_to_id} to {client_id}')
                     await context.write(task_message)
-                    logger.debug(f'Sent task {task_message} to {client_id} ({task_message.task_id})')
+                    logger.debug(f'Sent task {task_message.method_name} to {client_id} ({task_message.task_id})')
                 except asyncio.QueueEmpty:
                     await asyncio.sleep(1.)
             else:
