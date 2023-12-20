@@ -9,7 +9,7 @@ from stalactite.mocks import MockPartyMasterImpl, MockPartyMemberImpl
 
 
 members_count = 2
-epochs = 5
+epochs = 2
 # shared uids also identifies dataset size
 # 1. target should be supplied with record uids
 # 2. each member should have their own data (of different sizes)
