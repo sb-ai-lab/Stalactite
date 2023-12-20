@@ -30,6 +30,7 @@ from stalactite.communications.grpc_utils.utils import (
     ClientStatus,
     MessageTypes,
     MethodMessage,
+    PreparedTask,
     SerializedMethodMessage,
     prepare_kwargs,
     collect_kwargs,
@@ -42,7 +43,39 @@ sh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(me
 logger.addHandler(sh)
 
 
-class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
+class GRpcPartyCommunicator(PartyCommunicator, ABC):
+    participant: PartyMaster | PartyMember
+
+    def prepare_task(
+            self,
+            message_type: MessageTypes,
+            send_to_id: str,
+            agent_status: str,
+            method_name: _Method,
+            task_id: str | None = None,
+            parent_id: str | None = None,
+            require_answer: bool = True,
+            message: communicator_pb2.MainMessage | None = None,
+    ) -> PreparedTask:
+        task_id = str(uuid.uuid4()) if task_id is None else task_id
+        message_kwargs = prepare_kwargs(message)
+        future = ParticipantFuture(participant_id=send_to_id)
+
+        task_message = communicator_pb2.MainMessage(
+            message_type=message_type,
+            status=agent_status,
+            require_answer=require_answer,
+            task_id=task_id,
+            parent_id=parent_id,
+            from_uid=self.participant.id,
+            method_name=method_name,
+            tensor_kwargs=message_kwargs.tensor_kwargs,
+            other_kwargs=message_kwargs.other_kwargs,
+        )
+        return PreparedTask(task_id=task_id, task_message=task_message, task_future=future)
+
+
+class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
     MEMBER_DATA_FIELDNAME = '__member_data__'
 
     def __init__(
@@ -60,8 +93,6 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
         self.host = host
         self.server_thread_pool_size = server_thread_pool_size
         self.max_message_size = max_message_size
-
-        self.master_id = participant.id
 
         self.server_thread = None
         self.asyncio_event_loop = None
@@ -117,7 +148,7 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
     def send(
             self,
             send_to_id: str,
-            method_name: str,
+            method_name: _Method,
             require_answer: bool = True,
             task_id: str | None = None,
             parent_id: str | None = None,
@@ -126,23 +157,22 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
     ) -> ParticipantFuture:
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
-        task_id = str(uuid.uuid4()) if task_id is None else task_id
-        message_kwargs = prepare_kwargs(message)
-        future = ParticipantFuture(participant_id=send_to_id)
 
-        task_message = communicator_pb2.MainMessage(
+        prepared_task = self.prepare_task(
             message_type=MessageTypes.server_task,
-            status=self.status,
+            agent_status=self.status,
+            send_to_id=send_to_id,
+            method_name=method_name,
             require_answer=require_answer,
             task_id=task_id,
             parent_id=parent_id,
-            from_uid=self.master_id,
-            method_name=method_name,
-            tensor_kwargs=message_kwargs.tensor_kwargs,
-            other_kwargs=message_kwargs.other_kwargs,
+            message=message,
         )
+        future = prepared_task.task_future
+        task_id = prepared_task.task_id
+        task_message = prepared_task.task_message
 
-        if self.master_id == send_to_id:
+        if self.participant.id == send_to_id:
             self._put_to_main_tasks_queue(task_message)
         else:
             self._put_to_server_tasks_queue(task_message, send_to_id=send_to_id)
@@ -158,7 +188,7 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
 
     def broadcast(
             self,
-            method_name: str,
+            method_name: _Method,
             mass_kwargs: List[torch.Tensor] | None = None,
             participating_members: List[str] | None = None,
             parent_id: str | None = None,
@@ -217,7 +247,7 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
         try:
             self.servicer = GRpcCommunicatorServicer(
                 world_size=self.world_size,
-                master_id=self.master_id,
+                master_id=self.participant.id,
                 host=self.host,
                 port=self.port,
                 threadpool_max_workers=self.server_thread_pool_size,
@@ -236,7 +266,7 @@ class GRpcMasterPartyCommunicator(PartyCommunicator, ABC):
             event_loop = threading.Thread(target=self._run, daemon=True)
             event_loop.start()
             self.participant.run(party)
-            self.send(send_to_id=self.master_id, method_name=_Method.finalize, require_answer=False)
+            self.send(send_to_id=self.participant.id, method_name=_Method.finalize, require_answer=False)
             event_loop.join()
             self.server_thread.join(timeout=2.)
             logger.info("Party communicator %s: finished" % self.participant.id)
@@ -323,7 +353,7 @@ class GRpcParty(Party):
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
 
-        futures = self.party_communicator.broadcast(
+        bc_futures = self.party_communicator.broadcast(
             method_name=method_name,
             participating_members=participating_members,
             mass_kwargs=mass_kwargs,
@@ -338,9 +368,9 @@ class GRpcParty(Party):
             % (method_name, self.op_timeout or "inf")
         )
 
-        futures = concurrent.futures.wait(futures, timeout=self.op_timeout)
+        bc_futures = concurrent.futures.wait(bc_futures, timeout=self.op_timeout)
         completed_futures, uncompleted_futures \
-            = cast(set[ParticipantFuture], futures[0]), cast(set[ParticipantFuture], futures[1])
+            = cast(set[ParticipantFuture], bc_futures[0]), cast(set[ParticipantFuture], bc_futures[1])
 
         if len(uncompleted_futures) > 0:
             # todo: custom exception with additional info about uncompleted tasks
@@ -401,7 +431,7 @@ class GRpcParty(Party):
         )
 
 
-class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
+class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
     MEMBER_DATA_FIELDNAME = '__member_data__'
 
     def __init__(
@@ -425,8 +455,6 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
         self._master_id = None
         self._world_status = None
         self._heartbeats_thread = None
-
-        self.client_id = participant.id
 
         self.server_tasks_queue: Queue[communicator_pb2.MainMessage] = Queue()
         self.tasks_futures: dict[str, ParticipantFuture] = dict()
@@ -453,14 +481,14 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
     def _heartbeats(self):
         while True:
             time.sleep(self.heartbeat_interval)
-            yield communicator_pb2.HB(agent_name=self.client_id, status=ClientStatus.alive)
+            yield communicator_pb2.HB(agent_name=self.participant.id, status=ClientStatus.alive)
 
     def _task_requests(self):
         while True:
             time.sleep(self.task_requesting_pings_interval)
             yield communicator_pb2.MainMessage(
                 message_type=MessageTypes.client_task,
-                from_uid=self.client_id,
+                from_uid=self.participant.id,
             )
 
     def _read_server_heartbeats(self, server_responses: Iterator[communicator_pb2.HB]):
@@ -482,7 +510,7 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
     def randezvous(self) -> None:
         while self._world_status != Status.all_ready:
             time.sleep(0.1)
-        logger.info(f'Client {self.client_id} is ready to run')
+        logger.info(f'Client {self.participant.id} is ready to run')
 
     @property
     def is_ready(self) -> bool:
@@ -494,7 +522,7 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
     def send(
             self,
             send_to_id: str,
-            method_name: str,
+            method_name: _Method,
             require_answer: bool = True,
             task_id: str | None = None,
             parent_id: str | None = None,
@@ -508,24 +536,23 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
             raise RuntimeError("Cannot proceed because communicator is not ready. "
                                "Perhaps, rendezvous has not been called or was unsuccessful")
 
-        if send_to_id not in (self._master_id, self.client_id):
+        if send_to_id not in (self._master_id, self.participant.id):
             raise RuntimeError('GRpcMemberPartyCommunicator cannot send to other Members')
 
-        task_id = str(uuid.uuid4()) if task_id is None else task_id
-        message_kwargs = prepare_kwargs(message)
-        future = ParticipantFuture(participant_id=send_to_id)
-
-        task_message = communicator_pb2.MainMessage(
+        prepared_task = self.prepare_task(
             message_type=MessageTypes.client_task,
-            status=ClientStatus.alive,
+            agent_status=ClientStatus.alive,
+            send_to_id=send_to_id,
+            method_name=method_name,
             require_answer=require_answer,
             task_id=task_id,
             parent_id=parent_id,
-            from_uid=self.client_id,
-            method_name=method_name,
-            tensor_kwargs=message_kwargs.tensor_kwargs,
-            other_kwargs=message_kwargs.other_kwargs,
+            message=message,
         )
+        future = prepared_task.task_future
+        task_id = prepared_task.task_id
+        task_message = prepared_task.task_message
+
         if send_to_id == self._master_id:
             res = self._stub.UnaryExchange(task_message, timeout=self.sent_task_timout)
             assert res.message_type == MessageTypes.acknowledgment, 'Sent message was not acknowledged'
@@ -542,7 +569,7 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
         return future
 
     def broadcast(self,
-                  method_name: str,
+                  method_name: _Method,
                   mass_kwargs: List[Any] | None = None,
                   participating_members: List[str] | None = None,
                   parent_id: str | None = None,
@@ -556,7 +583,7 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
         self.randezvous()
         self._start_receiving_tasks()
         self._run()
-        logger.info(f"Party communicator {self.client_id} finished")
+        logger.info(f"Party communicator {self.participant.id} finished")
 
     def _start_receiving_tasks(self):
         server_task_responses = self._stub.BidiExchange(self._task_requests(), wait_for_ready=True)
@@ -583,7 +610,6 @@ class GRpcMemberPartyCommunicator(PartyCommunicator, ABC):
                 SerializedMethodMessage(
                     tensor_kwargs=dict(task.tensor_kwargs),
                     other_kwargs=dict(task.other_kwargs),
-                    # str_list_kwargs=dict(task.str_list_kwargs),
                 )
             )
             mkwargs = kwargs.pop(self.MEMBER_DATA_FIELDNAME, None)
