@@ -3,8 +3,7 @@ import enum
 import logging
 import pickle
 from queue import Queue
-from typing import Any
-import concurrent
+from typing import Any, Optional
 
 import grpc
 import torch
@@ -57,14 +56,29 @@ class PreparedTask:
 
 
 def load_data(serialized_tensor: bytes) -> torch.Tensor:
+    """
+    Serialize torch.Tensor data to use it in protobuf message.
+
+    :param serialized_tensor: Tensor to serialize
+    """
     return safetensors.torch.load(serialized_tensor)['tensor']
 
 
 def save_data(tensor: torch.Tensor):
+    """
+    Deserialize torch.Tensor from bytes.
+
+    :param tensor: Tensor serialized with load_data function
+    """
     return safetensors.torch.save(tensors={'tensor': tensor})
 
 
-def prepare_kwargs(kwargs: MethodMessage | None) -> SerializedMethodMessage:
+def prepare_kwargs(kwargs: Optional[MethodMessage]) -> SerializedMethodMessage:
+    """
+    Serialize data fields for protobuf message.
+
+    :param kwargs: MethodMessage containing Task data to be serialized
+    """
     if kwargs is None:
         return SerializedMethodMessage()
     serialized_tensors = {}
@@ -87,6 +101,11 @@ def prepare_kwargs(kwargs: MethodMessage | None) -> SerializedMethodMessage:
 
 
 def collect_kwargs(message_kwargs: SerializedMethodMessage) -> dict:
+    """
+    Collect and deserialize protobuf message data fields.
+
+    :param message_kwargs: SerializedMethodMessage containing Task data after serialization
+    """
     tensor_kwargs = {}
     for key, value in message_kwargs.tensor_kwargs.items():
         tensor_kwargs[key] = load_data(value)
