@@ -3,9 +3,7 @@ syntax = "proto3";
 
 service Communicator {
   rpc Heartbeat(stream HB) returns (stream HB) {}
-  // Bidirectional ping-pong to keep the connection alive
   rpc BidiExchange(stream MainMessage) returns (stream MainMessage) {}
-  // Custom serialization of the tensors
   rpc UnaryExchange(MainMessage) returns (MainMessage) {}
 }
 
@@ -15,23 +13,16 @@ message HB{
   string status = 2;
 }
 
-//message UidsList {
-//  repeated string uids = 1;
-//}
 
 message MainMessage {
   string message_type = 1;
-  optional bool require_answer = 2; // data.get('require_answer')
-  optional string status = 3; // client.status | master.status
-  optional string task_id = 4; // Event.id
-  optional string parent_id = 5; // Event.parent_id
-  optional string from_uid = 6; // Event.from_uid
-  optional string method_name = 7; // Event.method_name
-  map<string, bytes> tensor_kwargs = 8; // MethodMessage.tensor_kwargs
-  map<string, bytes> other_kwargs = 9; // MethodMessage.other_kwargs
-//  map<string, UidsList> str_list_kwargs = 10; // MethodMessage.other_kwargs
-//  map<string, float> numeric_kwargs = 8; // Event.data
-//  map<string, string> str_kwargs = 9; // Event.data
-//  map<string, bytes> bytes_kwargs = 10; // Event.data
+  optional bool require_answer = 2;
+  optional string status = 3;
+  optional string task_id = 4;
+  optional string parent_id = 5;
+  optional string from_uid = 6;
+  optional string method_name = 7;
+  map<string, bytes> tensor_kwargs = 8;
+  map<string, bytes> other_kwargs = 9;
 }
 
