@@ -1,5 +1,6 @@
 import enum
 
+
 class _Method(str, enum.Enum):
     service_return_answer = 'service_return_answer'
     service_heartbeat = 'service_heartbeat'
