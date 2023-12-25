@@ -530,7 +530,7 @@ class GRpcParty(Party):
             PartyDataTensor,
             self._sync_broadcast_to_members(
                 method_name=_Method.predict,
-                message=MethodMessage(other_kwargs={'uids': uids, 'use_test': True})
+                message=MethodMessage(other_kwargs={'uids': uids, 'use_test': use_test})
             )
         )
 
