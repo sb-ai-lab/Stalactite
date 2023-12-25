@@ -31,19 +31,23 @@ class ComputeAccuracy:
 
 
 class ComputeAccuracy_numpy():
-    def __init__(self, force_to_binary=True):
+    def __init__(self, force_to_binary=True, is_linreg=True):
         self.force_to_binary = force_to_binary
         self.name = 'Accuracy'
+        self.is_linreg = is_linreg
 
     def compute(self, true_label, predictions):
         predictions = predictions.copy()
         true_label = true_label.copy()
 
         if self.force_to_binary:
-            predictions[predictions < 0] = -1
-            predictions[predictions > 0] = 1
-        # import pdb; pdb.set_trace()
-        # accuracy = accuracy_score(true_label.squeeze(), predictions.squeeze())
+            if self.is_linreg:
+                predictions[predictions < 0] = -1
+                predictions[predictions > 0] = 1
+            else:
+                predictions[predictions < 0.5] = 0
+                predictions[predictions > 0.5] = 1
+
         accuracy = np.sum(true_label.squeeze() == predictions.squeeze()) / true_label.squeeze().shape[0]
         return accuracy
 

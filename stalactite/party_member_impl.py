@@ -2,7 +2,6 @@ import logging
 from typing import List, Optional
 
 import torch
-import scipy as sp
 from datasets.dataset_dict import DatasetDict
 
 from stalactite.base import DataTensor, PartyMember, RecordsBatch
@@ -49,17 +48,11 @@ class PartyMemberImpl(PartyMember):
         self.is_finalized = True
         logger.info("Member %s: has been finalized" % self.id)
 
-    def _prepare_data(self, uids: RecordsBatch):
-
-        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
-        return U, S, Vh
-
     def update_weights(self, uids: RecordsBatch, upd: DataTensor):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
-        U, S, Vh = self._prepare_data(uids)
-        self._model.update_weights(data_U=U, data_S=S, data_Vh=Vh, rhs=upd)
+        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
+        self._model.update_weights(X_train, upd)
         logger.info("Member %s: successfully updated weights" % self.id)
 
     def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:

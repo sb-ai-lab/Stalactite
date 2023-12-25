@@ -1,6 +1,7 @@
 import logging
 
 import torch
+import scipy as sp
 
 from .elm import solve_ols_svd
 
@@ -31,23 +32,13 @@ class LinearRegressionBatch(torch.nn.Module):
         #     pdb.set_trace()
         return outputs
 
-    def update_weights(self, data_U, data_S, data_Vh, rhs):
-        """Update weights from the SVD of data.
-
-        Args:
-            data_U (tensor): U of SVD of data matrix.
-            data_S (tensor): S of SVD of data matrix.
-            data_Vh (tensor): Vh of SVD of data matrix.
-            rhs (tensor): Y minus prediction of other parties
-
-        Returns:
-            coeffs (tensor): new vector of coefficients
-        """
+    def update_weights(self, X_train, rhs) -> None:
+        # todo: add docs
+        U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
         logger.debug("updating weights inside model")
-        coeffs, num_rank = solve_ols_svd(data_U, data_S, data_Vh, rhs, self.reg_lambda)
+        coeffs, num_rank = solve_ols_svd(U, S, Vh, rhs, self.reg_lambda)
         self.linear.weight.copy_(torch.as_tensor(coeffs).t())  # TODO: copying is not efficient
         logger.debug("SUCCESS update weights")
-        return coeffs
 
     def predict(self, X_pred):
         Y_pred = self.forward(X_pred)

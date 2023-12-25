@@ -13,11 +13,12 @@ from sklearn.metrics import mean_absolute_error
 from datasets import DatasetDict
 
 from stalactite.models.linreg_batch import LinearRegressionBatch
+from stalactite.models.logreg_batch import LogisticRegressionBatch
 from stalactite.data_loader import load, init, DataPreprocessor
 from stalactite.batching import ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.party_member_impl import PartyMemberImpl
-from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently
+from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
 
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id: int, ds_size: int,
                       input_dims: List[int], batch_size: int, epochs: int,
-                      members_count: int):
+                      members_count: int, model_name: str, lr: float):
     with mlflow.start_run():
 
         log_params = {
@@ -39,21 +40,34 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
             "mode": "single",
             "member_id": member_id,
             "exp_uid": exp_uid,
-            "members_count": members_count
+            "members_count": members_count,
+            "model_name": model_name,
+            "learning_rate": lr,
+
 
         }
         mlflow.log_params(log_params)
 
         dataset = datasets_list[member_id]
-        # extract the input data matrix and the targets
+
         X_train_all = dataset["train_train"][f"image_part_{member_id}"][:ds_size]
         Y_train_all = dataset["train_train"]["label"][:ds_size]
 
         X_test = dataset["train_val"][f"image_part_{member_id}"]
         Y_test = dataset["train_val"]["label"]
 
-        model = LinearRegressionBatch(input_dim=input_dims[member_id], output_dim=1, reg_lambda=0.5)
-        batcher = ListBatcher(epochs=epochs, members=[str(x) for x in range(10)], uids=[str(x) for x in range(ds_size)], batch_size=batch_size)
+        if model_name == "linreg":
+            model = LinearRegressionBatch(input_dim=input_dims[member_id], output_dim=1, reg_lambda=0.5)
+        elif model_name == "logreg":
+            model = LogisticRegressionBatch(input_dim=input_dims[member_id], output_dim=1, learning_rate=lr)
+        else:
+            raise ValueError(f"unknown model name: {model_name}, set one of ['linreg', 'logreg']")
+
+        batcher = ListBatcher(
+            epochs=epochs,
+            members=[str(x) for x in range(10)], uids=[str(x) for x in range(ds_size)],
+            batch_size=batch_size
+        )
 
         step = 0
         for i, titer in enumerate(batcher):
@@ -64,8 +78,12 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
             X_train = dataset["train_train"][f"image_part_{member_id}"][tensor_idx]
             Y_train = dataset["train_train"]["label"][tensor_idx]
 
-            U, S, Vt = sp.linalg.svd(X_train, full_matrices=False, overwrite_a=False, check_finite=False)
-            model.update_weights(data_U=U, data_S=S, data_Vh=Vt, rhs=Y_train)
+            if model_name == "linreg":
+
+                U, S, Vt = sp.linalg.svd(X_train, full_matrices=False, overwrite_a=False, check_finite=False)
+                model.update_weights(data_U=U, data_S=S, data_Vh=Vt, rhs=Y_train)
+            else:
+                model.update_weights(X_train, Y_train, is_single=True)
 
             train_predictions = model.predict(X_train_all)
             train_predictions = torch.mean(torch.stack((train_predictions,), dim=1), dim=1)
@@ -73,12 +91,12 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
             test_predictions = model.predict(X_test)
             test_predictions = torch.mean(torch.stack((test_predictions,), dim=1), dim=1)
 
-            train_mae = mean_absolute_error(Y_train_all.numpy(), train_predictions.numpy())
-            test_mae = mean_absolute_error(Y_test.numpy(), test_predictions.numpy())
+            train_mae = mean_absolute_error(Y_train_all.numpy(), train_predictions.detach().numpy())
+            test_mae = mean_absolute_error(Y_test.numpy(), test_predictions.detach().numpy())
 
-            acc = ComputeAccuracy_numpy()
-            train_acc = acc.compute(true_label=Y_train_all.numpy(), predictions=train_predictions.numpy())
-            test_acc = acc.compute(true_label=Y_test.numpy(), predictions=test_predictions.numpy())
+            acc = ComputeAccuracy_numpy(is_linreg=True if model_name == "linreg" else False)
+            train_acc = acc.compute(true_label=Y_train_all.numpy(), predictions=train_predictions.detach().numpy())
+            test_acc = acc.compute(true_label=Y_test.numpy(), predictions=test_predictions.detach().numpy())
 
             mlflow.log_metric("train_mae", train_mae, step=step)
             mlflow.log_metric("train_acc", train_acc, step=step)
@@ -89,7 +107,7 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
 
 def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_count: int, ds_size: int,
             input_dims: List[int], batch_size: int, epochs: int,
-            is_consequently: bool):
+            is_consequently: bool, model_name: str, lr: float):
     with mlflow.start_run():
 
         log_params = {
@@ -99,7 +117,9 @@ def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_coun
             "mode": "vfl",
             "members_count": members_count,
             "exp_uid": exp_uid,
-            "is_consequently": is_consequently
+            "is_consequently": is_consequently,
+            "model_name": model_name,
+            "learning_rate": lr,
 
         }
         mlflow.log_params(log_params)
@@ -116,6 +136,20 @@ def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_coun
         shared_party_info = dict()
         if is_consequently:
             master = PartyMasterImplConsequently(
+                uid="master",
+                epochs=epochs,
+                report_train_metrics_iteration=1,
+                report_test_metrics_iteration=1,
+                target=targets,
+                test_target=test_targets,
+                target_uids=target_uids,
+                batch_size=batch_size,
+                model_update_dim_size=0,
+                run_mlflow=True
+            )
+
+        elif model_name == "logreg":
+            master = PartyMasterImplLogreg(
                 uid="master",
                 epochs=epochs,
                 report_train_metrics_iteration=1,
@@ -146,7 +180,9 @@ def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_coun
                 uid=f"member-{i}",
                 model_update_dim_size=input_dims[i],
                 member_record_uids=member_uids,
-                model=LinearRegressionBatch(input_dim=input_dims[i], output_dim=1, reg_lambda=0.2),
+                model=LinearRegressionBatch(input_dim=input_dims[i], output_dim=1, reg_lambda=0.2)
+                if model_name == "linreg" else LogisticRegressionBatch(input_dim=input_dims[i], output_dim=1,
+                                                                       learning_rate=lr),
                 dataset=datasets_list[i],
                 data_params=params[i]["data"]
             )
@@ -200,7 +236,7 @@ def main():
     )
 
     mlflow.set_tracking_uri(mlflow_tracking_uri)
-    mlflow.set_experiment(os.environ.get("EXPERIMENT", "local_vert_updated"))
+    mlflow.set_experiment(os.environ.get("EXPERIMENT", "local_vert_logreg"))
     # models input dims for 1, 2, 3 and 5 members
     input_dims_list = [[619], [304, 315], [204, 250, 165], [], [108, 146, 150, 147, 68]]
 
@@ -211,10 +247,18 @@ def main():
     epochs = int(os.environ.get("EPOCHS", 1))
     mode = os.environ.get("MODE", "single")
     members_count = int(os.environ.get("MEMBERS_COUNT", 3))
+    model_name = os.environ.get("MODEL_NAME")
+    learning_rate = float(os.environ.get("LR", 0.01))
 
     params = init()
     for m in range(members_count):
-        params[m].data.dataset = f"mnist_binary38_parts{members_count}"
+        if model_name == "linreg":
+            params[m].data.dataset = f"mnist_binary38_parts{members_count}"
+        elif model_name == "logreg":
+            params[m].data.dataset = f"mnist_binary01_38_parts{members_count}"
+        else:
+            raise ValueError("Unknown model name {}".format(model_name))
+
     dataset, _ = load(params)
     datasets_list = []
     for m in range(members_count):
@@ -223,6 +267,8 @@ def main():
         tmp_dataset, _ = dp.preprocess()
         datasets_list.append(tmp_dataset)
 
+    # with open(f"datasets_{members_count}_members.pkl", "wb") as fp:
+    #     pickle.dump({"data": datasets_list}, fp)
     exp_uid = str(uuid.uuid4())
     if mode.lower() == "single":
         for member_id in range(members_count):
@@ -230,14 +276,14 @@ def main():
             run_single_member(
                 exp_uid=exp_uid, datasets_list=datasets_list, member_id=member_id, batch_size=batch_size,
                 ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1],
-                members_count=members_count
+                members_count=members_count, model_name=model_name, lr=learning_rate
             )
 
     elif mode.lower() == "vfl":
         run_vfl(
             exp_uid=exp_uid, params=params, datasets_list=datasets_list, members_count=members_count,
             batch_size=batch_size, ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1],
-            is_consequently=is_consequently
+            is_consequently=is_consequently, model_name=model_name, lr=learning_rate
             )
     else:
         raise ValueError(f"Unrecognized mode: {mode}. Please choose one of the following: single or vfl")
