@@ -1,7 +1,7 @@
 import asyncio
 from collections import defaultdict
 import logging
-from typing import AsyncIterator
+from typing import AsyncIterator, Any
 from concurrent import futures
 
 import grpc
@@ -30,7 +30,9 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
             *args,
             threadpool_max_workers: int = 10,
             max_message_size: int = -1,
-            **kwargs) -> None:
+            logging_level: Any = logging.INFO,
+            **kwargs
+    ) -> None:
         """
         Initialize GRpcCommunicatorServicer with necessary connection arguments.
 
@@ -59,6 +61,8 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         )
         self._main_tasks_queue: asyncio.Queue[communicator_pb2.MainMessage] = asyncio.Queue()
         self._tasks_futures = dict()
+
+        logger.setLevel(logging_level)
 
 
     @property

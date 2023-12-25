@@ -46,6 +46,10 @@ logger.addHandler(sh)
 class GRpcPartyCommunicator(PartyCommunicator, ABC):
     """ Base gRPC party communicator class. """
     participant: Union[PartyMaster, PartyMember]
+    logging_level = logging.INFO
+
+    def __init__(self, logging_level: Any = logging.INFO):
+        logger.setLevel(logging_level)
 
     def prepare_task(
             self,
@@ -101,6 +105,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             server_thread_pool_size: int = 10,
             max_message_size: int = -1,
             rendezvous_timeout: float = 3600.,
+            **kwargs,
     ):
         """
         Initialize master communicator with connection parameters.
@@ -124,6 +129,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.server_thread = None
         self.asyncio_event_loop = None
         self.servicer: Optional[GRpcCommunicatorServicer] = None
+
+        super(GRpcMasterPartyCommunicator, self).__init__(**kwargs)
 
     @property
     def status(self) -> Status:
@@ -337,6 +344,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 port=self.port,
                 threadpool_max_workers=self.server_thread_pool_size,
                 max_message_size=self.max_message_size,
+                logging_level=self.logging_level,
             )
             self.server_thread = threading.Thread(
                 target=self._run_coroutine,
@@ -559,6 +567,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             task_requesting_pings_interval: float = 0.1,
             sent_task_timout: float = 3600.,
             rendezvous_timeout: float = 3600.,
+            **kwargs,
     ):
         """
         Initialize member communicator with connection and task parameters.
@@ -587,6 +596,9 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
 
         self.server_tasks_queue: Queue[communicator_pb2.MainMessage] = Queue()
         self.tasks_futures: dict[str, ParticipantFuture] = dict()
+
+        super(GRpcMemberPartyCommunicator, self).__init__(**kwargs)
+
 
     def _start_client(self):
         """ Create a gRPC channel. Start a thread with heartbeats from the member. """
