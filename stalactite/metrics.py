@@ -31,10 +31,18 @@ class ComputeAccuracy:
 
 
 class ComputeAccuracy_numpy():
-    def __init__(self, force_to_binary=True, is_linreg=True):
+    def __init__(self, force_to_binary=True, is_linreg=True, is_multilabel=False):
         self.force_to_binary = force_to_binary
         self.name = 'Accuracy'
         self.is_linreg = is_linreg
+        self.is_multilabel = is_multilabel
+
+    @staticmethod
+    def accuracy_multilable(y_true, y_pred):
+        temp = 0
+        for i in range(y_true.shape[0]):
+            temp += sum(np.logical_and(y_true[i], y_pred[i])) / sum(np.logical_or(y_true[i], y_pred[i]))
+        return temp / y_true.shape[0]
 
     def compute(self, true_label, predictions):
         predictions = predictions.copy()
@@ -47,6 +55,9 @@ class ComputeAccuracy_numpy():
             else:
                 predictions[predictions < 0.5] = 0
                 predictions[predictions > 0.5] = 1
+
+        if self.is_multilabel:
+            return self.accuracy_multilable(true_label, predictions)
 
         accuracy = np.sum(true_label.squeeze() == predictions.squeeze()) / true_label.squeeze().shape[0]
         return accuracy

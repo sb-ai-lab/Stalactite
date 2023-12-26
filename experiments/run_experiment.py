@@ -6,6 +6,7 @@ import threading
 from threading import Thread
 from typing import List
 
+import datasets
 import torch
 import mlflow
 import scipy as sp
@@ -15,6 +16,7 @@ from datasets import DatasetDict
 from stalactite.models.linreg_batch import LinearRegressionBatch
 from stalactite.models.logreg_batch import LogisticRegressionBatch
 from stalactite.data_loader import load, init, DataPreprocessor
+from stalactite.data_preprocessors import FullDataTensor
 from stalactite.batching import ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.party_member_impl import PartyMemberImpl
@@ -30,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id: int, ds_size: int,
                       input_dims: List[int], batch_size: int, epochs: int,
-                      members_count: int, model_name: str, lr: float):
+                      members_count: int, model_name: str, lr: float, ds_name: str):
     with mlflow.start_run():
 
         log_params = {
@@ -43,23 +45,35 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
             "members_count": members_count,
             "model_name": model_name,
             "learning_rate": lr,
-
-
+            "dataset": ds_name
         }
         mlflow.log_params(log_params)
 
         dataset = datasets_list[member_id]
 
-        X_train_all = dataset["train_train"][f"image_part_{member_id}"][:ds_size]
-        Y_train_all = dataset["train_train"]["label"][:ds_size]
+        if ds_name == "mnist":
+            features_key = "image_part_"
+            labels_key = "label"
+            output_dim = 1
+            is_multilabel = True
+        elif ds_name == "multilabel":
+            features_key = "features_part_"
+            labels_key = "labels"
+            output_dim = 10
+            is_multilabel = True
+        else:
+            raise ValueError("Unknown dataset")
 
-        X_test = dataset["train_val"][f"image_part_{member_id}"]
-        Y_test = dataset["train_val"]["label"]
+        X_train_all = dataset["train_train"][f"{features_key}{member_id}"][:ds_size]
+        Y_train_all = dataset["train_train"][labels_key][:ds_size]
+
+        X_test = dataset["train_val"][f"{features_key}{member_id}"]
+        Y_test = dataset["train_val"][labels_key]
 
         if model_name == "linreg":
-            model = LinearRegressionBatch(input_dim=input_dims[member_id], output_dim=1, reg_lambda=0.5)
+            model = LinearRegressionBatch(input_dim=input_dims[member_id], output_dim=output_dim, reg_lambda=0.5)
         elif model_name == "logreg":
-            model = LogisticRegressionBatch(input_dim=input_dims[member_id], output_dim=1, learning_rate=lr)
+            model = LogisticRegressionBatch(input_dim=input_dims[member_id], output_dim=output_dim, learning_rate=lr)
         else:
             raise ValueError(f"unknown model name: {model_name}, set one of ['linreg', 'logreg']")
 
@@ -75,8 +89,8 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
             logger.debug(f"batch: {i}")
             batch = titer.batch
             tensor_idx = [int(x) for x in batch]
-            X_train = dataset["train_train"][f"image_part_{member_id}"][tensor_idx]
-            Y_train = dataset["train_train"]["label"][tensor_idx]
+            X_train = dataset["train_train"][f"{features_key}{member_id}"][tensor_idx]
+            Y_train = dataset["train_train"][labels_key][tensor_idx]
 
             if model_name == "linreg":
 
@@ -85,16 +99,18 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
             else:
                 model.update_weights(X_train, Y_train, is_single=True)
 
-            train_predictions = model.predict(X_train_all)
-            train_predictions = torch.mean(torch.stack((train_predictions,), dim=1), dim=1)
+            if model_name == "logreg":
+                train_predictions = torch.sigmoid(model.predict(X_train_all))
+                test_predictions = torch.sigmoid(model.predict(X_test))
 
-            test_predictions = model.predict(X_test)
-            test_predictions = torch.mean(torch.stack((test_predictions,), dim=1), dim=1)
+            else:
+                train_predictions = model.predict(X_train_all)
+                test_predictions = model.predict(X_test)
 
             train_mae = mean_absolute_error(Y_train_all.numpy(), train_predictions.detach().numpy())
             test_mae = mean_absolute_error(Y_test.numpy(), test_predictions.detach().numpy())
 
-            acc = ComputeAccuracy_numpy(is_linreg=True if model_name == "linreg" else False)
+            acc = ComputeAccuracy_numpy(is_linreg=True if model_name == "linreg" else False, is_multilabel=is_multilabel)
             train_acc = acc.compute(true_label=Y_train_all.numpy(), predictions=train_predictions.detach().numpy())
             test_acc = acc.compute(true_label=Y_test.numpy(), predictions=test_predictions.detach().numpy())
 
@@ -107,7 +123,7 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
 
 def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_count: int, ds_size: int,
             input_dims: List[int], batch_size: int, epochs: int,
-            is_consequently: bool, model_name: str, lr: float):
+            is_consequently: bool, model_name: str, lr: float, ds_name: str):
     with mlflow.start_run():
 
         log_params = {
@@ -120,6 +136,7 @@ def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_coun
             "is_consequently": is_consequently,
             "model_name": model_name,
             "learning_rate": lr,
+            "dataset": ds_name
 
         }
         mlflow.log_params(log_params)
@@ -237,12 +254,10 @@ def main():
 
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(os.environ.get("EXPERIMENT", "local_vert_logreg"))
-    # models input dims for 1, 2, 3 and 5 members
-    input_dims_list = [[619], [304, 315], [204, 250, 165], [], [108, 146, 150, 147, 68]]
 
+    ds_name = os.environ.get("DATASET", "MNIST")
     ds_size = int(os.environ.get("DS_SIZE", 1000))
     is_consequently = bool(int(os.environ.get("IS_CONSEQUENTLY")))
-
     batch_size = int(os.environ.get("BATCH_SIZE", 500))
     epochs = int(os.environ.get("EPOCHS", 1))
     mode = os.environ.get("MODE", "single")
@@ -250,7 +265,14 @@ def main():
     model_name = os.environ.get("MODEL_NAME")
     learning_rate = float(os.environ.get("LR", 0.01))
 
-    params = init()
+    # models input dims for 1, 2, 3 and 5 members
+    if ds_name == "MNIST":
+        input_dims_list = [[619], [304, 315], [204, 250, 165], [], [108, 146, 150, 147, 68]]
+    else:
+        input_dims_list = [[100], [40, 60], [20, 50, 30], [], [10, 5, 45, 15, 25]]
+
+    params = init(config_path="../experiments/configs/config_local_multilabel.yaml")
+
     for m in range(members_count):
         if model_name == "linreg":
             params[m].data.dataset = f"mnist_binary38_parts{members_count}"
@@ -259,13 +281,29 @@ def main():
         else:
             raise ValueError("Unknown model name {}".format(model_name))
 
-    dataset, _ = load(params)
-    datasets_list = []
-    for m in range(members_count):
-        logger.info(f"preparing dataset for member: {m}")
-        dp = DataPreprocessor(dataset, params[m].data, member_id=m)
-        tmp_dataset, _ = dp.preprocess()
-        datasets_list.append(tmp_dataset)
+    if ds_name.lower() == "mnist":
+        dataset, _ = load(params)
+        datasets_list = []
+        for m in range(members_count):
+            logger.info(f"preparing dataset for member: {m}")
+            dp = DataPreprocessor(dataset, params[m].data, member_id=m)
+            tmp_dataset, _ = dp.preprocess()
+            datasets_list.append(tmp_dataset)
+
+    elif ds_name.lower() == "multilabel":
+        dataset = {}
+        for m in range(members_count):
+            dataset[m] = datasets.load_from_disk(f"/home/dmitriy/data/multilabel_ds_parts{members_count}/part_{m}")
+
+        datasets_list = []
+        for m in range(members_count):
+            logger.info(f"preparing dataset for member: {m}")
+            dp = DataPreprocessor(dataset, params[m].data, member_id=m)
+            tmp_dataset, _ = dp.preprocess()
+            datasets_list.append(tmp_dataset)
+    else:
+        raise ValueError(f"Unknown dataset: {ds_name}, choose one from ['mnist', 'multilabel']")
+
 
     # with open(f"datasets_{members_count}_members.pkl", "wb") as fp:
     #     pickle.dump({"data": datasets_list}, fp)
@@ -276,14 +314,14 @@ def main():
             run_single_member(
                 exp_uid=exp_uid, datasets_list=datasets_list, member_id=member_id, batch_size=batch_size,
                 ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1],
-                members_count=members_count, model_name=model_name, lr=learning_rate
+                members_count=members_count, model_name=model_name, lr=learning_rate, ds_name=ds_name
             )
 
     elif mode.lower() == "vfl":
         run_vfl(
             exp_uid=exp_uid, params=params, datasets_list=datasets_list, members_count=members_count,
             batch_size=batch_size, ds_size=ds_size, epochs=epochs, input_dims=input_dims_list[members_count-1],
-            is_consequently=is_consequently, model_name=model_name, lr=learning_rate
+            is_consequently=is_consequently, model_name=model_name, lr=learning_rate, ds_name=ds_name
             )
     else:
         raise ValueError(f"Unrecognized mode: {mode}. Please choose one of the following: single or vfl")

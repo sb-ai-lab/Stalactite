@@ -1,3 +1,4 @@
+import os
 import yaml
 import random
 import copy
@@ -58,9 +59,9 @@ def load_yaml_config(yaml_path):
             raise ValueError("Yaml error - check yaml file")
 
 
-def init():
+def init(config_path="../experiments/configs/config_local_mnist.yaml"):
 
-    config = AttrDict(load_yaml_config("../experiments/configs/config_local_mnist.yaml"))
+    config = AttrDict(load_yaml_config(config_path))
 
     seed = config.common.random_seed
     random.seed(seed)
@@ -69,20 +70,16 @@ def init():
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
 
-
-
     tmp_args = init_simulation_sp(attr())
     joint_config = AttrDict({})
     for ii in range(config.common.parties_num):
-        joint_config[ii] = AttrDict(load_yaml_config("../experiments/configs/config_local_mnist.yaml"))
+        joint_config[ii] = AttrDict(load_yaml_config(config_path))
 
         joint_config[ii].common.update(vars(tmp_args))
-        # joint_config[ii].model.role = joint_config[ii].common.role
         joint_config[ii].data.features_key = joint_config[ii].data.features_key + str(ii)
 
     joint_config['joint_config'] = True
     joint_config['parties'] = list(range(config.common.parties_num))
-    # joint_config['backend'] = config.common.backend.lower()
     config = joint_config
 
     return config
@@ -105,8 +102,6 @@ def load_splitted_part(part_path, split_feature_prefix='image', new_name_split_f
     part_path = Path(part_path)
 
     part_ds = datasets.load_from_disk(part_path)
-
-    # import pdb; pdb.set_trace()
 
     if new_name_split_feature is not None:
         for kk, ds in part_ds.items():
