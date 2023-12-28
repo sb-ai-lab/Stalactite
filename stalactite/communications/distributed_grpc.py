@@ -34,6 +34,8 @@ from stalactite.communications.grpc_utils.utils import (
     SerializedMethodMessage,
     prepare_kwargs,
     collect_kwargs,
+    start_thread,
+    UnsupportedError,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,9 +49,15 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
     """ Base gRPC party communicator class. """
     participant: Union[PartyMaster, PartyMember]
     logging_level = logging.INFO
+    is_ready: bool = False
 
     def __init__(self, logging_level: Any = logging.INFO):
         logger.setLevel(logging_level)
+
+    def raise_if_not_ready(self):
+        if not self.is_ready:
+            raise RuntimeError("Cannot proceed because communicator is not ready. "
+                               "Perhaps, rendezvous has not been called or was unsuccessful")
 
     def prepare_task(
             self,
@@ -126,23 +134,27 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.max_message_size = max_message_size
         self.rendezvous_timeout = rendezvous_timeout
 
-        self.server_thread = None
+        self.server_thread: Optional[threading.Thread] = None
         self.asyncio_event_loop = None
         self.servicer: Optional[GRpcCommunicatorServicer] = None
 
         super(GRpcMasterPartyCommunicator, self).__init__(**kwargs)
 
     @property
+    def servicer_initialized(self) -> bool:
+        return self.servicer is not None
+
+    @property
     def status(self) -> Status:
         """ Return status of the master communicator. """
-        if self.servicer is None:
+        if not self.servicer_initialized:
             return Status.not_started
         return self.servicer.status
 
     @property
     def number_connected_clients(self) -> int:
         """ Return number of VFL agent members connected to the server. """
-        if self.servicer is None:
+        if not self.servicer_initialized:
             return 0
         return len(self.servicer.connected_clients)
 
@@ -154,7 +166,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
     def randezvous(self) -> None:
         """ Wait until all the VFL agent members are connected to the gRPC server. """
         timer = time.time()
-        if self.servicer is None:
+        if not self.servicer_initialized:
             raise ValueError('Started rendezvous before initializing gRPC server and servicer')
         while self.status != Status.all_ready:
             time.sleep(0.1)
@@ -166,7 +178,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
     @property
     def is_ready(self) -> bool:
         """ Return True if the gRPC server is ready to accept connections and process the requests. """
-        return self.server_thread.running()
+        return self.server_thread.is_alive()
 
     def _get_tasks_from_main_queue(self) -> Optional[communicator_pb2.MainMessage]:
         """ Get task scheduled for VFL master to process. """
@@ -228,6 +240,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         :param message: Task data arguments
         :param kwargs: Optional kwargs which are ignored
         """
+        self.raise_if_not_ready()
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
 
@@ -282,6 +295,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         :param message: Task data arguments
         :param kwargs: Optional kwargs which are ignored
         """
+        self.raise_if_not_ready()
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
         logger.debug("Sending event (%s) to all members" % method_name)
@@ -346,22 +360,17 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 max_message_size=self.max_message_size,
                 logging_level=self.logging_level,
             )
-            self.server_thread = threading.Thread(
-                target=self._run_coroutine,
-                args=(self.servicer.start_servicer_and_server(),),
-                daemon=True
-            )
-            self.server_thread.start()
-
-            self.randezvous()
-            party = GRpcParty(party_communicator=self)
-
-            event_loop = threading.Thread(target=self._run, daemon=True)
-            event_loop.start()
-            self.participant.run(party)
-            self.send(send_to_id=self.participant.id, method_name=_Method.finalize, require_answer=False)
-            event_loop.join()
-            self.server_thread.join(timeout=2.)
+            with start_thread(
+                    target=self._run_coroutine,
+                    args=(self.servicer.start_servicer_and_server(),),
+                    daemon=True,
+                    thread_timeout=2.,
+            ) as self.server_thread:
+                self.randezvous()
+                party = GRpcParty(party_communicator=self)
+                with start_thread(target=self._run, daemon=True):
+                    self.participant.run(party)
+                    self.send(send_to_id=self.participant.id, method_name=_Method.finalize, require_answer=False)
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:
             logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
@@ -402,7 +411,6 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
 
                         future = self._server_tasks_futures.pop(task.parent_id)
                         future.set_result(event_data['result'])
-                        future.done()
                     elif task.method_name == _Method.finalize.value:
                         logger.info("Party communicator %s: finalized" % self.participant.id)
                         break
@@ -599,7 +607,6 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
 
         super(GRpcMemberPartyCommunicator, self).__init__(**kwargs)
 
-
     def _start_client(self):
         """ Create a gRPC channel. Start a thread with heartbeats from the member. """
         self._grpc_channel = grpc.insecure_channel(
@@ -705,15 +712,12 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         :param message: Task data arguments
         :param kwargs: Optional kwargs which are ignored
         """
+        self.raise_if_not_ready()
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
 
-        if not self.is_ready:
-            raise RuntimeError("Cannot proceed because communicator is not ready. "
-                               "Perhaps, rendezvous has not been called or was unsuccessful")
-
         if send_to_id not in (self._master_id, self.participant.id):
-            raise RuntimeError('GRpcMemberPartyCommunicator cannot send to other Members')
+            raise UnsupportedError('GRpcMemberPartyCommunicator cannot send to other Members')
 
         prepared_task = self.prepare_task(
             message_type=MessageTypes.client_task,
@@ -755,7 +759,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         """ Broadcast task to VFL agents via gRPC channel.
         This method is unavailable for GRpcMemberPartyCommunicator as it cannot communcate with other members.
         """
-        raise AttributeError('GRpcMemberPartyCommunicator cannot broadcast to other Members')
+        raise UnsupportedError('GRpcMemberPartyCommunicator cannot broadcast to other Members')
 
     def run(self):
         """ Run the VFL member.
