@@ -1,20 +1,18 @@
-from docker import APIClient
+import os
 import pytest
-
-
-def pytest_addoption(parser):
-    parser.addoption("--test_config_path", action="store", default="configs/config-test.yml")
+import pathlib
 
 
 @pytest.fixture(scope='session')
-def test_config_path(request):
-    test_config_path = request.config.option.test_config_path
-    if test_config_path is None:
-        pytest.skip()
-    return test_config_path
+def docker_compose_file():
+    return os.path.join(pathlib.Path(os.path.abspath(__file__)).parent.parent, 'prerequisites', 'docker-compose.yml')
 
 
 @pytest.fixture(scope='session')
-def docker_client() -> APIClient:
-    client = APIClient(base_url='unix://var/run/docker.sock')
-    return client
+def docker_setup():
+    return ""
+
+
+@pytest.fixture(scope='session')
+def docker_cleanup():
+    return ""
