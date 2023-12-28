@@ -1,0 +1,33 @@
+common:
+  random_seed: 0
+  epochs: 2
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  batch_size: 1000
+
+prerequisites:
+  run_mlflow: True
+  mlflow_host: 'node3.bdcl'
+  mlflow_port: '5555'
+
+data:
+  random_seed: 0
+  dataset_size: 1000
+  host_path_data_dir: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data"
+
+grpc_server:
+  host: '0.0.0.0'
+  port: '50051'
+  max_message_size: -1
+
+master:
+  logging_level: 'debug'
+
+member:
+  logging_level: 'debug'
+
+
+docker:
+  docker_compose_command: "docker compose"
+  docker_compose_path: '/src/vf-benchmark/prerequisites'
