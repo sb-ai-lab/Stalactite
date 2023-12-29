@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+
+service Communicator {
+  rpc Heartbeat(stream HB) returns (stream HB) {}
+  rpc BidiExchange(stream MainMessage) returns (stream MainMessage) {}
+  rpc UnaryExchange(MainMessage) returns (MainMessage) {}
+}
+
+
+message HB{
+  string agent_name = 1;
+  string status = 2;
+}
+
+
+message MainMessage {
+  string message_type = 1;
+  optional bool require_answer = 2;
+  optional string status = 3;
+  optional string task_id = 4;
+  optional string parent_id = 5;
+  optional string from_uid = 6;
+  optional string method_name = 7;
+  map<string, bytes> tensor_kwargs = 8;
+  map<string, bytes> other_kwargs = 9;
+}
+

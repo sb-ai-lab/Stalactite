@@ -13,29 +13,9 @@ from typing import List, Dict, Any, Optional, Union, cast, Set
 
 from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, ParticipantFuture, Party, PartyDataTensor, \
     RecordsBatch
+from stalactite.communications.helpers import ParticipantType, _Method
 
 logger = logging.getLogger(__name__)
-
-
-class _Method(enum.Enum):
-    service_return_answer = 'service_return_answer'
-    service_heartbeat = 'service_heartbeat'
-
-    records_uids = 'records_uids'
-    register_records_uids = 'register_records_uids'
-
-    initialize = 'initialize'
-    finalize = 'finalize'
-
-    update_weights = 'update_weights'
-    predict = 'predict'
-    update_predict = 'update_predict'
-
-
-class _ParticipantType(enum.Enum):
-    master = 'master'
-    member = 'member'
-
 
 @dataclass
 class _Event:
@@ -52,7 +32,7 @@ class _Event:
 
 @dataclass(frozen=True)
 class _ParticipantInfo:
-    type: _ParticipantType
+    type: ParticipantType
     queue: Queue
 
 
@@ -72,7 +52,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
     def randezvous(self):
         logger.info("Party communicator %s: performing randezvous" % self.participant.id)
         self._party_info[self.participant.id] = _ParticipantInfo(
-            type=_ParticipantType.master if isinstance(self.participant, PartyMaster) else _ParticipantType.member,
+            type=ParticipantType.master if isinstance(self.participant, PartyMaster) else ParticipantType.member,
             queue=Queue()
         )
 
@@ -80,7 +60,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         while len(self._party_info) < self.world_size + 1:
             time.sleep(0.1)
 
-        self.members = [uid for uid, pinfo in self._party_info.items() if pinfo.type == _ParticipantType.member]
+        self.members = [uid for uid, pinfo in self._party_info.items() if pinfo.type == ParticipantType.member]
 
         logger.info("Party communicator %s: randezvous has been successfully performed" % self.participant.id)
 
