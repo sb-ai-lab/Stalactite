@@ -1,3 +1,5 @@
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import enum
 import logging
@@ -11,7 +13,23 @@ import safetensors.torch
 
 from stalactite.communications.grpc_utils.generated_code import communicator_pb2
 from stalactite.base import ParticipantFuture
+
+
 logger = logging.getLogger(__name__)
+
+
+class UnsupportedError(Exception):
+    def __init__(self, message: str = "Unsupported method for class."):
+        super().__init__(message)
+
+@contextmanager
+def start_thread(*args, thread_timeout: float = 100., **kwargs):
+    thread = threading.Thread(*args, **kwargs)
+    try:
+        thread.start()
+        yield thread
+    finally:
+        thread.join(timeout=thread_timeout)
 
 
 class Status(str, enum.Enum):
@@ -47,6 +65,7 @@ class MessageTypes(str, enum.Enum):
 class ParticipantTasks:
     context: grpc.aio.ServicerContext
     queue: Queue
+
 
 @dataclass
 class PreparedTask:

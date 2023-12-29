@@ -102,7 +102,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         client_name = request.agent_name
         logger.debug(f"Got ping from client {client_name}")
         self.connected_clients.add(client_name)
-        if len(self.connected_clients) == self.world_size:
+        if len(self.connected_clients) == self.world_size: # TODO add connections monitoring
             logger.info(f"All {self.world_size} clients connected")
             self.status = Status.all_ready
         else:
@@ -155,4 +155,4 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
                     await context.write(task_message)
                     logger.debug(f'Sent task {task_message.method_name} to {client_id} ({task_message.task_id})')
                 except asyncio.QueueEmpty:
-                    pass
+                    await asyncio.sleep(0.)
