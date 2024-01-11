@@ -12,6 +12,7 @@ import uuid
 
 import grpc
 import torch
+from prometheus_client import start_http_server
 
 from stalactite.base import (
     PartyMaster,
@@ -34,6 +35,8 @@ from stalactite.communications.grpc_utils.utils import (
     SerializedMethodMessage,
     prepare_kwargs,
     collect_kwargs,
+    start_thread,
+    UnsupportedError,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,9 +50,17 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
     """ Base gRPC party communicator class. """
     participant: Union[PartyMaster, PartyMember]
     logging_level = logging.INFO
+    is_ready: bool = False
 
     def __init__(self, logging_level: Any = logging.INFO):
         logger.setLevel(logging_level)
+
+    def raise_if_not_ready(self):
+        if not self.is_ready:
+            raise RuntimeError(
+                "Cannot proceed because communicator is not ready. "
+                "Perhaps, rendezvous has not been called or was unsuccessful"
+            )
 
     def prepare_task(
             self,
@@ -105,6 +116,10 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             server_thread_pool_size: int = 10,
             max_message_size: int = -1,
             rendezvous_timeout: float = 3600.,
+            disconnect_idle_client_time: float = 120.,
+            prometheus_server_port: int = 8080,
+            run_prometheus: bool = False,
+            experiment_label: Optional[str] = None,
             **kwargs,
     ):
         """
@@ -117,6 +132,10 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         :param server_thread_pool_size: Number of threadpool workers processing connections on the gRPC server
         :param max_message_size: Maximum message length that the gRPC channel can send or receive. -1 means unlimited
         :param rendezvous_timeout: Maximum time to wait until all the members are connected
+        :param disconnect_idle_client_time: Time in seconds to wait after a client`s last heartbeat to consider the
+               client disconnected
+        :param prometheus_server_port: HTTP server on master started to report metrics to Prometheus
+        :param run_prometheus: Whether to report heartbeat metrics to Prometheus
         """
         self.participant = participant
         self.world_size = world_size
@@ -125,36 +144,44 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.server_thread_pool_size = server_thread_pool_size
         self.max_message_size = max_message_size
         self.rendezvous_timeout = rendezvous_timeout
+        self.disconnect_idle_client_time = disconnect_idle_client_time
+        self.run_prometheus = run_prometheus
+        self.prometheus_server_port = prometheus_server_port
+        self.experiment_label = experiment_label
 
-        self.server_thread = None
+        self.server_thread: Optional[threading.Thread] = None
         self.asyncio_event_loop = None
         self.servicer: Optional[GRpcCommunicatorServicer] = None
 
         super(GRpcMasterPartyCommunicator, self).__init__(**kwargs)
 
     @property
+    def servicer_initialized(self) -> bool:
+        return self.servicer is not None
+
+    @property
     def status(self) -> Status:
         """ Return status of the master communicator. """
-        if self.servicer is None:
+        if not self.servicer_initialized:
             return Status.not_started
         return self.servicer.status
 
     @property
     def number_connected_clients(self) -> int:
         """ Return number of VFL agent members connected to the server. """
-        if self.servicer is None:
+        if not self.servicer_initialized:
             return 0
         return len(self.servicer.connected_clients)
 
     @property
     def members(self) -> list[str]:
         """ List the VFL agent members` ids connected to the server. """
-        return list(self.servicer.connected_clients)
+        return list(self.servicer.connected_clients.keys())
 
     def randezvous(self) -> None:
         """ Wait until all the VFL agent members are connected to the gRPC server. """
         timer = time.time()
-        if self.servicer is None:
+        if not self.servicer_initialized:
             raise ValueError('Started rendezvous before initializing gRPC server and servicer')
         while self.status != Status.all_ready:
             time.sleep(0.1)
@@ -166,7 +193,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
     @property
     def is_ready(self) -> bool:
         """ Return True if the gRPC server is ready to accept connections and process the requests. """
-        return self.server_thread.running()
+        return self.server_thread.is_alive()
 
     def _get_tasks_from_main_queue(self) -> Optional[communicator_pb2.MainMessage]:
         """ Get task scheduled for VFL master to process. """
@@ -228,6 +255,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         :param message: Task data arguments
         :param kwargs: Optional kwargs which are ignored
         """
+        self.raise_if_not_ready()
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
 
@@ -282,6 +310,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         :param message: Task data arguments
         :param kwargs: Optional kwargs which are ignored
         """
+        self.raise_if_not_ready()
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
         logger.debug("Sending event (%s) to all members" % method_name)
@@ -337,6 +366,9 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         tasks from the main loop.
         """
         try:
+            if self.run_prometheus:
+                logger.info(f'Prometheus experiment label: {self.experiment_label}')
+                start_http_server(port=self.prometheus_server_port)
             self.servicer = GRpcCommunicatorServicer(
                 world_size=self.world_size,
                 master_id=self.participant.id,
@@ -345,23 +377,21 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 threadpool_max_workers=self.server_thread_pool_size,
                 max_message_size=self.max_message_size,
                 logging_level=self.logging_level,
+                disconnect_idle_client_time=self.disconnect_idle_client_time,
+                run_prometheus=self.run_prometheus,
+                experiment_label=self.experiment_label,
             )
-            self.server_thread = threading.Thread(
-                target=self._run_coroutine,
-                args=(self.servicer.start_servicer_and_server(),),
-                daemon=True
-            )
-            self.server_thread.start()
-
-            self.randezvous()
-            party = GRpcParty(party_communicator=self)
-
-            event_loop = threading.Thread(target=self._run, daemon=True)
-            event_loop.start()
-            self.participant.run(party)
-            self.send(send_to_id=self.participant.id, method_name=_Method.finalize, require_answer=False)
-            event_loop.join()
-            self.server_thread.join(timeout=2.)
+            with start_thread(
+                    target=self._run_coroutine,
+                    args=(self.servicer.start_servicer_and_server(),),
+                    daemon=True,
+                    thread_timeout=2.,
+            ) as self.server_thread:
+                self.randezvous()
+                party = GRpcParty(party_communicator=self)
+                with start_thread(target=self._run, daemon=True):
+                    self.participant.run(party)
+                    self.send(send_to_id=self.participant.id, method_name=_Method.finalize, require_answer=False)
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:
             logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
@@ -402,7 +432,6 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
 
                         future = self._server_tasks_futures.pop(task.parent_id)
                         future.set_result(event_data['result'])
-                        future.done()
                     elif task.method_name == _Method.finalize.value:
                         logger.info("Party communicator %s: finalized" % self.participant.id)
                         break
@@ -599,7 +628,6 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
 
         super(GRpcMemberPartyCommunicator, self).__init__(**kwargs)
 
-
     def _start_client(self):
         """ Create a gRPC channel. Start a thread with heartbeats from the member. """
         self._grpc_channel = grpc.insecure_channel(
@@ -705,15 +733,13 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         :param message: Task data arguments
         :param kwargs: Optional kwargs which are ignored
         """
+
+        self.raise_if_not_ready()
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
 
-        if not self.is_ready:
-            raise RuntimeError("Cannot proceed because communicator is not ready. "
-                               "Perhaps, rendezvous has not been called or was unsuccessful")
-
         if send_to_id not in (self._master_id, self.participant.id):
-            raise RuntimeError('GRpcMemberPartyCommunicator cannot send to other Members')
+            raise UnsupportedError('GRpcMemberPartyCommunicator cannot send to other Members')
 
         prepared_task = self.prepare_task(
             message_type=MessageTypes.client_task,
@@ -755,7 +781,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         """ Broadcast task to VFL agents via gRPC channel.
         This method is unavailable for GRpcMemberPartyCommunicator as it cannot communcate with other members.
         """
-        raise AttributeError('GRpcMemberPartyCommunicator cannot broadcast to other Members')
+        raise UnsupportedError('GRpcMemberPartyCommunicator cannot broadcast to other Members')
 
     def run(self):
         """ Run the VFL member.
