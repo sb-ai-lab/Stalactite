@@ -1,27 +1,38 @@
 import logging
 import os
 from pathlib import Path
-import subprocess
 from threading import Thread
 from typing import Dict, Any
 
 import click
 from docker import APIClient
 from docker.errors import APIError
+import mlflow as _mlflow
 import torch
 
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.mocks import MockPartyMasterImpl, MockPartyMemberImpl
-from stalactite.utils import VFLConfig, load_yaml_config, raise_path_not_exist
+from stalactite.configs import VFLConfig, raise_path_not_exist
+from stalactite.utils_main import (
+    get_env_vars,
+    run_subprocess_command,
+    get_status,
+    is_test_environment,
+    get_logs,
+    BASE_CONTAINER_LABEL,
+    KEY_CONTAINER_LABEL,
+    BASE_MASTER_CONTAINER_NAME,
+    BASE_MEMBER_CONTAINER_NAME,
+    BASE_IMAGE_FILE,
+    BASE_IMAGE_TAG,
+    PREREQUISITES_NETWORK,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 logger.addHandler(sh)
-
-CONTAINER_LABEL = 'grpc-experiment'
-TEST_CONTAINER_LABEL = 'test-grpc-experiment'
 
 
 @click.group()
@@ -31,11 +42,12 @@ def cli():
 
 @cli.group()
 def prerequisites():
+    """ Prerequisites management command group. """
     click.echo("Manage experimental prerequisites")
 
 
 @prerequisites.command()
-@click.option('--config-path', type=str)
+@click.option('--config-path', type=str, required=True)
 @click.option(
     '-d',
     '--detached',
@@ -45,40 +57,38 @@ def prerequisites():
     help="Run non-blocking start."
 )
 def start(config_path, detached):
-    logger.info('Starting prerequisites containers')
-    config = VFLConfig.model_validate(load_yaml_config(config_path))
-    env_vars = os.environ.copy()
-    env_vars['MLFLOW_PORT'] = config.prerequisites.mlflow_port
-    command = f"{config.docker.docker_compose_command}"
-    build_process = subprocess.run(
-        command + ' build',
-        cwd=config.docker.docker_compose_path,
-        env=env_vars,
-        shell=True,
-    )
-    try:
-        build_process.check_returncode()
-    except subprocess.CalledProcessError as exc:
-        logger.error("Failed build process", exc_info=exc)
-        raise
-    up_process = subprocess.run(
-        command + ' up' + (' -d' if detached else ''),
-        cwd=config.docker.docker_compose_path,
-        env=env_vars,
-        shell=True,
-    )
-    try:
-        up_process.check_returncode()
-    except subprocess.CalledProcessError as exc:
-        logger.error("Failed launch", exc_info=exc)
-        raise
+    """
+    Start containers with prerequisites (MlFlow, Prometheus, Grafana).
 
+    :param config_path: Path to the VFL config file
+    :param detached: Start containers in detached regime
+    """
+    logger.info('Starting prerequisites containers')
+    config = VFLConfig.load_and_validate(config_path)
+    env_vars = get_env_vars(config)
+    command = f"{config.docker.docker_compose_command}"
+    run_subprocess_command(
+        command=command + ' build',
+        logger_err_info="Failed build process",
+        cwd=config.docker.docker_compose_path,
+        env=env_vars,
+        shell=True
+    )
+    run_subprocess_command(
+        command=command + ' up' + (' -d' if detached else ''),
+        logger_err_info="Failed launch",
+        cwd=config.docker.docker_compose_path,
+        env=env_vars,
+        shell=True
+    )
     if detached:
         logger.info(f"MlFlow port: {config.prerequisites.mlflow_port}")
+        logger.info(f"Prometheus port: {config.prerequisites.prometheus_port}")
+        logger.info(f"Grafana port: {config.prerequisites.grafana_port}")
 
 
 @prerequisites.command()
-@click.option('--config-path', type=str)
+@click.option('--config-path', type=str, required=True)
 @click.option(
     '--remove',
     is_flag=True,
@@ -94,36 +104,33 @@ def start(config_path, detached):
     help="Delete created volumes."
 )
 def stop(config_path, remove, remove_volumes):
+    """
+    Stop prerequisites containers (and remove all defined in docker-compose.yml networks and images[, and volumes]).
+
+    :param config_path: Path to the VFL config file
+    :param remove: Remove created containers, networks
+    :param remove_volumes: Remove volumes
+    """
     logger.info('Stopping prerequisites containers')
-    config = VFLConfig.model_validate(load_yaml_config(config_path))
-    env_vars = os.environ.copy()
-    env_vars['MLFLOW_PORT'] = config.prerequisites.mlflow_port
-    # TODO prometheus
+    config = VFLConfig.load_and_validate(config_path)
+    env_vars = get_env_vars(config)
     command = f"{config.docker.docker_compose_command}"
-    build_process = subprocess.run(
-        command + ' stop',
+    run_subprocess_command(
+        command=command + ' stop',
+        logger_err_info="Failed stopping prerequisites containers",
         cwd=config.docker.docker_compose_path,
         env=env_vars,
-        shell=True,
+        shell=True
     )
-    try:
-        build_process.check_returncode()
-    except subprocess.CalledProcessError as exc:
-        logger.error("Failed stopping prerequisites containers", exc_info=exc)
-        raise
+    logger.info(f"Successfully stopped prerequisite containers")
     if remove:
-        down_process = subprocess.run(
-            command + ' down' + (' -v' if remove_volumes else ''),
+        run_subprocess_command(
+            command=command + ' down' + (' -v' if remove_volumes else ''),
+            logger_err_info="Failed releasing resources",
             cwd=config.docker.docker_compose_path,
             env=env_vars,
-            shell=True,
+            shell=True
         )
-        try:
-            down_process.check_returncode()
-        except subprocess.CalledProcessError as exc:
-            logger.error("Failed releasing resources", exc_info=exc)
-            raise
-
         logger.info(f"Successfully teared down prerequisite resources")
 
 
@@ -210,103 +217,61 @@ def logs(config_path):
 )
 @click.pass_context
 def local(ctx, single_process, multi_process):
+    """
+    Local experiments (multi-process / single process) mode command group.
+
+    :param ctx: Click context passed through into group`s commands
+    :param single_process: Run single process experiment
+    :param multi_process: Run multiple process (dockerized) experiment
+    """
+    ctx.obj = dict()
     if multi_process and not single_process:
         click.echo('Multiple-process single-node mode')
+        ctx.obj['client'] = APIClient(base_url='unix://var/run/docker.sock')
     elif single_process and not multi_process:
         click.echo('Multiple-threads single-node mode')
     else:
         raise SyntaxError('Either `--single-process` or `--multi-process` flag can be set.')
-    ctx.obj = dict()
     ctx.obj['multi_process'] = multi_process
     ctx.obj['single_process'] = single_process
 
 
 @local.command()
-@click.option('--config-path', type=str)
+@click.option('--config-path', type=str, required=True)
 @click.pass_context
 def start(ctx, config_path):
-    # TODO
-    raise NotImplementedError
+    """
+    Start local experiment.
+    For a multiprocess mode build and start VFL master and members containers.
 
-
-@local.command()
-@click.option('--config-path', type=str)
-def stop(config_path):
-    # TODO
-    raise NotImplementedError
-
-
-@local.command()
-@click.option('--config-path', type=str)
-def status(config_path):
-    # TODO
-    raise NotImplementedError
-
-
-@local.command()
-@click.option('--config-path', type=str)
-def logs(config_path):
-    # TODO
-    raise NotImplementedError
-
-
-@cli.group()
-@click.pass_context
-@click.option(
-    '--single-process',
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Run single-node single-process (multi-thread) test."
-)
-@click.option(
-    '--multi-process',
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Run single-node multi-process (dockerized) test."
-)
-def test(ctx, multi_process, single_process):
-    if multi_process and not single_process:
-        click.echo('Manage multi-process single-node tests')
-    elif single_process and not multi_process:
-        click.echo('Manage single-process (multi-thread) single-node tests')
-    else:
-        raise SyntaxError('Either `--single-process` or `--multi-process` flag can be set.')
-    ctx.obj = dict()
-    ctx.obj['multi_process'] = multi_process
-    ctx.obj['single_process'] = single_process
-
-
-@test.command()
-@click.pass_context
-@click.option('--config-path', type=str)
-def start(ctx, config_path):
-    config = VFLConfig.model_validate(load_yaml_config(config_path))
+    :param ctx: Passed from group Click context
+    :param config_path: Path to the VFL config file
+    """
+    _test = is_test_environment()
+    config = VFLConfig.load_and_validate(config_path)
     if ctx.obj['multi_process'] and not ctx.obj['single_process']:
-        logger.info('Starting multi-process single-node test')
-        client = APIClient(base_url='unix://var/run/docker.sock')
-        image_name = 'grpc-base.dockerfile'
-        image = 'grpc-base:latest'
+        logger.info('Starting multi-process single-node experiment')
+        client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
         try:
-            logger.info('Building image of the agent')
-            logs = client.build(
+            logger.info('Building image of the agent. If build for the first time, it may take a while...')
+            _logs = client.build(
                 path=str(Path(os.path.abspath(__file__)).parent.parent),
-                tag=image,
+                tag=BASE_IMAGE_TAG,
                 quiet=True,
                 decode=True,
                 nocache=False,
-                dockerfile=os.path.join(Path(os.path.abspath(__file__)).parent.parent, 'docker', image_name),
+                dockerfile=os.path.join(Path(os.path.abspath(__file__)).parent.parent, 'docker', BASE_IMAGE_FILE),
             )
-            for log in logs:
+            for log in _logs:
                 logger.debug(log["stream"])
         except APIError as exc:
             logger.error('Error while building an image', exc_info=exc)
             raise
-        network = 'vfl-network'
-        if networks := client.networks(names=[network]):
+
+        if networks := client.networks(names=[PREREQUISITES_NETWORK]):
             network = networks.pop()['Name']
         else:
+            network = PREREQUISITES_NETWORK
             client.create_network(network)
         networking_config = client.create_networking_config({
             network: client.create_endpoint_config()
@@ -323,43 +288,57 @@ def start(ctx, config_path):
             f'{configs_path}:{configs_path}:rw',
             f'{data_path}:{data_path}:rw',
         ])
+
+        container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
+        master_container_name = BASE_MASTER_CONTAINER_NAME + ('-test' if _test else '')
         try:
             logger.info('Starting gRPC master container')
             grpc_server_host = 'grpc-master'
+
             master_container = client.create_container(
-                image=image,
+                image=BASE_IMAGE_TAG,
                 command=["python", "run_grpc_master.py", "--config-path", f"{os.path.abspath(config_path)}"],
                 detach=True,
                 environment={},
                 hostname=grpc_server_host,
-                labels={'container-g': TEST_CONTAINER_LABEL},
+                labels={KEY_CONTAINER_LABEL: container_label},
                 volumes=volumes,
                 host_config=mounts_host_config,
                 networking_config=networking_config,
+                name=master_container_name,
             )
             logger.info(f'Master container id: {master_container.get("Id")}')
             client.start(container=master_container.get('Id'))
 
             for member_rank in range(config.common.world_size):
                 logger.info(f'Starting gRPC member-{member_rank} container')
+                member_container_name = BASE_MEMBER_CONTAINER_NAME + f'-{member_rank}' + ('-test' if _test else '')
 
                 member_container = client.create_container(
-                    image=image,
+                    image=BASE_IMAGE_TAG,
                     command=["python", "run_grpc_member.py", "--config-path", f"{os.path.abspath(config_path)}"],
                     detach=True,
                     environment={'RANK': member_rank, 'GRPC_SERVER_HOST': grpc_server_host},
-                    labels={'container-g': TEST_CONTAINER_LABEL},
+                    labels={KEY_CONTAINER_LABEL: container_label},
                     volumes=volumes,
                     host_config=mounts_host_config,
                     networking_config=networking_config,
+                    name=member_container_name,
                 )
                 logger.info(f'Member {member_rank} container id: {member_container.get("Id")}')
                 client.start(container=member_container.get('Id'))
         except APIError as exc:
-            logger.error('Error while agents containers launch', exc_info=exc)
+            logger.error(
+                'Error while agents containers launch. If the container name is in use, alternatively to renaming you '
+                'can remove all containers from previous experiment by running '
+                f'`stalactite {"test" if _test else "local"} --multi-process stop`',
+                exc_info=exc
+            )
             raise
     elif ctx.obj['single_process'] and not ctx.obj['multi_process']:
         # TODO bufix and refactor
+        raise NotImplementedError
+
         def local_master_main(uid: str, world_size: int, shared_party_info: Dict[str, Any]):
             comm = LocalMasterPartyCommunicator(
                 participant=MockPartyMasterImpl(
@@ -410,21 +389,30 @@ def start(ctx, config_path):
             thread.join()
 
 
-@test.command()
-@click.pass_context
+@local.command()
 @click.option(
     '--leave-containers',
     is_flag=True,
     show_default=False,
     default=False,
-    help="Delete created agents containers"
+    help="Flag to retain created agents containers"
 )
+@click.pass_context
 def stop(ctx, leave_containers):
+    """
+    Stop local experiment.
+    For a multiprocess mode stop and remove containers of the VFL master and members.
+
+    :param ctx: Passed from group Click context
+    :param leave_containers: Whether to leave stopped containers without removing them
+    """
+    _test = is_test_environment()
     if ctx.obj['multi_process'] and not ctx.obj['single_process']:
-        logger.info('Stopping multi-process single-node test')
-        client = APIClient(base_url='unix://var/run/docker.sock')
+        logger.info('Stopping multi-process single-node')
+        client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
         try:
-            containers = client.containers(all=True, filters={'label': f'container-g={TEST_CONTAINER_LABEL}'})
+            container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
+            containers = client.containers(all=True, filters={'label': f'{KEY_CONTAINER_LABEL}={container_label}'})
             for container in containers:
                 logger.info(f'Stopping {container["Id"]}')
                 client.stop(container)
@@ -432,55 +420,211 @@ def stop(ctx, leave_containers):
                     logger.info(f'Removing {container["Id"]}')
                     client.remove_container(container)
         except APIError as exc:
-            logger.error('Error while stopping and removing containers', exc_info=exc)
-            raise
+            logger.error('Error while stopping (and removing) containers', exc_info=exc)
 
 
-@test.command()
+@local.command()
 @click.option('--agent-id', type=str, default=None)
-def status(agent_id):
-    client = APIClient(base_url='unix://var/run/docker.sock')
-    try:
-        if agent_id is None:
-            containers = client.containers(all=True, filters={'label': f'container-g={TEST_CONTAINER_LABEL}'})
-        else:
-            containers = client.containers(all=True, filters={'id': agent_id})
-        for container in containers:
-            logger.info(f'Container id: {container["Id"]}. Status: {container["Status"]}')
-    except APIError as exc:
-        logger.error('Error checking container status', exc_info=exc)
-        raise
+@click.pass_context
+def status(ctx, agent_id):
+    """
+    Print status of the experimental container(s).
+
+    :param ctx: Passed from group Click context
+    :param agent_id: Id of the agent to print a status for
+    """
+    _test = is_test_environment()
+    container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
+    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+    get_status(agent_id=agent_id, logger=logger, containers_label=f'{KEY_CONTAINER_LABEL}={container_label}',
+               docker_client=client)
 
 
-@test.command()
-@click.option('--agent-id', type=str)
+@local.command()
+@click.option('--agent-id', type=str, required=True)
 @click.option(
     '--follow',
     is_flag=True,
     show_default=True,
     default=False,
-    help="Delete created agents containers"
+    help="Follow log output"
 )
 @click.option('--tail', type=str, default='all')
-def logs(agent_id, follow, tail):
-    client = APIClient(base_url='unix://var/run/docker.sock')
-    if tail != 'all':
-        try:
-            tail = int(tail)
-        except ValueError:
-            logger.warning('Invalid `tail` argument. Must be positive int or `all`. Defaulting to `10`.')
-            tail = 10
-    try:
-        logs_gen = client.logs(container=agent_id, follow=follow, stream=True, tail=tail)
-        for log in logs_gen:
-            print(log.decode().strip())
-    except APIError as exc:
-        logger.error('Error retrieving container logs', exc_info=exc)
-        raise
+@click.pass_context
+def logs(ctx, agent_id, follow, tail):
+    """
+    Print logs of the experimental container.
+
+    :param ctx: Passed from group Click context
+    :param agent_id: Id of the agent to print a status for
+    :param follow: Whether to continue streaming the new output from the logs
+    :param tail: Number of lines to show from the end of the logs
+    """
+    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+    get_logs(
+        agent_id=agent_id,
+        tail=tail,
+        follow=follow,
+        docker_client=client,
+    )
+
+
+@cli.group()
+@click.pass_context
+@click.option(
+    '--single-process',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Run single-node single-process (multi-thread) test."
+)
+@click.option(
+    '--multi-process',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Run single-node multi-process (dockerized) test."
+)
+def test(ctx, multi_process, single_process):
+    """
+    Local tests (multi-process / single process) mode command group.
+
+    :param ctx: Click context passed through into group`s commands
+    :param single_process: Run tests on single process experiment
+    :param multi_process: Run tests on multiple process (dockerized) experiment
+    """
+    if multi_process and not single_process:
+        click.echo('Manage multi-process single-node tests')
+    elif single_process and not multi_process:
+        click.echo('Manage single-process (multi-thread) single-node tests')
+    else:
+        raise SyntaxError('Either `--single-process` or `--multi-process` flag can be set.')
+    ctx.obj = dict()
+    ctx.obj['multi_process'] = multi_process
+    ctx.obj['single_process'] = single_process
+
+
+@test.command()
+@click.pass_context
+@click.option('--config-path', type=str, required=True)
+def start(ctx, config_path):
+    """
+    Start local test experiment.
+    For a multiprocess mode run integration tests on started VFL master and members containers.
+
+    :param ctx: Passed from group Click context
+    :param config_path: Path to the VFL config file
+    """
+    config = VFLConfig.load_and_validate(config_path)
+    if ctx.obj['multi_process'] and not ctx.obj['single_process']:
+        test_group_name = 'TestLocalGroupStart'
+        report_file_name = f'{test_group_name}-log-{config.common.experiment_label}.jsonl'
+        run_subprocess_command(
+            command=f"python -m pytest --test_config_path {config_path} "
+                    f"tests/distributed_grpc/integration_test.py -k '{test_group_name}' -x "
+                    f"--report-log={os.path.join(config.common.reports_export_folder, report_file_name)} "
+                    "-W ignore::DeprecationWarning",
+            logger_err_info="Failed running test",
+            cwd=Path(__file__).parent.parent,
+            shell=True
+        )
+    else:
+        # TODO
+        raise NotImplementedError
+
+
+@test.command()
+@click.pass_context
+@click.option('--config-path', type=str)
+@click.option(
+    '--no-tests',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Remove test containers without launching Pytest."
+)
+def stop(ctx, config_path, no_tests):
+    """
+    Stop local test experiment.
+    For a multiprocess mode run integration tests on stopped VFL master and members containers.
+
+    :param ctx: Passed from group Click context
+    :param config_path: Path to the VFL config file
+    :param no_tests: Whether to discard testing and remove test containers only
+    """
+    if config_path is None and not no_tests:
+        raise SyntaxError('Specify `--config-path` or pass flag `--no-tests`')
+    if no_tests:
+        _test = 1
+        if ctx.obj['multi_process'] and not ctx.obj['single_process']:
+            logger.info('Removing test containers')
+            client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+            try:
+                container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
+                containers = client.containers(all=True, filters={'label': f'{KEY_CONTAINER_LABEL}={container_label}'})
+                for container in containers:
+                    logger.info(f'Stopping and removing {container["Id"]}')
+                    client.stop(container)
+                    client.remove_container(container)
+            except APIError as exc:
+                logger.error('Error while stopping (and removing) containers', exc_info=exc)
+            return
+    config = VFLConfig.load_and_validate(config_path)
+    if ctx.obj['multi_process'] and not ctx.obj['single_process']:
+        test_group_name = 'TestLocalGroupStop'
+        report_file_name = f'{test_group_name}-log-{config.common.experiment_label}.jsonl'
+        run_subprocess_command(
+            command=f"python -m pytest --test_config_path {config_path} "
+                    f"tests/distributed_grpc/integration_test.py -k '{test_group_name}' -x "
+                    f"--report-log={os.path.join(config.common.reports_export_folder, report_file_name)} "
+                    "-W ignore::DeprecationWarning",
+            logger_err_info="Failed running test",
+            cwd=Path(__file__).parent.parent,
+            shell=True
+        )
+
+
+@test.command()
+@click.option('--agent-id', type=str, default=None)
+def status(agent_id):
+    """
+    Print status of the experimental test container(s).
+
+    :param ctx: Passed from group Click context
+    :param agent_id: Id of the agent to print a status for
+    """
+    _test = True
+    container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
+    get_status(agent_id=agent_id, containers_label=f'{KEY_CONTAINER_LABEL}={container_label}', logger=logger)
+
+
+@test.command()
+@click.option(
+    '--agent-id',
+    type=str,
+    default=None,
+    help='If the `agent-id` is passed, show container logs, otherwise, prints test report')
+@click.option('--tail', type=str, default='all')
+@click.option('--config-path', type=str, default=None)
+def logs(agent_id, config_path, tail):
+    """
+    Print logs of the experimental test container or return path to tests` logs.
+
+    :param agent_id: Id of the agent to print a status for (for container logs). If not passed, print Pytest report
+    :param config_path: Path to the VFL config file
+    :param tail: Number of lines to show from the end of the logs (for container logs)
+    """
+    if agent_id is None and config_path is None:
+        raise SyntaxError('Either `--agent-id` or `--config-path` argument must be specified.')
+    if agent_id is not None:
+        get_logs(agent_id=agent_id, tail=tail)
+    if config_path is not None:
+        config = VFLConfig.load_and_validate(config_path)
+        logger.info(f'Test-report-logs path: {config.common.reports_export_folder}')
 
 
 @cli.command()
-@click.option('--config-path', type=str)
+@click.option('--config-path', type=str, required=True)
 def predict():
     click.echo('Run VFL predictions')
     # TODO
@@ -489,29 +633,73 @@ def predict():
 
 @cli.group()
 def report():
+    """ Experimental report command group. """
     click.echo('Get report on the experiment')
 
 
 @report.command()
-@click.option('--config-path', type=str)
-@click.option('--report-save-path', type=str)
-def export():
-    # TODO
-    raise NotImplementedError
+@click.option('--config-path', type=str, required=True)
+@click.option(
+    '--report-save-dir',
+    type=str,
+    default=None,
+    help='If not specified, uses `config.common.reports_export_folder` path to save results'
+)
+def export(config_path, report_save_dir):
+    """
+    Export MlFlow results into CSV format.
+
+    :param config_path: Path to the VFL config file
+    :param report_save_dir: Directory to save report. If not specified `config.common.reports_export_folder` is used
+    """
+    config = VFLConfig.load_and_validate(config_path)
+    file_name = f'mlflow-experiment-{config.common.experiment_label}.csv'
+    if report_save_dir is not None:
+        os.makedirs(os.path.dirname(report_save_dir), exist_ok=True)
+        save_dir = os.path.abspath(report_save_dir)
+    else:
+        save_dir = os.path.abspath(config.common.reports_export_folder)
+    _mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
+    response_mlflow = _mlflow.search_runs(experiment_names=[config.common.experiment_label])
+    assert response_mlflow.shape[0] != 0, 'MlFlow returned empty dataframe. Skipping saving report'
+    full_save_path = os.path.join(save_dir, file_name)
+    response_mlflow.to_csv(full_save_path)
+    logger.info(f'Saved MlFlow report to: {full_save_path}')
 
 
 @report.command()
-@click.option('--config-path', type=str)
-def mlflow():
-    # TODO
-    raise NotImplementedError
+@click.option('--config-path', type=str, required=True)
+def mlflow(config_path):
+    """
+    Print URI of the MlFlow experiment.
+
+    :param config_path: Path to the VFL config file
+    """
+    config = VFLConfig.load_and_validate(config_path)
+    mlflow_uri = f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}"
+    _mlflow.set_tracking_uri(mlflow_uri)
+    response_mlflow = _mlflow.get_experiment_by_name(config.common.experiment_label)
+    if response_mlflow is None:
+        logger.info(f'Experiment {config.common.experiment_label} not found. MlFlow URI: {mlflow_uri}')
+    else:
+        logger.info(f'MlFLow URI of the current experiment: {mlflow_uri}/#/experiments/{response_mlflow.experiment_id}')
 
 
 @report.command()
-@click.option('--config-path', type=str)
-def prometheus():
-    # TODO
-    raise NotImplementedError
+@click.option('--config-path', type=str, required=True)
+def prometheus(config_path):
+    """
+    Print Prometheus and Grafana URIs.
+
+    :param config_path: Path to the VFL config file
+    """
+    config = VFLConfig.load_and_validate(config_path)
+    logger.info(
+        'Prometheus UI is available at: '
+        f'http://{config.prerequisites.prometheus_host}:{config.prerequisites.prometheus_port}. '
+        'Additionally, you can explore results in Grafana: '
+        f'http://{config.prerequisites.prometheus_host}:{config.prerequisites.grafana_port}'
+    )
 
 
 if __name__ == "__main__":
