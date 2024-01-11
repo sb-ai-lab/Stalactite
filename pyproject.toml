@@ -33,6 +33,8 @@ grpcio-tools = "^1.59.3"
 [tool.poetry.group.test.dependencies]
 pytest = "^7.4.3"
 pytest-docker = "^2.0.1"
+pytest-timeout = "^2.2.0"
+pytest-reportlog = "^0.4.0"
 
 [tool.poetry.scripts]
 stalactite = "stalactite.main:cli"
