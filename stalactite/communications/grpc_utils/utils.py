@@ -10,17 +10,22 @@ from typing import Any, Optional
 import grpc
 import torch
 import safetensors.torch
+from prometheus_client import Gauge
 
 from stalactite.communications.grpc_utils.generated_code import communicator_pb2
 from stalactite.base import ParticipantFuture
 
-
 logger = logging.getLogger(__name__)
+
+
+class PrometheusMetric(enum.Enum):
+    number_of_connected_agents = Gauge('number_of_connected_agents', 'Active clients number', ['experiment_label'])
 
 
 class UnsupportedError(Exception):
     def __init__(self, message: str = "Unsupported method for class."):
         super().__init__(message)
+
 
 @contextmanager
 def start_thread(*args, thread_timeout: float = 100., **kwargs):

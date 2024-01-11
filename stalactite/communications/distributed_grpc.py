@@ -12,6 +12,7 @@ import uuid
 
 import grpc
 import torch
+from prometheus_client import start_http_server
 
 from stalactite.base import (
     PartyMaster,
@@ -56,8 +57,10 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
 
     def raise_if_not_ready(self):
         if not self.is_ready:
-            raise RuntimeError("Cannot proceed because communicator is not ready. "
-                               "Perhaps, rendezvous has not been called or was unsuccessful")
+            raise RuntimeError(
+                "Cannot proceed because communicator is not ready. "
+                "Perhaps, rendezvous has not been called or was unsuccessful"
+            )
 
     def prepare_task(
             self,
@@ -113,6 +116,10 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             server_thread_pool_size: int = 10,
             max_message_size: int = -1,
             rendezvous_timeout: float = 3600.,
+            disconnect_idle_client_time: float = 120.,
+            prometheus_server_port: int = 8080,
+            run_prometheus: bool = False,
+            experiment_label: Optional[str] = None,
             **kwargs,
     ):
         """
@@ -125,6 +132,10 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         :param server_thread_pool_size: Number of threadpool workers processing connections on the gRPC server
         :param max_message_size: Maximum message length that the gRPC channel can send or receive. -1 means unlimited
         :param rendezvous_timeout: Maximum time to wait until all the members are connected
+        :param disconnect_idle_client_time: Time in seconds to wait after a client`s last heartbeat to consider the
+               client disconnected
+        :param prometheus_server_port: HTTP server on master started to report metrics to Prometheus
+        :param run_prometheus: Whether to report heartbeat metrics to Prometheus
         """
         self.participant = participant
         self.world_size = world_size
@@ -133,6 +144,10 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.server_thread_pool_size = server_thread_pool_size
         self.max_message_size = max_message_size
         self.rendezvous_timeout = rendezvous_timeout
+        self.disconnect_idle_client_time = disconnect_idle_client_time
+        self.run_prometheus = run_prometheus
+        self.prometheus_server_port = prometheus_server_port
+        self.experiment_label = experiment_label
 
         self.server_thread: Optional[threading.Thread] = None
         self.asyncio_event_loop = None
@@ -161,7 +176,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
     @property
     def members(self) -> list[str]:
         """ List the VFL agent members` ids connected to the server. """
-        return list(self.servicer.connected_clients)
+        return list(self.servicer.connected_clients.keys())
 
     def randezvous(self) -> None:
         """ Wait until all the VFL agent members are connected to the gRPC server. """
@@ -351,6 +366,9 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         tasks from the main loop.
         """
         try:
+            if self.run_prometheus:
+                logger.info(f'Prometheus experiment label: {self.experiment_label}')
+                start_http_server(port=self.prometheus_server_port)
             self.servicer = GRpcCommunicatorServicer(
                 world_size=self.world_size,
                 master_id=self.participant.id,
@@ -359,6 +377,9 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 threadpool_max_workers=self.server_thread_pool_size,
                 max_message_size=self.max_message_size,
                 logging_level=self.logging_level,
+                disconnect_idle_client_time=self.disconnect_idle_client_time,
+                run_prometheus=self.run_prometheus,
+                experiment_label=self.experiment_label,
             )
             with start_thread(
                     target=self._run_coroutine,
