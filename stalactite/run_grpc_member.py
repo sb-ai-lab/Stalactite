@@ -6,15 +6,16 @@ import pickle
 from typing import Any
 
 import click
+import numpy as np
+import torch
 
-from stalactite.utils import load_yaml_config, VFLConfig
+from stalactite.configs import VFLConfig
 from stalactite.communications import GRpcMemberPartyCommunicator
 from stalactite.party_member_impl import PartyMemberImpl
 from stalactite.models.linreg_batch import LinearRegressionBatch
 from stalactite.data_loader import AttrDict
 
 
-#
 @dataclass
 class MemberData:
     model_update_dim_size: int
@@ -35,6 +36,10 @@ def prepare_data(config: VFLConfig, member_rank: int) -> MemberData:
         datasets_list = pickle.load(f)['data']
 
     random.seed(config.data.random_seed)
+    np.random.seed(config.data.random_seed)
+    torch.manual_seed(config.data.random_seed)
+    torch.cuda.manual_seed_all(config.data.random_seed)
+    torch.backends.cudnn.deterministic = True
     num_dataset_records = [200 + random.randint(100, 1000) for _ in range(config.common.world_size)]
     shared_record_uids = [str(i) for i in range(config.data.dataset_size)]
     members_datasets_uids = [
@@ -81,7 +86,7 @@ def get_party_member(config: VFLConfig, member_rank: int):
 @click.option('--config-path', type=str, default='../configs/config.yml')
 def main(config_path):
     member_rank = int(os.environ.get('RANK', 0))
-    config = VFLConfig.model_validate(load_yaml_config(config_path))
+    config = VFLConfig.load_and_validate(config_path)
 
     grpc_host = os.environ.get('GRPC_SERVER_HOST', config.grpc_server.host)
 
@@ -90,6 +95,7 @@ def main(config_path):
         master_host=grpc_host,
         master_port=config.grpc_server.port,
         logging_level=config.member.logging_level,
+        heartbeat_interval=config.member.heartbeat_interval,
     )
     comm.run()
 

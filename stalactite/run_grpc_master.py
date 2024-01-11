@@ -1,15 +1,15 @@
-import time
 from dataclasses import dataclass
 import random
 import os
 import pickle
-from pathlib import Path
 
 import click
 import mlflow
+import numpy as np
+import torch
 
 from stalactite.communications import GRpcMasterPartyCommunicator
-from stalactite.utils import load_yaml_config, VFLConfig
+from stalactite.configs import VFLConfig
 from stalactite.party_master_impl import PartyMasterImpl
 from stalactite.base import DataTensor
 
@@ -23,6 +23,11 @@ class MasterData:
 
 def prepare_data(config: VFLConfig) -> MasterData:
     random.seed(config.data.random_seed)
+    np.random.seed(config.data.random_seed)
+    torch.manual_seed(config.data.random_seed)
+    torch.cuda.manual_seed_all(config.data.random_seed)
+    torch.backends.cudnn.deterministic = True
+
     shared_uids_count = config.data.dataset_size
     shared_record_uids = [str(i) for i in range(shared_uids_count)]
     target_uids = shared_record_uids
@@ -48,7 +53,6 @@ def get_party_master(
         batch_size: int = 10,
         run_mlflow: bool = False,
 ):
-    # TODO PartyMasterImpl
     return PartyMasterImpl(
         uid="master",
         epochs=epochs,
@@ -65,10 +69,10 @@ def get_party_master(
 @click.command()
 @click.option('--config-path', type=str, default='../configs/config.yml')
 def main(config_path):
-    config = VFLConfig.model_validate(load_yaml_config(config_path))
-    if config.prerequisites.run_mlflow:
+    config = VFLConfig.load_and_validate(config_path)
+    if config.master.run_mlflow:
         mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
-        mlflow.set_experiment('grpc-experiment')
+        mlflow.set_experiment(config.common.experiment_label)
         mlflow.start_run()
 
     data = prepare_data(config)
@@ -78,7 +82,7 @@ def main(config_path):
         report_train_metrics_iteration=config.common.report_train_metrics_iteration,
         report_test_metrics_iteration=config.common.report_test_metrics_iteration,
         batch_size=config.common.batch_size,
-        run_mlflow=config.prerequisites.run_mlflow
+        run_mlflow=config.master.run_mlflow
     )
     comm = GRpcMasterPartyCommunicator(
         participant=party_master,
@@ -87,9 +91,12 @@ def main(config_path):
         host=config.grpc_server.host,
         max_message_size=config.grpc_server.max_message_size,
         logging_level=config.master.logging_level,
+        prometheus_server_port=config.prerequisites.prometheus_server_port,
+        run_prometheus=config.master.run_prometheus,
+        experiment_label=config.common.experiment_label,
     )
     comm.run()
-    if config.prerequisites.run_mlflow:
+    if config.master.run_mlflow:
         mlflow.end_run()
 
 

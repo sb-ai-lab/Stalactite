@@ -4,11 +4,16 @@ from pathlib import Path
 from typing import Union, Literal
 import warnings
 
-import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
+import yaml
 
 
 def raise_path_not_exist(path: str):
+    """
+    Helper function to raise if path does not exist.
+
+    :param path: Path to the file / directory
+    """
     if not os.path.exists(path):
         raise FileExistsError(f'Path {path} does not exist')
 
@@ -48,6 +53,11 @@ class AttrDict(dict):
 
 
 def load_yaml_config(yaml_path: Union[str, Path]) -> dict:
+    """
+    Load YAML file from yaml_path.
+
+    :param yaml_path: Path of the YAML file to load
+    """
     if not os.path.exists(yaml_path):
         raise ValueError(f"Configuration file at `config-path` {yaml_path} does not exist")
 
@@ -59,10 +69,7 @@ def load_yaml_config(yaml_path: Union[str, Path]) -> dict:
 
 
 class CommonConfig(BaseModel):
-    """
-    Common experimental parameters config.
-    """
-    # random_seed: int = Field(description='Experiment random seed (including random, numpy, torch)')
+    """ Common experimental parameters config. """
     epochs: int = Field(description='Number of epochs to train a model')
     world_size: int = Field(description='Number of the VFL member agents (without the master)')
     report_train_metrics_iteration: int = Field(default=1)
@@ -85,18 +92,14 @@ class CommonConfig(BaseModel):
 
 
 class DataConfig(BaseModel):
-    """
-    Experimental data parameters config
-    """
+    """ Experimental data parameters config. """
     random_seed: int = Field(default=0, description='Experiment data random seed (including random, numpy, torch)')
     dataset_size: int = Field(description='Number of dataset rows to use')
     host_path_data_dir: str = Field(description='Path to datasets` directory')
 
 
 class PrerequisitesConfig(BaseModel):
-    """
-    Prerequisites parameters config
-    """
+    """ Prerequisites parameters config. """
     mlflow_host: str = Field(default='0.0.0.0', description='MlFlow host')
     mlflow_port: str = Field(default='5000', description='MlFlow port')
     prometheus_host: str = Field(default='0.0.0.0', description='Prometheus host')
@@ -106,9 +109,7 @@ class PrerequisitesConfig(BaseModel):
 
 
 class GRpcServerConfig(BaseModel):
-    """
-    gRPC server and servicer parameters config
-    """
+    """ gRPC server and servicer parameters config. """
     host: str = Field(default='0.0.0.0', description='Host of the gRPC server and servicer')
     port: str = Field(default='50051', description='Port of the gRPC server')
     max_message_size: int = Field(
@@ -118,9 +119,7 @@ class GRpcServerConfig(BaseModel):
 
 
 class PartyConfig(BaseModel):
-    """
-    VFL base party parameters config
-    """
+    """ VFL base parties` parameters config. """
     logging_level: Literal['debug', 'info', 'warning'] = Field(default='info', description='Logging level')
 
     @field_validator('logging_level')
@@ -135,9 +134,7 @@ class PartyConfig(BaseModel):
 
 
 class MasterConfig(PartyConfig):
-    """
-    VFL master party parameters config
-    """
+    """ VFL master party`s parameters config. """
     run_mlflow: bool = Field(default=False, description='Whether to log metrics to MlFlow')
     run_prometheus: bool = Field(default=False, description='Whether to log heartbeats to Prometheus')
     disconnect_idle_client_time: float = Field(
@@ -147,16 +144,12 @@ class MasterConfig(PartyConfig):
 
 
 class MemberConfig(PartyConfig):
-    """
-    VFL member party parameters config
-    """
+    """ VFL member parties` parameters config. """
     heartbeat_interval: float = Field(default=2., description='Time in seconds to sent heartbeats to master.')
 
 
 class DockerConfig(BaseModel):
-    """
-    Docker client parameters config
-    """
+    """ Docker client parameters config. """
     docker_compose_path: str = Field(
         default='../prerequisites',
         description='Path to the directory containing docker-compose.yml'
@@ -175,9 +168,7 @@ class DockerConfig(BaseModel):
 
 
 class VFLConfig(BaseModel):
-    """
-    Experimental parameters general config
-    """
+    """ Experimental parameters general config. """
     common: CommonConfig
     data: DataConfig
     prerequisites: PrerequisitesConfig
