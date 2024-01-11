@@ -1,14 +1,11 @@
-# This config is not meant to be changed (except for empty fields) as it is used in tests.
-# Set directories paths before running tests. For experiments, copy the file contents into `config.yml`
-
 common:
-  epochs: 1
+  epochs: 5
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 2
+  world_size: 3
   batch_size: 1000
-  experiment_label: test-experiment-0
-  reports_export_folder: # todo: Path to export tests logs and reports
+  experiment_label: experiment-0
+  reports_export_folder: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/reports"
 
 prerequisites:
   mlflow_host: 'node3.bdcl'
@@ -20,7 +17,7 @@ prerequisites:
 data:
   random_seed: 0
   dataset_size: 1000
-  host_path_data_dir: # todo: Path to directory containing pickled datasets
+  host_path_data_dir: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data"
 
 grpc_server:
   host: '0.0.0.0'
@@ -37,6 +34,7 @@ member:
   logging_level: 'debug'
   heartbeat_interval: 2.
 
+
 docker:
   docker_compose_command: "docker compose"
-  docker_compose_path: # todo: Path to the docker-compose.yml file and prerequisites configs/
+  docker_compose_path: '/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/prerequisites'
