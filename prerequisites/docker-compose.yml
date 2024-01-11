@@ -1,29 +1,29 @@
 version: '3.9'
 
 services:
-#  prometheus-db:
-#    image: prom/prometheus
-#    ports:
-#      - "9090:9090"
-#    volumes:
-#      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml
-##      - prometheus_storage:/prometheus
-#    networks:
-#      - vfl-network
-#
-#  grafana:
-#    image: grafana/grafana-enterprise
-#    ports:
-#      - "3001:3000"
-#    volumes:
-#      - ./configs/grafana_provisioning/datasources:/etc/grafana/provisioning/datasources
-#      - ./configs/grafana_provisioning/dashboards:/etc/grafana/provisioning/dashboards
-##      - grafana_storage:/var/lib/grafana
-#    environment:
-#      - PROMETHEUS_HOST=prometheus-db
-#      - PROMETHEUS_PORT=9090
-#    networks:
-#      - vfl-network
+  prometheus-db:
+    image: prom/prometheus
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+    volumes:
+      -  "${DOCKER_COMPOSE_PATH}/configs/prometheus.yml:/etc/prometheus/prometheus.yml"
+#      - prometheus_storage:/prometheus
+    networks:
+      - vfl-network
+
+  grafana:
+    image: grafana/grafana-enterprise
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    volumes:
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/datasources:/etc/grafana/provisioning/datasources"
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/dashboards:/etc/grafana/provisioning/dashboards"
+#      - grafana_storage:/var/lib/grafana
+    environment:
+      - PROMETHEUS_HOST=prometheus-db
+      - PROMETHEUS_PORT=${PROMETHEUS_PORT}
+    networks:
+      - vfl-network
 
   mlflow-vfl:
     image: anastasiiazakharova/mlflow-server:2.3
@@ -50,8 +50,6 @@ services:
       - PGDATA=/var/lib/postgresql/data/pgdata
 #    volumes:
 #      - /postgresql/data:/var/lib/postgresql/data
-#    ports:
-#      - 5432:5432
     networks:
       - vfl-network
 
