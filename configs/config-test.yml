@@ -1,20 +1,26 @@
+# This config is not meant to be changed (except for empty fields) as it is used in tests.
+# Set directories paths before running tests. For experiments, copy the file contents into `config.yml`
+
 common:
-  random_seed: 0
-  epochs: 2
+  epochs: 1
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
   batch_size: 1000
+  experiment_label: test-experiment-0
+  reports_export_folder: # todo: Path to export tests logs and reports
 
 prerequisites:
-  run_mlflow: True
   mlflow_host: 'node3.bdcl'
   mlflow_port: '5555'
+  prometheus_host: 'node3.bdcl'
+  prometheus_port: '9090'
+  grafana_port: '3001'
 
 data:
   random_seed: 0
   dataset_size: 1000
-  host_path_data_dir: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data"
+  host_path_data_dir: # todo: Path to directory containing pickled datasets
 
 grpc_server:
   host: '0.0.0.0'
@@ -22,12 +28,15 @@ grpc_server:
   max_message_size: -1
 
 master:
+  run_mlflow: True
+  run_prometheus: True
   logging_level: 'debug'
+  disconnect_idle_client_time: 120.
 
 member:
   logging_level: 'debug'
-
+  heartbeat_interval: 2.
 
 docker:
   docker_compose_command: "docker compose"
-  docker_compose_path: '/src/vf-benchmark/prerequisites'
+  docker_compose_path: # todo: Path to the docker-compose.yml file and prerequisites configs/
