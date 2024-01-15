@@ -27,6 +27,11 @@ class UnsupportedError(Exception):
         super().__init__(message)
 
 
+class ArbiterServerError(Exception):
+    def __init__(self, message: str = "Arbiter server could not process the request."):
+        super().__init__(message)
+
+
 @contextmanager
 def start_thread(*args, thread_timeout: float = 100., **kwargs):
     thread = threading.Thread(*args, **kwargs)
