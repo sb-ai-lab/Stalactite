@@ -6,7 +6,7 @@ from typing import ClassVar as _ClassVar, Mapping as _Mapping, Optional as _Opti
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class HB(_message.Message):
-    __slots__ = ["agent_name", "status"]
+    __slots__ = ("agent_name", "status")
     AGENT_NAME_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     agent_name: str
@@ -14,16 +14,16 @@ class HB(_message.Message):
     def __init__(self, agent_name: _Optional[str] = ..., status: _Optional[str] = ...) -> None: ...
 
 class MainMessage(_message.Message):
-    __slots__ = ["message_type", "require_answer", "status", "task_id", "parent_id", "from_uid", "method_name", "tensor_kwargs", "other_kwargs"]
+    __slots__ = ("message_type", "require_answer", "status", "task_id", "parent_id", "from_uid", "method_name", "tensor_kwargs", "other_kwargs")
     class TensorKwargsEntry(_message.Message):
-        __slots__ = ["key", "value"]
+        __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: bytes
         def __init__(self, key: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
     class OtherKwargsEntry(_message.Message):
-        __slots__ = ["key", "value"]
+        __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
