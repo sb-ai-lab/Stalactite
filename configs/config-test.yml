@@ -8,7 +8,7 @@ common:
   world_size: 2
   batch_size: 1000
   experiment_label: test-experiment-0
-  reports_export_folder: # todo: Path to export tests logs and reports
+  reports_export_folder: "." # todo: Path to export tests logs and reports
 
 prerequisites:
   mlflow_host: 'node3.bdcl'
@@ -20,7 +20,7 @@ prerequisites:
 data:
   random_seed: 0
   dataset_size: 1000
-  host_path_data_dir: # todo: Path to directory containing pickled datasets
+  host_path_data_dir: "." # todo: Path to directory containing pickled datasets
 
 grpc_server:
   host: '0.0.0.0'
@@ -37,6 +37,26 @@ member:
   logging_level: 'debug'
   heartbeat_interval: 2.
 
+grpc_arbiter:
+  container_host: 'node3.bdcl'
+  host: '0.0.0.0'
+  port: '50052'
+  max_message_size: -1
+  server_threadpool_max_workers: 10
+  use_arbiter: True
+  ts_algorithm: CKKS
+  ts_poly_modulus_degree: 8192
+  ts_coeff_mod_bit_sizes:
+    - 60
+    - 40
+    - 40
+    - 60
+  ts_global_scale_pow: 20
+  ts_generate_relin_keys: True
+  ts_generate_galois_keys: True
+#  ts_context_path: "." # todo: Path to file with serialized Tenseal context
+
 docker:
   docker_compose_command: "docker compose"
-  docker_compose_path: # todo: Path to the docker-compose.yml file and prerequisites configs/
+  docker_compose_path: "." # todo: Path to the docker-compose.yml file and prerequisites configs/
+
