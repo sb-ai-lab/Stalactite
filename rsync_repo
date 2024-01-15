@@ -82,6 +82,7 @@ function sync() {
         --exclude 'storage' \
         --exclude '.DS_Store' \
         --exclude 'mlruns' \
+        --exclude '.pytest_cache' \
         "$from" $to
 }
 

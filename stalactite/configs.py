@@ -1,11 +1,12 @@
 import logging
 import os
 from pathlib import Path
-from typing import Union, Literal
+from typing import Union, Literal, Optional
 import warnings
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 import yaml
+import tenseal as ts
 
 
 def raise_path_not_exist(path: str):
@@ -108,14 +109,52 @@ class PrerequisitesConfig(BaseModel):
     prometheus_server_port: int = 8765
 
 
-class GRpcServerConfig(BaseModel):
-    """ gRPC server and servicer parameters config. """
+class GRpcConfig(BaseModel):
+    """ gRPC base parameters config. """
     host: str = Field(default='0.0.0.0', description='Host of the gRPC server and servicer')
     port: str = Field(default='50051', description='Port of the gRPC server')
     max_message_size: int = Field(
         default=-1,
-        description='Maximum message length that the gRPC channel can send or receive. -1 means unlimited.'
+        description='Maximum message length that the gRPC channel can send or receive. -1 means unlimited'
     )
+    server_threadpool_max_workers: int = Field(default=10, description='Concurrent future number of workers')
+
+
+class GRpcServerConfig(GRpcConfig):
+    """ gRPC server and servicer parameters config. """
+
+
+class GRpcArbiterConfig(GRpcConfig):
+    """ gRPC arbiter server and servicer parameters config. """
+    container_host: str = Field(default='0.0.0.0', description='Host of the arbiter container')
+    use_arbiter: bool = Field(default=False, description='Whether to include arbiter for VFL with HE')
+    ts_algorithm: Literal['CKKS', 'BFV'] = Field(default='CKKS', description='Tenseal scheme to use')
+    ts_poly_modulus_degree: int = Field(default=8192, description='Tenseal `poly_modulus_degree` param')
+    ts_coeff_mod_bit_sizes: Optional[list[int]] = Field(default=None, description='Tenseal `coeff_mod_bit_sizes` param')
+    ts_global_scale_pow: int = Field(
+        default=20, description='Tenseal `global_scale` parameter will be calculated as 2 ** ts_global_scale_pow'
+    )
+    ts_plain_modulus: Optional[int] = Field(
+        default=None, description='Tenseal `plain_modulus` param. Should not be passed when the scheme is CKKS.'
+    )
+    ts_generate_galois_keys: bool = Field(
+        default=True,
+        description='Whether to generate galois keys (galois keys are required to do ciphertext rotations)'
+    )
+    ts_generate_relin_keys: bool = Field(
+        default=True,
+        description='Whether to generate relinearization keys (needed for encrypted multiplications)'
+    )
+    ts_context_path: Optional[str] = Field(default=None, description='Path to saved Tenseal private context file.')
+
+    @field_validator('ts_algorithm')
+    @classmethod
+    def validate_ts_algorithm(cls, v: str):
+        mapping = {
+            'CKKS': ts.SCHEME_TYPE.CKKS,
+            'BFV': ts.SCHEME_TYPE.BFV,
+        }
+        return mapping.get(v, ts.SCHEME_TYPE.CKKS)
 
 
 class PartyConfig(BaseModel):
@@ -173,6 +212,7 @@ class VFLConfig(BaseModel):
     data: DataConfig
     prerequisites: PrerequisitesConfig
     grpc_server: GRpcServerConfig
+    grpc_arbiter: GRpcArbiterConfig
     master: MasterConfig
     member: MemberConfig
     docker: DockerConfig
@@ -185,6 +225,15 @@ class VFLConfig(BaseModel):
                 f'IDLE client`s disconnection time on master (`master.disconnect_idle_client_time`) '
                 f'at least by 2 sec.\nCurrent values are {self.member.heartbeat_interval}, '
                 f'{self.master.disconnect_idle_client_time}, respectively.')
+
+        if self.grpc_arbiter.use_arbiter:
+            if f'{self.grpc_arbiter.host}:{self.grpc_arbiter.port}' \
+                    == f'{self.grpc_server.host}:{self.grpc_server.port}':
+                raise ValueError(
+                    f'Arbiter port {self.grpc_arbiter.port} is the same to '
+                    f'gRPC master server port {self.grpc_server.port}'
+                )
+
         return self
 
     @model_validator(mode='after')
