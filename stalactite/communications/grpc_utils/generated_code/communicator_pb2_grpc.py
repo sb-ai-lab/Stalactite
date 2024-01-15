@@ -41,15 +41,13 @@ class CommunicatorServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def BidiExchange(self, request_iterator, context):
-        """Bidirectional ping-pong to keep the connection alive
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UnaryExchange(self, request, context):
-        """Custom serialization of the tensors
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
