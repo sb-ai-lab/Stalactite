@@ -17,7 +17,6 @@ logger.addHandler(sh)
 
 class GRpcArbiterCommunicator:
     """ gRPC Arbiter communicator class. """
-
     def __init__(
             self,
             master_id: str,
@@ -26,15 +25,6 @@ class GRpcArbiterCommunicator:
             grpc_operations_timeout: float = 300.,
             max_message_size: int = -1,
     ):
-        """
-        Initialize GRpcArbiterCommunicator class.
-
-        :param master_id: ID of the VFL experiment master
-        :param arbiter_host: Host of the gRPC server
-        :param arbiter_port: Port of the gRPC server
-        :param grpc_operations_timeout: Timeout of the gRPC operations
-        :param max_message_size: Maximum message length that the gRPC channel can send or receive. -1 means unlimited
-        """
         self.master_id = master_id
         self.arbiter_host = arbiter_host
         self.arbiter_port = arbiter_port
@@ -47,7 +37,6 @@ class GRpcArbiterCommunicator:
 
     @property
     def is_initialized(self) -> bool:
-        """ Whether the arbiter was initialized. """
         return self._is_initialized
 
     def initialize_arbiter(self):
@@ -102,7 +91,7 @@ class GRpcArbiterCommunicator:
 
     @property
     def public_key(self) -> ts.Context:
-        """ Get public tenseal context, call server if run for the first time. """
+        """ Get public tenseal context, call server if run first time. """
         if self._tenseal_context is not None:
             return self._tenseal_context
         else:
