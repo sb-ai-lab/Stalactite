@@ -68,23 +68,18 @@ def start(config_path, detached):
     env_vars = get_env_vars(config)
     command = f"{config.docker.docker_compose_command}"
     run_subprocess_command(
-        command=command + ' build',
+        command=command + ' up' + (' -d' if detached else '') + ' --build',
         logger_err_info="Failed build process",
         cwd=config.docker.docker_compose_path,
         env=env_vars,
         shell=True
     )
-    run_subprocess_command(
-        command=command + ' up' + (' -d' if detached else ''),
-        logger_err_info="Failed launch",
-        cwd=config.docker.docker_compose_path,
-        env=env_vars,
-        shell=True
-    )
     if detached:
-        logger.info(f"MlFlow port: {config.prerequisites.mlflow_port}")
-        logger.info(f"Prometheus port: {config.prerequisites.prometheus_port}")
-        logger.info(f"Grafana port: {config.prerequisites.grafana_port}")
+        logger.info(
+            f"MlFlow port: {config.prerequisites.mlflow_port}\n"
+            f"Prometheus port: {config.prerequisites.prometheus_port}\n"
+            f"Grafana port: {config.prerequisites.grafana_port}"
+        )
 
 
 @prerequisites.command()

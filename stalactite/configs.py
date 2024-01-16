@@ -84,6 +84,7 @@ class CommonConfig(BaseModel):
         default=Path(__file__).parent,
         description='Folder for exporting tests` and experiments` reports'
     )
+    rendezvous_timeout: float = Field(default=3600, description='Initial agents rendezvous timeout in sec.')
 
     @field_validator('reports_export_folder')
     @classmethod
@@ -128,6 +129,7 @@ class GRpcArbiterConfig(GRpcConfig):
     """ gRPC arbiter server and servicer parameters config. """
     container_host: str = Field(default='0.0.0.0', description='Host of the arbiter container')
     use_arbiter: bool = Field(default=False, description='Whether to include arbiter for VFL with HE')
+    grpc_operations_timeout: float = Field(default=300, description='Timeout of the unary calls to gRPC arbiter server')
     ts_algorithm: Literal['CKKS', 'BFV'] = Field(default='CKKS', description='Tenseal scheme to use')
     ts_poly_modulus_degree: int = Field(default=8192, description='Tenseal `poly_modulus_degree` param')
     ts_coeff_mod_bit_sizes: Optional[list[int]] = Field(default=None, description='Tenseal `coeff_mod_bit_sizes` param')
@@ -180,12 +182,20 @@ class MasterConfig(PartyConfig):
         default=120.,
         description='Time in seconds to wait after a client`s last heartbeat to consider the client disconnected'
     )
+    time_between_idle_connections_checks: float = Field(
+        default=3., description='Time between checking which clients disconnected'
+    )
 
 
 class MemberConfig(PartyConfig):
     """ VFL member parties` parameters config. """
     heartbeat_interval: float = Field(default=2., description='Time in seconds to sent heartbeats to master.')
+    task_requesting_pings_interval: float = Field(
+        default=0.1,
+        description='Interval between new tasks requests from master'
 
+    )
+    sent_task_timout: float = Field(default=3600, description='Timeout of the unary endpoints calls to the gRPC')
 
 class DockerConfig(BaseModel):
     """ Docker client parameters config. """

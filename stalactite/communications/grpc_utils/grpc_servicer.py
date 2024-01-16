@@ -36,6 +36,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
             disconnect_idle_client_time: float = 120.,
             run_prometheus: bool = False,
             experiment_label: Optional[str] = None,
+            time_between_idle_connections_checks: float = 3.,
             **kwargs
     ) -> None:
         """
@@ -52,6 +53,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
                client disconnected
         :param run_prometheus: Whether to report heartbeat metrics to Prometheus
         :param experiment_label: Prometheus metrics label for current experiment
+        :param time_between_inactive_connections_checks: Time in sec between checking last client pings
         :param kwargs: Keyword arguments of the communicator_pb2_grpc.CommunicatorServicer class
         """
         super().__init__(*args, **kwargs)
@@ -64,6 +66,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         self.disconnect_idle_client_time = disconnect_idle_client_time
         self.run_prometheus = run_prometheus
         self.experiment_label = experiment_label
+        self.time_between_idle_connections_checks = time_between_idle_connections_checks
 
         if self.run_prometheus and self.experiment_label is None:
             raise RuntimeError('Experiment label (`experiment_label`) is not set. Cannot log heartbeats to Prometheus')
@@ -123,7 +126,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         Remove clients which have not sent HB message in `disconnect_idle_client_time` sec.
         """
         while True:
-            await asyncio.sleep(3.)
+            await asyncio.sleep(self.time_between_idle_connections_checks)
             items = list(self.connected_clients.items())
             for conn_id, last_ping in items:
                 if time.time() - last_ping > self.disconnect_idle_client_time:

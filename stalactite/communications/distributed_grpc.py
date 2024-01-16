@@ -120,6 +120,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             prometheus_server_port: int = 8080,
             run_prometheus: bool = False,
             experiment_label: Optional[str] = None,
+            time_between_idle_connections_checks: float = 3.,
             **kwargs,
     ):
         """
@@ -136,6 +137,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                client disconnected
         :param prometheus_server_port: HTTP server on master started to report metrics to Prometheus
         :param run_prometheus: Whether to report heartbeat metrics to Prometheus
+        :param experiment_label: Label of the experiment used in prerequisites
+        :param time_between_idle_connections_checks: Time in sec between checking last client pings
         """
         self.participant = participant
         self.world_size = world_size
@@ -148,6 +151,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.run_prometheus = run_prometheus
         self.prometheus_server_port = prometheus_server_port
         self.experiment_label = experiment_label
+        self.time_between_idle_connections_checks = time_between_idle_connections_checks
 
         self.server_thread: Optional[threading.Thread] = None
         self.asyncio_event_loop = None
@@ -380,6 +384,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 disconnect_idle_client_time=self.disconnect_idle_client_time,
                 run_prometheus=self.run_prometheus,
                 experiment_label=self.experiment_label,
+                time_between_idle_connections_checks=self.time_between_idle_connections_checks
             )
             with start_thread(
                     target=self._run_coroutine,

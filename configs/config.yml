@@ -6,6 +6,7 @@ common:
   batch_size: 1000
   experiment_label: experiment-0
   reports_export_folder: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/reports"
+  rendezvous_timeout: 3600
 
 prerequisites:
   mlflow_host: 'node3.bdcl'
@@ -23,24 +24,30 @@ grpc_server:
   host: '0.0.0.0'
   port: '50051'
   max_message_size: -1
+  server_thread_pool_size: 10
 
 master:
   run_mlflow: True
   run_prometheus: True
   logging_level: 'debug'
   disconnect_idle_client_time: 120.
+  time_between_idle_connections_checks: 3.
+
 
 member:
   logging_level: 'debug'
   heartbeat_interval: 2.
+  task_requesting_pings_interval: 0.1
+  sent_task_timout: 3600
 
 grpc_arbiter:
+  use_arbiter: True
   container_host: 'node3.bdcl'
   host: '0.0.0.0'
   port: '50052'
   max_message_size: -1
   server_threadpool_max_workers: 10
-  use_arbiter: True
+  grpc_operations_timeout: 300
   ts_algorithm: CKKS
   ts_poly_modulus_degree: 8192
   ts_coeff_mod_bit_sizes:
