@@ -18,6 +18,8 @@ class LogisticRegressionBatch(torch.nn.Module):
         self.linear = torch.nn.Linear(input_dim, output_dim, bias=False, device=None, dtype=None)
         self.criterion = torch.nn.BCEWithLogitsLoss()
         self.optimizer = torch.optim.SGD(self.linear.parameters(), lr=learning_rate)
+        # self.optimizer = torch.optim.Adam(self.linear.parameters(), lr=learning_rate)
+
 
     def forward(self, x):
         return self.linear(x)
