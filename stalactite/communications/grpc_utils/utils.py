@@ -10,7 +10,7 @@ from typing import Any, Optional
 import grpc
 import torch
 import safetensors.torch
-from prometheus_client import Gauge
+from prometheus_client import Gauge, Summary
 
 from stalactite.communications.grpc_utils.generated_code import communicator_pb2
 from stalactite.base import ParticipantFuture
@@ -18,8 +18,48 @@ from stalactite.base import ParticipantFuture
 logger = logging.getLogger(__name__)
 
 
+class MultiElementQueue:
+    _lock = threading.Lock()
+    elements = list()
+
+    def put(self, value):
+        with self._lock:
+            self.elements.append(value)
+
+    def get(self):
+        with self._lock:
+            self.elements.pop()
+
+    def get_all(self):
+        with self._lock:
+            values = self.elements
+            self.elements = list()
+        return values
+
+
 class PrometheusMetric(enum.Enum):
     number_of_connected_agents = Gauge('number_of_connected_agents', 'Active clients number', ['experiment_label'])
+    execution_time = Summary(
+        'member_task_execution_time',
+        'Execution time in sec of the tasks on members',
+        ['experiment_label', 'client_id', 'task_type']
+    )
+    message_size = Summary(
+        'member_task_message_size',
+        'Size of the returned by member message containing results',
+        ['experiment_label', 'client_id', 'task_type']
+    )
+    send_client_time = Summary(
+        'member_send_time',
+        'Time of the unary send operation to master until an acknowledgment is received',
+        ['experiment_label', 'client_id', 'task_type']
+    )
+    iteration_times = Summary(
+        'master_iteration_time',
+        'Time of iterations in the training loop',
+        ['experiment_label', 'iteration']
+    )
+
 
 
 class UnsupportedError(Exception):

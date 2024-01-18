@@ -126,7 +126,7 @@ class GRpcServerConfig(GRpcConfig):
 
 class GRpcArbiterConfig(GRpcConfig):
     """ gRPC arbiter server and servicer parameters config. """
-    container_host: str = Field(default='0.0.0.0', description='Host of the arbiter container')
+    container_host: str = Field(default='0.0.0.0', description='Host of the container with gRPC arbiter service')
     use_arbiter: bool = Field(default=False, description='Whether to include arbiter for VFL with HE')
     ts_algorithm: Literal['CKKS', 'BFV'] = Field(default='CKKS', description='Tenseal scheme to use')
     ts_poly_modulus_degree: int = Field(default=8192, description='Tenseal `poly_modulus_degree` param')
@@ -174,6 +174,7 @@ class PartyConfig(BaseModel):
 
 class MasterConfig(PartyConfig):
     """ VFL master party`s parameters config. """
+    container_host: str = Field(default='0.0.0.0', description='Host of the master container with gRPC server.')
     run_mlflow: bool = Field(default=False, description='Whether to log metrics to MlFlow')
     run_prometheus: bool = Field(default=False, description='Whether to log heartbeats to Prometheus')
     disconnect_idle_client_time: float = Field(
