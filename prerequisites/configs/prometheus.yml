@@ -8,3 +8,4 @@ scrape_configs:
     - targets:
       - "master-agent-vfl:8765"
       - "master-agent-vfl-test:8765"
+      - "master-agent-vfl-distributed:8765"

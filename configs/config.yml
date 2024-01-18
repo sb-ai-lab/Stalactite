@@ -4,7 +4,7 @@ common:
   report_test_metrics_iteration: 1
   world_size: 2
   batch_size: 1000
-  experiment_label: experiment-distr-0
+  experiment_label: experiment-local
   reports_export_folder: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/reports"
   rendezvous_timeout: 3600
 
