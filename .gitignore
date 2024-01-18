@@ -162,3 +162,5 @@ mlruns
 .docker
 data
 rsync_repo
+reports/
+configs/config-local.yml

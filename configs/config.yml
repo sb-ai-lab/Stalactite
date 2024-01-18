@@ -2,9 +2,9 @@ common:
   epochs: 5
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 3
+  world_size: 2
   batch_size: 1000
-  experiment_label: experiment-0
+  experiment_label: experiment-distr-0
   reports_export_folder: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/reports"
   rendezvous_timeout: 3600
 
@@ -27,6 +27,7 @@ grpc_server:
   server_thread_pool_size: 10
 
 master:
+  container_host: 'node3.bdcl'
   run_mlflow: True
   run_prometheus: True
   logging_level: 'debug'

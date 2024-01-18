@@ -88,7 +88,7 @@ def main(config_path):
     member_rank = int(os.environ.get('RANK', 0))
     config = VFLConfig.load_and_validate(config_path)
 
-    grpc_host = os.environ.get('GRPC_SERVER_HOST', config.grpc_server.host)
+    grpc_host = os.environ.get('GRPC_SERVER_HOST', config.master.container_host)
 
     comm = GRpcMemberPartyCommunicator(
         participant=get_party_member(config, member_rank),

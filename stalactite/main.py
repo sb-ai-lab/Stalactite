@@ -16,9 +16,11 @@ from stalactite.configs import VFLConfig, raise_path_not_exist
 from stalactite.utils_main import (
     get_env_vars,
     run_subprocess_command,
-    get_status,
     is_test_environment,
+    build_base_image,
     get_logs,
+    get_status,
+    stop_containers,
     BASE_CONTAINER_LABEL,
     KEY_CONTAINER_LABEL,
     BASE_MASTER_CONTAINER_NAME,
@@ -26,6 +28,7 @@ from stalactite.utils_main import (
     BASE_IMAGE_FILE,
     BASE_IMAGE_TAG,
     PREREQUISITES_NETWORK,
+
 )
 
 logger = logging.getLogger(__name__)
@@ -130,69 +133,270 @@ def stop(config_path, remove, remove_volumes):
 
 
 @cli.group()
-def member():
+@click.pass_context
+def member(ctx):
     click.echo("Manage distributed (multi-node) members")
+    ctx.obj = dict()
+    postfix = '-distributed'
+    ctx.obj['member_container_label'] = BASE_CONTAINER_LABEL + postfix + '-member'
+    ctx.obj['member_container_name'] = lambda rank: BASE_MEMBER_CONTAINER_NAME + f'-{rank}' + postfix
 
 
 @member.command()
 @click.option('--config-path', type=str)
-def start(config_path):
-    # TODO
-    raise NotImplementedError
+@click.option(
+    '--rank',
+    type=int,
+    help='Rank of the member for correct data loading'
+)  # TODO remove after refactoring of the preprocessing
+@click.option(
+    '-d',
+    '--detached',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Run non-blocking start."
+)
+@click.pass_context
+def start(ctx, config_path, rank, detached):
+    config = VFLConfig.load_and_validate(config_path)
+    logger.info('Starting member for distributed experiment')
+    client = APIClient(base_url='unix://var/run/docker.sock')
+    logger.info('Building image for the member container. If build for the first time, it may take a while...')
+    try:
+        build_base_image(client, logger=logger)
+
+        logger.info(f'Starting gRPC member-{rank} container')
+
+        data_path = config.data.host_path_data_dir
+        configs_path = os.path.dirname(os.path.abspath(config_path))
+        raise_path_not_exist(configs_path)
+        raise_path_not_exist(data_path)
+
+        member_container = client.create_container(
+            image=BASE_IMAGE_TAG,
+            command=["python", "run_grpc_member.py", "--config-path", f"{os.path.abspath(config_path)}"],
+            detach=True,
+            environment={'RANK': rank},
+            labels={KEY_CONTAINER_LABEL: ctx.obj['member_container_label']},
+            volumes=[f'{data_path}', f'{configs_path}'],
+            host_config=client.create_host_config(
+                binds=[
+                    f'{configs_path}:{configs_path}:rw',
+                    f'{data_path}:{data_path}:rw',
+                ],
+            ),
+            name=ctx.obj['member_container_name'](rank),
+        )
+        logger.info(f'Member {rank} container id: {member_container.get("Id")}')
+        client.start(container=member_container.get('Id'))
+        if not detached:
+            output = client.attach(member_container, stream=True, logs=True)
+            try:
+                for log in output:
+                    print(log.decode().strip())
+            except KeyboardInterrupt:
+                client.stop(member_container)  # TODO question: stop if interrupted?
+    except APIError as exc:
+        logger.error(f'Error while starting member-{rank} container', exc_info=exc)
+        raise
 
 
 @member.command()
-@click.option('--config-path', type=str)
-def stop(config_path):
-    # TODO
-    raise NotImplementedError
+@click.option(
+    '--leave-containers',
+    is_flag=True,
+    show_default=False,
+    default=False,
+    help="Flag to retain created agents containers"
+)
+@click.pass_context
+def stop(ctx, leave_containers):
+    logger.info('Stopping members` containers')
+    client = APIClient(base_url='unix://var/run/docker.sock')
+    try:
+        container_label = ctx.obj['member_container_label']
+        containers = client.containers(all=True, filters={'label': f'{KEY_CONTAINER_LABEL}={container_label}'})
+        stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
+    except APIError as exc:
+        logger.error('Error while stopping (and removing) containers', exc_info=exc)
 
 
 @member.command()
-@click.option('--config-path', type=str)
-def status(config_path):
-    # TODO
-    raise NotImplementedError
+@click.option('--agent-id', type=str, default=None)
+@click.option('--rank', type=str, default=None)
+@click.pass_context
+def status(ctx, agent_id, rank):
+    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+    container_label = ctx.obj['member_container_label']
+    if agent_id is None and rank is None:
+        get_status(
+            agent_id=None,
+            logger=logger,
+            containers_label=f'{KEY_CONTAINER_LABEL}={container_label}',
+            docker_client=client
+        )
+        return
+    elif agent_id is not None:
+        container_name_or_id = agent_id
+    else:
+        container_name_or_id = ctx.obj['member_container_name'](rank)
+    get_status(
+        agent_id=container_name_or_id,
+        logger=logger,
+        containers_label=f'{KEY_CONTAINER_LABEL}={container_label}',
+        docker_client=client
+    )
 
 
 @member.command()
-@click.option('--config-path', type=str)
-def logs(config_path):
-    # TODO
-    raise NotImplementedError
+@click.option('--agent-id', type=str, default=None)
+@click.option('--rank', type=str, default=None)  # TODO rm after refactor?
+@click.option(
+    '--follow',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Follow log output"
+)
+@click.option('--tail', type=str, default='all')
+@click.pass_context
+def logs(ctx, agent_id, rank, follow, tail):
+    if agent_id is None and rank is None:
+        raise SyntaxError('Either `--agent-id` or `--rank` must be passed.')
+    if agent_id is not None:
+        container_name_or_id = agent_id
+    else:
+        container_name_or_id = ctx.obj['member_container_name'](rank)
+    client = APIClient(base_url='unix://var/run/docker.sock')
+    get_logs(
+        agent_id=container_name_or_id,
+        tail=tail,
+        follow=follow,
+        docker_client=client,
+    )
 
 
 @cli.group()
-def master():
+@click.pass_context
+def master(ctx):
     click.echo("Manage distributed (multi-node) master")
+    ctx.obj = dict()
+    postfix = '-distributed'
+    ctx.obj['master_container_label'] = BASE_CONTAINER_LABEL + postfix + '-master'
+    ctx.obj['master_container_name'] = BASE_MASTER_CONTAINER_NAME + postfix
 
 
 @master.command()
 @click.option('--config-path', type=str)
-def start(config_path):
-    # TODO
-    raise NotImplementedError
+@click.option(
+    '-d',
+    '--detached',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Run non-blocking start."
+)
+@click.pass_context
+def start(ctx, config_path, detached):
+    config = VFLConfig.load_and_validate(config_path)
+    logger.info('Starting master for distributed experiment')
+    client = APIClient(base_url='unix://var/run/docker.sock')
+    logger.info('Building image for the master container. If build for the first time, it may take a while...')
+    build_base_image(client, logger=logger)
+
+    data_path = config.data.host_path_data_dir
+    configs_path = os.path.dirname(os.path.abspath(config_path))
+    raise_path_not_exist(configs_path)
+    raise_path_not_exist(data_path)
+
+    try:
+        logger.info('Starting gRPC master container')
+
+        master_container = client.create_container(
+            image=BASE_IMAGE_TAG,
+            command=["python", "run_grpc_master.py", "--config-path", f"{os.path.abspath(config_path)}"],
+            detach=True,
+            labels={KEY_CONTAINER_LABEL: ctx.obj['master_container_label']},
+            volumes=[f'{data_path}', f'{configs_path}'],
+            host_config=client.create_host_config(
+                binds=[
+                    f'{configs_path}:{configs_path}:rw',
+                    f'{data_path}:{data_path}:rw',
+                ],
+                port_bindings={config.grpc_server.port: config.grpc_server.port},
+            ),
+            ports=[config.grpc_server.port],
+            name=ctx.obj['master_container_name'],
+        )
+        client.start(container=master_container.get('Id'))
+        logger.info(f'Master container id: {master_container.get("Id")}')
+        if not detached:
+            output = client.attach(master_container, stream=True, logs=True)
+            try:
+                for log in output:
+                    print(log.decode().strip())
+            except KeyboardInterrupt:
+                client.stop(master_container)  # TODO question: stop if interrupted?
+
+    except APIError as exc:
+        logger.error('Error while starting master container', exc_info=exc)
+        raise
 
 
 @master.command()
-@click.option('--config-path', type=str)
-def stop(config_path):
-    # TODO
-    raise NotImplementedError
+@click.option(
+    '--leave-containers',
+    is_flag=True,
+    show_default=False,
+    default=False,
+    help="Flag to retain created agents containers"
+)
+@click.pass_context
+def stop(ctx, leave_containers):
+    logger.info('Stopping master container')
+    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+    try:
+        containers = client.containers(all=True, filters={'name': ctx.obj['master_container_name']})
+        if len(containers) < 1:
+            logger.warning('Found 0 containers. Skipping.')
+            return
+        stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
+    except APIError as exc:
+        logger.error('Error while stopping (and removing) master container', exc_info=exc)
 
 
 @master.command()
-@click.option('--config-path', type=str)
-def status(config_path):
-    # TODO
-    raise NotImplementedError
+@click.pass_context
+def status(ctx):
+    container_label = ctx.obj['master_container_label']
+    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+    get_status(
+        agent_id=None,
+        logger=logger,
+        containers_label=f'{KEY_CONTAINER_LABEL}={container_label}',
+        docker_client=client
+    )
 
 
 @master.command()
-@click.option('--config-path', type=str)
-def logs(config_path):
-    # TODO
-    raise NotImplementedError
+@click.option(
+    '--follow',
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Follow log output"
+)
+@click.option('--tail', type=str, default='all')
+@click.pass_context
+def logs(ctx, follow, tail):
+    client = APIClient(base_url='unix://var/run/docker.sock')
+    get_logs(
+        agent_id=ctx.obj['master_container_name'],
+        tail=tail,
+        follow=follow,
+        docker_client=client,
+    )
 
 
 @cli.group()
@@ -247,21 +451,8 @@ def start(ctx, config_path):
     if ctx.obj['multi_process'] and not ctx.obj['single_process']:
         logger.info('Starting multi-process single-node experiment')
         client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
-        try:
-            logger.info('Building image of the agent. If build for the first time, it may take a while...')
-            _logs = client.build(
-                path=str(Path(os.path.abspath(__file__)).parent.parent),
-                tag=BASE_IMAGE_TAG,
-                quiet=True,
-                decode=True,
-                nocache=False,
-                dockerfile=os.path.join(Path(os.path.abspath(__file__)).parent.parent, 'docker', BASE_IMAGE_FILE),
-            )
-            for log in _logs:
-                logger.debug(log["stream"])
-        except APIError as exc:
-            logger.error('Error while building an image', exc_info=exc)
-            raise
+        logger.info('Building image of the agent. If build for the first time, it may take a while...')
+        build_base_image(client, logger=logger)
 
         if networks := client.networks(names=[PREREQUISITES_NETWORK]):
             network = networks.pop()['Name']
@@ -408,12 +599,7 @@ def stop(ctx, leave_containers):
         try:
             container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
             containers = client.containers(all=True, filters={'label': f'{KEY_CONTAINER_LABEL}={container_label}'})
-            for container in containers:
-                logger.info(f'Stopping {container["Id"]}')
-                client.stop(container)
-                if not leave_containers:
-                    logger.info(f'Removing {container["Id"]}')
-                    client.remove_container(container)
+            stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
         except APIError as exc:
             logger.error('Error while stopping (and removing) containers', exc_info=exc)
 
@@ -426,13 +612,17 @@ def status(ctx, agent_id):
     Print status of the experimental container(s).
 
     :param ctx: Passed from group Click context
-    :param agent_id: Id of the agent to print a status for
+    :param agent_id: ID of the agent to print a status for
     """
     _test = is_test_environment()
     container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
     client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
-    get_status(agent_id=agent_id, logger=logger, containers_label=f'{KEY_CONTAINER_LABEL}={container_label}',
-               docker_client=client)
+    get_status(
+        agent_id=agent_id,
+        logger=logger,
+        containers_label=f'{KEY_CONTAINER_LABEL}={container_label}',
+        docker_client=client
+    )
 
 
 @local.command()
@@ -451,7 +641,7 @@ def logs(ctx, agent_id, follow, tail):
     Print logs of the experimental container.
 
     :param ctx: Passed from group Click context
-    :param agent_id: Id of the agent to print a status for
+    :param agent_id: ID of the agent to print a status for
     :param follow: Whether to continue streaming the new output from the logs
     :param tail: Number of lines to show from the end of the logs
     """
@@ -557,10 +747,7 @@ def stop(ctx, config_path, no_tests):
             try:
                 container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
                 containers = client.containers(all=True, filters={'label': f'{KEY_CONTAINER_LABEL}={container_label}'})
-                for container in containers:
-                    logger.info(f'Stopping and removing {container["Id"]}')
-                    client.stop(container)
-                    client.remove_container(container)
+                stop_containers(client, containers, leave_containers=False, logger=logger)
             except APIError as exc:
                 logger.error('Error while stopping (and removing) containers', exc_info=exc)
             return
@@ -586,7 +773,7 @@ def status(agent_id):
     Print status of the experimental test container(s).
 
     :param ctx: Passed from group Click context
-    :param agent_id: Id of the agent to print a status for
+    :param agent_id: ID of the agent to print a status for
     """
     _test = True
     container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
@@ -605,7 +792,7 @@ def logs(agent_id, config_path, tail):
     """
     Print logs of the experimental test container or return path to tests` logs.
 
-    :param agent_id: Id of the agent to print a status for (for container logs). If not passed, print Pytest report
+    :param agent_id: ID of the agent to print a status for (for container logs). If not passed, print Pytest report
     :param config_path: Path to the VFL config file
     :param tail: Number of lines to show from the end of the logs (for container logs)
     """

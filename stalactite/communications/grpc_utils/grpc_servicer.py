@@ -6,6 +6,7 @@ from typing import AsyncIterator, Any, Optional
 from concurrent import futures
 
 import grpc
+from google.protobuf.message import Message
 from stalactite.communications.grpc_utils.generated_code import communicator_pb2, communicator_pb2_grpc
 from stalactite.communications.grpc_utils.utils import Status, MessageTypes, PrometheusMetric
 
@@ -57,6 +58,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         :param kwargs: Keyword arguments of the communicator_pb2_grpc.CommunicatorServicer class
         """
         super().__init__(*args, **kwargs)
+        logger.setLevel(logging_level)
         self.world_size = world_size
         self.master_id = master_id
         self.host = host
@@ -80,7 +82,6 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         self._main_tasks_queue: asyncio.Queue[communicator_pb2.MainMessage] = asyncio.Queue()
         self._tasks_futures = dict()
 
-        logger.setLevel(logging_level)
 
     @property
     def main_tasks_queue(self) -> asyncio.Queue:
@@ -96,6 +97,38 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
     def tasks_futures(self) -> dict:
         """ Return dictionary of tasks futures. """
         return self._tasks_futures
+
+    @staticmethod
+    def _message_size(message: Message) -> int:
+        return message.ByteSize()
+
+    def log_iteration_timings(self, iteration_times: list[tuple[int, float]]):
+        """
+        Log to the Prometheus info of the training iteration time on master.
+
+        :param iteration_times: List of the iteration number and time pairs
+        """
+        if self.run_prometheus:
+            logger.debug('Reporting `master_iteration_time` to Prometheus')
+            for iter_num, iter_time in iteration_times:
+                PrometheusMetric.iteration_times.value.labels(
+                    experiment_label=self.experiment_label,
+                    iteration=iter_num,
+                ).observe(iter_time)
+
+    def _log_agents_metrics(self, client_id: str, task_type: str, message_size: int, execution_time: float) -> None:
+        if self.run_prometheus:
+            logger.debug('Reporting metrics to Prometheus')
+            PrometheusMetric.message_size.value.labels(
+                experiment_label=self.experiment_label,
+                client_id=client_id,
+                task_type=task_type,
+            ).observe(message_size)
+            PrometheusMetric.execution_time.value.labels(
+                experiment_label=self.experiment_label,
+                client_id=client_id,
+                task_type=task_type,
+            ).observe(execution_time)
 
     async def start_servicer_and_server(self):
         """ Launch gRPC server and servicer. """
@@ -116,9 +149,19 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
     def _log_agents_status(self) -> None:
         if self.run_prometheus:
             logger.debug('Reporting `number_of_connected_agents` to Prometheus.')
-            PrometheusMetric.number_of_connected_agents.value\
-                .labels(experiment_label=self.experiment_label)\
+            PrometheusMetric.number_of_connected_agents.value \
+                .labels(experiment_label=self.experiment_label) \
                 .set(len(self.connected_clients))
+
+    def _log_communication_time(self, client_id: str, timings: list[communicator_pb2.SendTime]) -> None:
+        if self.run_prometheus:
+            logger.debug('Reporting `member_send_time` to Prometheus.')
+            for timing in timings:
+                PrometheusMetric.send_client_time.value.labels(
+                    experiment_label=self.experiment_label,
+                    client_id=client_id,
+                    task_type=timing.method_name,
+                ).observe(timing.send_time)
 
     async def _check_active_connections(self):
         """
@@ -142,11 +185,12 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         logger.debug(f"Got ping from client {client_name}")
         self.connected_clients[client_name] = time.time()
         if len(self.connected_clients) == self.world_size:
-            logger.info(f"All {self.world_size} clients connected")
+            logger.debug(f"All {self.world_size} clients connected")
             self.status = Status.all_ready
         else:
             self.status = Status.waiting
         self._log_agents_status()
+        self._log_communication_time(client_id=client_name, timings=list(request.send_timings))
         return communicator_pb2.HB(
             agent_name=self.master_id,
             status=self.status,
@@ -166,6 +210,12 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
     ) -> communicator_pb2.MainMessage:
         """ Receive task response from member, return message indicating acknowledgment of the task received. """
         await self.main_tasks_queue.put(request)
+        self._log_agents_metrics(
+            client_id=request.from_uid,
+            task_type=request.parent_method_name,
+            message_size=self._message_size(request),
+            execution_time=request.parent_task_execution_time,
+        )
         return communicator_pb2.MainMessage(
             message_type=MessageTypes.acknowledgment,
             task_id=request.task_id,

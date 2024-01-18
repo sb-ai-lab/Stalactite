@@ -37,6 +37,7 @@ from stalactite.communications.grpc_utils.utils import (
     collect_kwargs,
     start_thread,
     UnsupportedError,
+    MultiElementQueue,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
     is_ready: bool = False
 
     def __init__(self, logging_level: Any = logging.INFO):
+        self.logging_level = logging_level
         logger.setLevel(logging_level)
 
     def raise_if_not_ready(self):
@@ -70,6 +72,8 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
             method_name: _Method,
             task_id: Optional[str] = None,
             parent_id: Optional[str] = None,
+            parent_method_name: Optional[str] = None,
+            parent_task_execution_time: Optional[float] = None,
             require_answer: bool = True,
             message: Optional[MethodMessage] = None,
     ) -> PreparedTask:
@@ -82,6 +86,8 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
         :param method_name: Method name to execute on participant
         :param task_id: Unique identifier of the task
         :param parent_id: Unique identifier of the parent task
+        :param parent_method_name: Method name of the parent task
+        :param parent_task_execution_time: Time in seconds of the parent task execution time
         :param require_answer: True if the task requires answer to sent back to sender
         :param message: Task data arguments
         """
@@ -97,6 +103,8 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
             parent_id=parent_id,
             from_uid=self.participant.id,
             method_name=method_name,
+            parent_method_name=parent_method_name,
+            parent_task_execution_time=parent_task_execution_time,
             tensor_kwargs=message_kwargs.tensor_kwargs,
             other_kwargs=message_kwargs.other_kwargs,
         )
@@ -245,6 +253,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             require_answer: bool = True,
             task_id: Optional[str] = None,
             parent_id: Optional[str] = None,
+            parent_method_name: Optional[str] = None,
+            parent_task_execution_time: Optional[float] = None,
             message: Optional[MethodMessage] = None,
             **kwargs
     ) -> ParticipantFuture:
@@ -256,6 +266,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         :param require_answer: True if the task requires answer to sent back to sender
         :param task_id: Unique identifier of the task
         :param parent_id: Unique identifier of the parent task
+        :param parent_method_name: Method name of the parent task
+        :param parent_task_execution_time: Time in seconds of the parent task execution time
         :param message: Task data arguments
         :param kwargs: Optional kwargs which are ignored
         """
@@ -271,6 +283,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             require_answer=require_answer,
             task_id=task_id,
             parent_id=parent_id,
+            parent_method_name=parent_method_name,
+            parent_task_execution_time=parent_task_execution_time,
             message=message,
         )
         future = prepared_task.task_future
@@ -397,6 +411,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 with start_thread(target=self._run, daemon=True):
                     self.participant.run(party)
                     self.send(send_to_id=self.participant.id, method_name=_Method.finalize, require_answer=False)
+
+                self.servicer.log_iteration_timings(self.participant.train_timings)
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:
             logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
@@ -630,6 +646,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
 
         self.server_tasks_queue: Queue[communicator_pb2.MainMessage] = Queue()
         self.tasks_futures: dict[str, ParticipantFuture] = dict()
+        self._sent_time: MultiElementQueue = MultiElementQueue()
 
         super(GRpcMemberPartyCommunicator, self).__init__(**kwargs)
 
@@ -657,7 +674,10 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         """ Generate heartbeats messages. """
         while True:
             time.sleep(self.heartbeat_interval)
-            yield communicator_pb2.HB(agent_name=self.participant.id, status=ClientStatus.alive)
+            heartbeat_message = communicator_pb2.HB(agent_name=self.participant.id, status=ClientStatus.alive)
+            if len(timings := self._sent_time.get_all()) > 0:
+                heartbeat_message.send_timings.extend(timings)
+            yield heartbeat_message
 
     def _task_requests(self):
         """ Generate tasks requests to the master. """
@@ -724,6 +744,8 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             require_answer: bool = True,
             task_id: Optional[str] = None,
             parent_id: Optional[str] = None,
+            parent_method_name: Optional[str] = None,
+            parent_task_execution_time: Optional[float] = None,
             message: Optional[MethodMessage] = None,
             **kwargs
     ) -> ParticipantFuture:
@@ -735,6 +757,8 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         :param require_answer: True if the task requires answer to sent back to sender
         :param task_id: Unique identifier of the task
         :param parent_id: Unique identifier of the parent task
+        :param parent_method_name: Method name of the parent task
+        :param parent_task_execution_time: Time in seconds of the parent task execution time
         :param message: Task data arguments
         :param kwargs: Optional kwargs which are ignored
         """
@@ -754,6 +778,8 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             require_answer=require_answer,
             task_id=task_id,
             parent_id=parent_id,
+            parent_task_execution_time=parent_task_execution_time,
+            parent_method_name=parent_method_name,
             message=message,
         )
         future = prepared_task.task_future
@@ -761,8 +787,17 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         task_message = prepared_task.task_message
 
         if send_to_id == self._master_id:
+            start = time.time()
             res = self._stub.UnaryExchange(task_message, timeout=self.sent_task_timout)
             assert res.message_type == MessageTypes.acknowledgment, 'Sent message was not acknowledged'
+            sent_timing = time.time() - start
+            self._sent_time.put(
+                communicator_pb2.SendTime(
+                    task_id=task_id,
+                    method_name=method_name,
+                    send_time=sent_timing,
+                )
+            )
         else:
             self.server_tasks_queue.put(task_message)
 
@@ -797,6 +832,8 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         self.randezvous()
         self._start_receiving_tasks()
         self._run()
+        while len(self._sent_time.elements) > 0:
+            continue
         logger.info(f"Party communicator {self.participant.id} finished")
 
     def _start_receiving_tasks(self):
@@ -836,8 +873,9 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                     raise ValueError('Mass kwargs must be torch.Tensor')
             else:
                 mkwargs = []
-
+            start = time.time()
             result = method(*mkwargs, **kwargs)  # TODO put CPU heavy tasks in another thread?
+            execution_time = time.time() - start
             client_msg = MethodMessage()
             setattr(client_msg, METHOD_VALUES[task.method_name], {'result': result})
 
@@ -845,6 +883,8 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                 send_to_id=task.from_uid,
                 method_name=_Method.service_return_answer,
                 parent_id=task.task_id,
+                parent_method_name=task.method_name,
+                parent_task_execution_time=execution_time,
                 require_answer=False,
                 message=client_msg
             )
