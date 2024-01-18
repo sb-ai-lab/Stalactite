@@ -1,18 +1,22 @@
 import logging
 import os
 from pathlib import Path
+import threading
 from threading import Thread
-from typing import Dict, Any
+# from typing import Dict, Any
 
 import click
 from docker import APIClient
 from docker.errors import APIError
 import mlflow as _mlflow
-import torch
+# import torch
 
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
-from stalactite.mocks import MockPartyMasterImpl, MockPartyMemberImpl
+# from stalactite.mocks import MockPartyMasterImpl, MockPartyMemberImpl
 from stalactite.configs import VFLConfig, raise_path_not_exist
+from stalactite.base import PartyMember
+from stalactite.data_utils import get_party_master, get_party_member
+
 from stalactite.utils_main import (
     get_env_vars,
     run_subprocess_command,
@@ -25,7 +29,6 @@ from stalactite.utils_main import (
     KEY_CONTAINER_LABEL,
     BASE_MASTER_CONTAINER_NAME,
     BASE_MEMBER_CONTAINER_NAME,
-    BASE_IMAGE_FILE,
     BASE_IMAGE_TAG,
     PREREQUISITES_NETWORK,
 
@@ -162,7 +165,7 @@ def start(ctx, config_path, rank, detached):
     config = VFLConfig.load_and_validate(config_path)
     logger.info('Starting member for distributed experiment')
     client = APIClient(base_url='unix://var/run/docker.sock')
-    logger.info('Building image for the member container. If build for the first time, it may take a while...')
+    logger.info('Building an image for the member container. If build for the first time, it may take a while...')
     try:
         build_base_image(client, logger=logger)
 
@@ -301,8 +304,8 @@ def master(ctx):
 def start(ctx, config_path, detached):
     config = VFLConfig.load_and_validate(config_path)
     logger.info('Starting master for distributed experiment')
-    client = APIClient(base_url='unix://var/run/docker.sock')
-    logger.info('Building image for the master container. If build for the first time, it may take a while...')
+    client = APIClient()
+    logger.info('Building an image for the master container. If build for the first time, it may take a while...')
     build_base_image(client, logger=logger)
 
     data_path = config.data.host_path_data_dir
@@ -355,7 +358,7 @@ def start(ctx, config_path, detached):
 @click.pass_context
 def stop(ctx, leave_containers):
     logger.info('Stopping master container')
-    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+    client = ctx.obj.get('client', APIClient())
     try:
         containers = client.containers(all=True, filters={'name': ctx.obj['master_container_name']})
         if len(containers) < 1:
@@ -370,7 +373,7 @@ def stop(ctx, leave_containers):
 @click.pass_context
 def status(ctx):
     container_label = ctx.obj['master_container_label']
-    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+    client = ctx.obj.get('client', APIClient())
     get_status(
         agent_id=None,
         logger=logger,
@@ -390,7 +393,7 @@ def status(ctx):
 @click.option('--tail', type=str, default='all')
 @click.pass_context
 def logs(ctx, follow, tail):
-    client = APIClient(base_url='unix://var/run/docker.sock')
+    client = APIClient()
     get_logs(
         agent_id=ctx.obj['master_container_name'],
         tail=tail,
@@ -426,7 +429,7 @@ def local(ctx, single_process, multi_process):
     ctx.obj = dict()
     if multi_process and not single_process:
         click.echo('Multiple-process single-node mode')
-        ctx.obj['client'] = APIClient(base_url='unix://var/run/docker.sock')
+        ctx.obj['client'] = APIClient()
     elif single_process and not multi_process:
         click.echo('Multiple-threads single-node mode')
     else:
@@ -450,8 +453,8 @@ def start(ctx, config_path):
     config = VFLConfig.load_and_validate(config_path)
     if ctx.obj['multi_process'] and not ctx.obj['single_process']:
         logger.info('Starting multi-process single-node experiment')
-        client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
-        logger.info('Building image of the agent. If build for the first time, it may take a while...')
+        client = ctx.obj.get('client', APIClient())
+        logger.info('Building an image of the agent. If build for the first time, it may take a while...')
         build_base_image(client, logger=logger)
 
         if networks := client.networks(names=[PREREQUISITES_NETWORK]):
@@ -522,49 +525,40 @@ def start(ctx, config_path):
             )
             raise
     elif ctx.obj['single_process'] and not ctx.obj['multi_process']:
-        # TODO bufix and refactor
-        raise NotImplementedError
-
-        def local_master_main(uid: str, world_size: int, shared_party_info: Dict[str, Any]):
-            comm = LocalMasterPartyCommunicator(
-                participant=MockPartyMasterImpl(
-                    uid=uid,
-                    epochs=1,
-                    report_train_metrics_iteration=5,
-                    report_test_metrics_iteration=5,
-                    target=torch.randint(0, 2, (5,))
-                ),
-                world_size=world_size,
-                shared_party_info=shared_party_info
-            )
-            comm.run()
-
-        def local_member_main(member_id: str, world_size: int, shared_party_info: Dict[str, Any]):
-            comm = LocalMemberPartyCommunicator(
-                participant=MockPartyMemberImpl(uid=member_id),
-                world_size=world_size,
-                shared_party_info=shared_party_info
-            )
-            comm.run()
-
-        logger.info('Starting multi-thread single-process test')
+        master = get_party_master(config)
+        members = [get_party_member(config, member_rank=rank) for rank in range(config.common.world_size)]
         shared_party_info = dict()
-        members_count = config.common.world_size
+
+        def local_master_main():
+            logger.info("Starting thread %s" % threading.current_thread().name)
+            comm = LocalMasterPartyCommunicator(
+                participant=master,
+                world_size=config.common.world_size,
+                shared_party_info=shared_party_info
+            )
+            comm.run()
+            logger.info("Finishing thread %s" % threading.current_thread().name)
+
+        def local_member_main(member: PartyMember):
+            logger.info("Starting thread %s" % threading.current_thread().name)
+            comm = LocalMemberPartyCommunicator(
+                participant=member,
+                world_size=config.common.world_size,
+                shared_party_info=shared_party_info
+            )
+            comm.run()
+            logger.info("Finishing thread %s" % threading.current_thread().name)
+
         threads = [
-            Thread(
-                name="master_main",
-                daemon=True,
-                target=local_master_main,
-                args=("master", members_count, shared_party_info)
-            ),
+            Thread(name=f"main_{master.id}", daemon=True, target=local_master_main),
             *(
                 Thread(
-                    name=f"member_main_{i}",
+                    name=f"main_{member.id}",
                     daemon=True,
                     target=local_member_main,
-                    args=(f"member-{i}", members_count, shared_party_info)
+                    args=(member,)
                 )
-                for i in range(members_count)
+                for member in members
             )
         ]
 
@@ -595,13 +589,15 @@ def stop(ctx, leave_containers):
     _test = is_test_environment()
     if ctx.obj['multi_process'] and not ctx.obj['single_process']:
         logger.info('Stopping multi-process single-node')
-        client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+        client = ctx.obj.get('client', APIClient())
         try:
             container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
             containers = client.containers(all=True, filters={'label': f'{KEY_CONTAINER_LABEL}={container_label}'})
             stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
         except APIError as exc:
             logger.error('Error while stopping (and removing) containers', exc_info=exc)
+    else:
+        logger.info('Nothing to stop')
 
 
 @local.command()
@@ -614,15 +610,18 @@ def status(ctx, agent_id):
     :param ctx: Passed from group Click context
     :param agent_id: ID of the agent to print a status for
     """
-    _test = is_test_environment()
-    container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
-    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
-    get_status(
-        agent_id=agent_id,
-        logger=logger,
-        containers_label=f'{KEY_CONTAINER_LABEL}={container_label}',
-        docker_client=client
-    )
+    if ctx.obj['multi_process'] and not ctx.obj['single_process']:
+        _test = is_test_environment()
+        container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
+        client = ctx.obj.get('client', APIClient())
+        get_status(
+            agent_id=agent_id,
+            logger=logger,
+            containers_label=f'{KEY_CONTAINER_LABEL}={container_label}',
+            docker_client=client
+        )
+    else:
+        logger.info('Status in the single-process mode is not available')
 
 
 @local.command()
@@ -645,13 +644,16 @@ def logs(ctx, agent_id, follow, tail):
     :param follow: Whether to continue streaming the new output from the logs
     :param tail: Number of lines to show from the end of the logs
     """
-    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
-    get_logs(
-        agent_id=agent_id,
-        tail=tail,
-        follow=follow,
-        docker_client=client,
-    )
+    if ctx.obj['multi_process'] and not ctx.obj['single_process']:
+        client = ctx.obj.get('client', APIClient())
+        get_logs(
+            agent_id=agent_id,
+            tail=tail,
+            follow=follow,
+            docker_client=client,
+        )
+    else:
+        logger.info('Logs in the single-process mode are not available')
 
 
 @cli.group()
@@ -714,8 +716,15 @@ def start(ctx, config_path):
             shell=True
         )
     else:
-        # TODO
-        raise NotImplementedError
+        report_file_name = f'local-tests-log-{config.common.experiment_label}.jsonl'
+        run_subprocess_command(
+            command=f"python -m pytest tests/test_local.py -x "
+                    f"--report-log={os.path.join(config.common.reports_export_folder, report_file_name)} "
+                    "-W ignore::DeprecationWarning --log-cli-level 20",
+            logger_err_info="Failed running test",
+            cwd=Path(__file__).parent.parent,
+            shell=True
+        )
 
 
 @test.command()
@@ -743,7 +752,7 @@ def stop(ctx, config_path, no_tests):
         _test = 1
         if ctx.obj['multi_process'] and not ctx.obj['single_process']:
             logger.info('Removing test containers')
-            client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+            client = ctx.obj.get('client', APIClient())  # base_url='unix://var/run/docker.sock' TODO check
             try:
                 container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
                 containers = client.containers(all=True, filters={'label': f'{KEY_CONTAINER_LABEL}={container_label}'})
