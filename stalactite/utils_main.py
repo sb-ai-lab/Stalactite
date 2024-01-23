@@ -9,7 +9,6 @@ from docker.errors import APIError, NotFound
 
 from stalactite.configs import VFLConfig
 
-
 BASE_CONTAINER_LABEL = 'grpc-experiment'
 KEY_CONTAINER_LABEL = 'container-g'
 BASE_MASTER_CONTAINER_NAME = 'master-agent-vfl'  # Do not change this value
@@ -64,7 +63,7 @@ def get_status(
         agent_id: Optional[str],
         containers_label: str,
         logger: logging.Logger,
-        docker_client: APIClient = APIClient() # APIClient(base_url='unix://var/run/docker.sock'),
+        docker_client: APIClient = APIClient()  # APIClient(base_url='unix://var/run/docker.sock'),
 ):
     try:
         if agent_id is None:
@@ -86,7 +85,7 @@ def get_logs(
         agent_id: str,
         tail: str = 'all',
         follow: bool = False,
-        docker_client: APIClient = APIClient(), # APIClient(base_url='unix://var/run/docker.sock'),
+        docker_client: APIClient = APIClient(),  # APIClient(base_url='unix://var/run/docker.sock'),
         logger: logging.Logger = logging.getLogger('__main__'),
 ):
     if tail != 'all':
@@ -107,13 +106,13 @@ def build_base_image(docker_client: APIClient, logger: logging.Logger = logging.
         _logs = docker_client.build(
             path=str(Path(os.path.abspath(__file__)).parent.parent),
             tag=BASE_IMAGE_TAG,
-            quiet=True,
+            quiet=False,
             decode=True,
             nocache=False,
             dockerfile=os.path.join(Path(os.path.abspath(__file__)).parent.parent, 'docker', BASE_IMAGE_FILE),
         )
         for log in _logs:
-            logger.debug(log["stream"])
+            logger.debug(log.get("stream", log.get('aux', {'aux': ''}).get('ID', '')).strip())
     except APIError as exc:
         logger.error('Error while building an image', exc_info=exc)
         raise

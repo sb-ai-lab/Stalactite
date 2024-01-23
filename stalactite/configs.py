@@ -198,6 +198,7 @@ class MemberConfig(PartyConfig):
     )
     sent_task_timout: float = Field(default=3600, description='Timeout of the unary endpoints calls to the gRPC')
 
+
 class DockerConfig(BaseModel):
     """ Docker client parameters config. """
     docker_compose_path: str = Field(
@@ -257,4 +258,5 @@ class VFLConfig(BaseModel):
 
     @classmethod
     def load_and_validate(cls, config_path: str):
+        """ Load YAML configuration and validate params with the VFLConfig model. """
         return cls.model_validate(load_yaml_config(config_path))

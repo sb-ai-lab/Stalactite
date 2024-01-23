@@ -37,7 +37,6 @@ from stalactite.communications.grpc_utils.utils import (
     collect_kwargs,
     start_thread,
     UnsupportedError,
-    MultiElementQueue,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,10 +53,12 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
     is_ready: bool = False
 
     def __init__(self, logging_level: Any = logging.INFO):
+        """ Initialize base GRpcPartyCommunicator class. Set the module logging level. """
         self.logging_level = logging_level
         logger.setLevel(logging_level)
 
     def raise_if_not_ready(self):
+        """ Raise an exception if the communicator was not initialized properly. """
         if not self.is_ready:
             raise RuntimeError(
                 "Cannot proceed because communicator is not ready. "
@@ -112,7 +113,9 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
 
 
 class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
-    """ gRPC Master communicator class. """
+    """ gRPC Master communicator class.
+    This class is used as the communicator for master in gRPC server-based (distributed) VFL setup.
+    """
     MEMBER_DATA_FIELDNAME = '__member_data__'
 
     def __init__(
@@ -169,6 +172,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
 
     @property
     def servicer_initialized(self) -> bool:
+        """ Whether the gRPC server was started and CommunicatorServicer was initialized. """
         return self.servicer is not None
 
     @property
@@ -242,7 +246,6 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
 
         :param task_id: Unique identifier of the task
         :param future: Task future
-        :return:
         """
         self.servicer.tasks_futures[task_id] = future
 
@@ -371,7 +374,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         return bc_futures
 
     def _run_coroutine(self, coroutine: Coroutine):
-        """ Run coroutine in the created asyncio event loop.
+        """
+        Run coroutine in the created asyncio event loop.
         Used to launch asyncio gRPC server in a separate thread.
         """
         self.asyncio_event_loop = asyncio.new_event_loop()
@@ -379,7 +383,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.asyncio_event_loop.run_until_complete(coroutine)
 
     def run(self):
-        """ Run the VFL master.
+        """
+        Run the VFL master.
         Launch the gRPC server, wait until all the members are connected and start sending, receiving and processing
         tasks from the main loop.
         """
@@ -564,7 +569,7 @@ class GRpcParty(Party):
         self._sync_broadcast_to_members(method_name=_Method.initialize)
 
     def finalize(self):
-        """ Finilize party communicators. """
+        """ Finalize party communicators. """
         self._sync_broadcast_to_members(method_name=_Method.finalize)
 
     def update_weights(self, upd: PartyDataTensor):
@@ -604,7 +609,9 @@ class GRpcParty(Party):
 
 
 class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
-    """ gRPC Master communicator class. """
+    """ gRPC Member communicator class.
+    This class is used as the communicator for member in gRPC server-based (distributed) VFL setup.
+    """
     MEMBER_DATA_FIELDNAME = '__member_data__'
 
     def __init__(
@@ -646,7 +653,8 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
 
         self.server_tasks_queue: Queue[communicator_pb2.MainMessage] = Queue()
         self.tasks_futures: dict[str, ParticipantFuture] = dict()
-        self._sent_time: MultiElementQueue = MultiElementQueue()
+        self._sent_time: Queue = Queue()
+        self._lock = threading.Lock()
 
         super(GRpcMemberPartyCommunicator, self).__init__(**kwargs)
 
@@ -660,7 +668,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             ]
         )
         self._stub = communicator_pb2_grpc.CommunicatorStub(self._grpc_channel)
-        logger.info("Starting ping-pong with the server")
+        logger.info(f"Starting ping-pong with the server {self.master_host}:{self.master_port}")
         pingpong_responses = self._stub.Heartbeat(self._heartbeats(), wait_for_ready=True)
         self._heartbeats_thread = threading.Thread(
             name='heartbeat-thread',
@@ -670,12 +678,19 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         )
         self._heartbeats_thread.start()
 
+    def _get_all_from_sent_time_queue(self) -> list[Any]:
+        """ Reset the self._sent_time queue, returning all the elements from it. """
+        with self._lock:
+            elements = self._sent_time.queue
+            self._sent_time = Queue()
+            return list(elements)
+
     def _heartbeats(self):
         """ Generate heartbeats messages. """
         while True:
             time.sleep(self.heartbeat_interval)
             heartbeat_message = communicator_pb2.HB(agent_name=self.participant.id, status=ClientStatus.alive)
-            if len(timings := self._sent_time.get_all()) > 0:
+            if len(timings := self._get_all_from_sent_time_queue()) > 0:
                 heartbeat_message.send_timings.extend(timings)
             yield heartbeat_message
 
@@ -689,7 +704,8 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             )
 
     def _read_server_heartbeats(self, server_responses: Iterator[communicator_pb2.HB]):
-        """ Read responses to heartbeats from master.
+        """
+        Read responses to heartbeats from master.
         Update info on the world status.
 
         :param server_responses: Iterator of the server responses
@@ -704,7 +720,8 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                     "Unexpected behaviour: Master id changed during the experiment"
 
     def _read_server_tasks(self, server_responses: Iterator[communicator_pb2.MainMessage]):
-        """ Read responses to task requests from master.
+        """
+        Read responses to task requests from master.
         Update tasks queue to process tasks in a main thread.
 
         :param server_responses: Iterator of the server responses
@@ -818,13 +835,15 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                   require_answer: bool = True,
                   include_current_participant: bool = False,
                   **kwargs) -> list[ParticipantFuture]:
-        """ Broadcast task to VFL agents via gRPC channel.
+        """
+        Broadcast task to VFL agents via gRPC channel.
         This method is unavailable for GRpcMemberPartyCommunicator as it cannot communcate with other members.
         """
         raise UnsupportedError('GRpcMemberPartyCommunicator cannot broadcast to other Members')
 
     def run(self):
-        """ Run the VFL member.
+        """
+        Run the VFL member.
         Start the gRPC client threads, wait until server sends an `all ready` heartbeat response. Start requesting,
         receiving and processing tasks from the VFL master.
         """
@@ -832,7 +851,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         self.randezvous()
         self._start_receiving_tasks()
         self._run()
-        while len(self._sent_time.elements) > 0:
+        while len(self._sent_time.queue) > 0:
             continue
         logger.info(f"Party communicator {self.participant.id} finished")
 
