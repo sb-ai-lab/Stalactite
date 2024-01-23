@@ -6,16 +6,18 @@ ENV PYTHONUNBUFFERED 1
 WORKDIR /opt
 
 COPY ./pyproject.toml /opt/pyproject.toml
+COPY ./poetry.lock /opt/poetry.lock
 COPY ./README.md /opt/README.md
 
 RUN pip install poetry
 
-RUN poetry config virtualenvs.create false && poetry lock --no-update
-RUN poetry install --no-root # TODO double installation fix??
+RUN poetry config virtualenvs.create false
+# RUN poetry lock --no-update # TODO do we need to lock?
+RUN poetry install --no-root
 
 COPY ./stalactite /opt/stalactite
 
-RUN poetry install
+RUN poetry install --only-root
 
 WORKDIR /opt/stalactite
 

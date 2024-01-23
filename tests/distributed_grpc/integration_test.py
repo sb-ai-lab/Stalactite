@@ -38,7 +38,7 @@ class TestLocalGroupStart:
         master_id_msg = 'Master container id:'
         messages = [
             'Starting multi-process single-node experiment',
-            'Building image of the agent',
+            'Building an image of the agent',
             'Starting gRPC master container',
             master_id_msg,
             'Starting gRPC member-0 container',
