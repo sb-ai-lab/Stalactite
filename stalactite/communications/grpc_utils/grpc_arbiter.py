@@ -185,7 +185,7 @@ class GRpcArbiterServicer(arbiter_pb2_grpc.ArbiterServicer):
 
 
 async def serve(config_path: str):
-    """ Initialize and start gRPC arbiter server """
+    """ Initialize and start gRPC arbiter server. """
     config = VFLConfig.load_and_validate(config_path)
     arbiter_server = grpc.aio.server(
         futures.ThreadPoolExecutor(max_workers=config.grpc_arbiter.server_threadpool_max_workers),

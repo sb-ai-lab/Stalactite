@@ -82,7 +82,6 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         self._main_tasks_queue: asyncio.Queue[communicator_pb2.MainMessage] = asyncio.Queue()
         self._tasks_futures = dict()
 
-
     @property
     def main_tasks_queue(self) -> asyncio.Queue:
         """ Return queue with tasks sent by VFL members. """
@@ -100,6 +99,11 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
 
     @staticmethod
     def _message_size(message: Message) -> int:
+        """
+        Return protobuf message size in bytes
+
+        :param message: Protobuf message
+        """
         return message.ByteSize()
 
     def log_iteration_timings(self, iteration_times: list[tuple[int, float]]):
@@ -117,6 +121,14 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
                 ).observe(iter_time)
 
     def _log_agents_metrics(self, client_id: str, task_type: str, message_size: int, execution_time: float) -> None:
+        """
+        Log to the Prometheus info of the task execution time and result message size on clients.
+
+        :param client_id: ID of the member sent the metrics
+        :param task_type: Name of the task which was executed
+        :param message_size: Size of the results message size in bytes
+        :param execution_time: Task execution time
+        """
         if self.run_prometheus:
             logger.debug('Reporting metrics to Prometheus')
             PrometheusMetric.message_size.value.labels(
@@ -147,6 +159,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         await server.wait_for_termination()
 
     def _log_agents_status(self) -> None:
+        """ Log number of active clients to the Prometheus. """
         if self.run_prometheus:
             logger.debug('Reporting `number_of_connected_agents` to Prometheus.')
             PrometheusMetric.number_of_connected_agents.value \
@@ -154,6 +167,12 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
                 .set(len(self.connected_clients))
 
     def _log_communication_time(self, client_id: str, timings: list[communicator_pb2.SendTime]) -> None:
+        """
+        Log time of the unary communication operations from members.
+
+        :param client_id: ID of the member sent the metrics
+        :param timings: List of the SendTime objects containing unary send time
+        """
         if self.run_prometheus:
             logger.debug('Reporting `member_send_time` to Prometheus.')
             for timing in timings:
@@ -179,7 +198,8 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
 
     def process_heartbeat(self, request: communicator_pb2.HB) -> communicator_pb2.HB:
         """
-        Process heartbeats from members. Indicate whether all members ready should start.
+        Process heartbeats from members.
+        Indicate whether all members ready should start.
         """
         client_name = request.agent_name
         logger.debug(f"Got ping from client {client_name}")

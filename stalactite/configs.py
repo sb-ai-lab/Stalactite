@@ -188,6 +188,7 @@ class MemberConfig(PartyConfig):
     heartbeat_interval: float = Field(default=2., description='Time in seconds to sent heartbeats to master.')
 
 
+
 class DockerConfig(BaseModel):
     """ Docker client parameters config. """
     docker_compose_path: str = Field(
@@ -247,4 +248,5 @@ class VFLConfig(BaseModel):
 
     @classmethod
     def load_and_validate(cls, config_path: str):
+        """ Load YAML configuration and validate params with the VFLConfig model. """
         return cls.model_validate(load_yaml_config(config_path))

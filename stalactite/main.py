@@ -1,18 +1,22 @@
+"""Stalactite CLI.
+
+This script implements main Stalactite command line interface commands,
+allowing launch of the VFL experiments in single-node or multi-node mode
+using the configuration file in the YAML format.
+"""
+
 import logging
 import os
 from pathlib import Path
 import threading
 from threading import Thread
-# from typing import Dict, Any
 
 import click
 from docker import APIClient
 from docker.errors import APIError
 import mlflow as _mlflow
-# import torch
 
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
-# from stalactite.mocks import MockPartyMasterImpl, MockPartyMemberImpl
 from stalactite.configs import VFLConfig, raise_path_not_exist
 from stalactite.base import PartyMember
 from stalactite.data_utils import get_party_master, get_party_member
@@ -43,6 +47,7 @@ logger.addHandler(sh)
 
 @click.group()
 def cli():
+    """ Main stalactite CLI command group. """
     click.echo("Stalactite module API")
 
 
@@ -53,21 +58,26 @@ def prerequisites():
 
 
 @prerequisites.command()
-@click.option('--config-path', type=str, required=True)
+@click.option(
+    '--config-path',
+    type=str,
+    required=True,
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 @click.option(
     '-d',
     '--detached',
     is_flag=True,
     show_default=True,
     default=False,
-    help="Run non-blocking start."
+    help="Run non-blocking start in detached mode."
 )
 def start(config_path, detached):
     """
     Start containers with prerequisites (MlFlow, Prometheus, Grafana).
 
-    :param config_path: Path to the VFL config file
-    :param detached: Start containers in detached regime
+    :param config_path: Absolute path to the configuration file in `YAML` format
+    :param detached: Run non-blocking start in detached mode
     """
     logger.info('Starting prerequisites containers')
     config = VFLConfig.load_and_validate(config_path)
@@ -89,13 +99,18 @@ def start(config_path, detached):
 
 
 @prerequisites.command()
-@click.option('--config-path', type=str, required=True)
+@click.option(
+    '--config-path',
+    type=str,
+    required=True,
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 @click.option(
     '--remove',
     is_flag=True,
     show_default=True,
     default=False,
-    help="Delete created containers, networks"
+    help="Delete created containers, networks."
 )
 @click.option(
     '--remove-volumes',
@@ -108,9 +123,9 @@ def stop(config_path, remove, remove_volumes):
     """
     Stop prerequisites containers (and remove all defined in docker-compose.yml networks and images[, and volumes]).
 
-    :param config_path: Path to the VFL config file
-    :param remove: Remove created containers, networks
-    :param remove_volumes: Remove volumes
+    :param config_path: Absolute path to the configuration file in `YAML` format
+    :param remove: Delete created containers, networks
+    :param remove_volumes: Delete created volumes
     """
     logger.info('Stopping prerequisites containers')
     config = VFLConfig.load_and_validate(config_path)
@@ -138,6 +153,7 @@ def stop(config_path, remove, remove_volumes):
 @cli.group()
 @click.pass_context
 def member(ctx):
+    """ Distributed VFL member management command group. """
     click.echo("Manage distributed (multi-node) members")
     ctx.obj = dict()
     postfix = '-distributed'
@@ -146,11 +162,16 @@ def member(ctx):
 
 
 @member.command()
-@click.option('--config-path', type=str)
+@click.option(
+    '--config-path',
+    type=str,
+    required=True,
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 @click.option(
     '--rank',
     type=int,
-    help='Rank of the member for correct data loading'
+    help='Rank of the member used for correct data loading.'
 )  # TODO remove after refactoring of the preprocessing
 @click.option(
     '-d',
@@ -162,19 +183,29 @@ def member(ctx):
 )
 @click.pass_context
 def start(ctx, config_path, rank, detached):
+    """
+    Start a VFL-distributed Member in an isolated container.
+
+    :param ctx: Click context
+    :param config_path: Absolute path to the configuration file in `YAML` format
+    :param rank: Rank of the member used for correct data loading
+    :param detached: Run non-blocking start
+    """
     config = VFLConfig.load_and_validate(config_path)
     logger.info('Starting member for distributed experiment')
-    client = APIClient(base_url='unix://var/run/docker.sock')
+    client = APIClient()
     logger.info('Building an image for the member container. If build for the first time, it may take a while...')
     try:
         build_base_image(client, logger=logger)
 
         logger.info(f'Starting gRPC member-{rank} container')
 
-        data_path = config.data.host_path_data_dir
         configs_path = os.path.dirname(os.path.abspath(config_path))
+
+        raise_path_not_exist(config.data.host_path_data_dir)
         raise_path_not_exist(configs_path)
-        raise_path_not_exist(data_path)
+
+        data_path = os.path.abspath(config.data.host_path_data_dir)
 
         member_container = client.create_container(
             image=BASE_IMAGE_TAG,
@@ -211,12 +242,18 @@ def start(ctx, config_path, rank, detached):
     is_flag=True,
     show_default=False,
     default=False,
-    help="Flag to retain created agents containers"
+    help="Retain created agents containers."
 )
 @click.pass_context
 def stop(ctx, leave_containers):
+    """
+    Stop distributed VFL members containers started on current host.
+
+    :param ctx: Click context
+    :param leave_containers: Retain created agents containers
+    """
     logger.info('Stopping members` containers')
-    client = APIClient(base_url='unix://var/run/docker.sock')
+    client = APIClient()
     try:
         container_label = ctx.obj['member_container_label']
         containers = client.containers(all=True, filters={'label': f'{KEY_CONTAINER_LABEL}={container_label}'})
@@ -226,11 +263,19 @@ def stop(ctx, leave_containers):
 
 
 @member.command()
-@click.option('--agent-id', type=str, default=None)
-@click.option('--rank', type=str, default=None)
+@click.option('--agent-id', type=str, default=None, help='ID of the agent`s container.')
+@click.option('--rank', type=str, default=None, help='Rank of the member.')
 @click.pass_context
 def status(ctx, agent_id, rank):
-    client = ctx.obj.get('client', APIClient(base_url='unix://var/run/docker.sock'))
+    """
+    Get the status of created members` containers.
+    If the `agent-id` and `rank` are not passed, all the created members` containers statuses will be returned.
+
+    :param ctx: Click context
+    :param agent_id: ID of the agent`s container
+    :param rank: Rank of the member
+    """
+    client = ctx.obj.get('client', APIClient())
     container_label = ctx.obj['member_container_label']
     if agent_id is None and rank is None:
         get_status(
@@ -253,25 +298,34 @@ def status(ctx, agent_id, rank):
 
 
 @member.command()
-@click.option('--agent-id', type=str, default=None)
-@click.option('--rank', type=str, default=None)  # TODO rm after refactor?
+@click.option('--agent-id', type=str, default=None, help='ID of the agent`s container.')
+@click.option('--rank', type=str, default=None, help='Rank of the member.')  # TODO rm after refactor?
 @click.option(
     '--follow',
     is_flag=True,
     show_default=True,
     default=False,
-    help="Follow log output"
+    help="Follow log output."
 )
-@click.option('--tail', type=str, default='all')
+@click.option('--tail', type=str, default='all', help='Number of lines to show from the end of the logs.')
 @click.pass_context
 def logs(ctx, agent_id, rank, follow, tail):
+    """
+    Retrieve members` containers logs present at the time of execution.
+
+    :param ctx: Click context
+    :param agent_id: ID of the agent`s container
+    :param rank: Rank of the member
+    :param follow: Follow log output
+    :param tail: Number of lines to show from the end of the logs. Can be `all` or a positive integer
+    """
     if agent_id is None and rank is None:
         raise SyntaxError('Either `--agent-id` or `--rank` must be passed.')
     if agent_id is not None:
         container_name_or_id = agent_id
     else:
         container_name_or_id = ctx.obj['member_container_name'](rank)
-    client = APIClient(base_url='unix://var/run/docker.sock')
+    client = APIClient()
     get_logs(
         agent_id=container_name_or_id,
         tail=tail,
@@ -283,6 +337,7 @@ def logs(ctx, agent_id, rank, follow, tail):
 @cli.group()
 @click.pass_context
 def master(ctx):
+    """ Distributed VFL master management command group. """
     click.echo("Manage distributed (multi-node) master")
     ctx.obj = dict()
     postfix = '-distributed'
@@ -291,7 +346,12 @@ def master(ctx):
 
 
 @master.command()
-@click.option('--config-path', type=str)
+@click.option(
+    '--config-path',
+    type=str,
+    required=True,
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 @click.option(
     '-d',
     '--detached',
@@ -302,16 +362,25 @@ def master(ctx):
 )
 @click.pass_context
 def start(ctx, config_path, detached):
+    """
+    Start VFL Master in an isolated container.
+
+    :param ctx: Click context
+    :param config_path: Absolute path to the configuration file in `YAML` format
+    :param detached: Run non-blocking start
+    """
     config = VFLConfig.load_and_validate(config_path)
     logger.info('Starting master for distributed experiment')
     client = APIClient()
     logger.info('Building an image for the master container. If build for the first time, it may take a while...')
     build_base_image(client, logger=logger)
 
-    data_path = config.data.host_path_data_dir
+    raise_path_not_exist(config.data.host_path_data_dir)
+
+    data_path = os.path.abspath(config.data.host_path_data_dir)
     configs_path = os.path.dirname(os.path.abspath(config_path))
+
     raise_path_not_exist(configs_path)
-    raise_path_not_exist(data_path)
 
     try:
         logger.info('Starting gRPC master container')
@@ -353,10 +422,16 @@ def start(ctx, config_path, detached):
     is_flag=True,
     show_default=False,
     default=False,
-    help="Flag to retain created agents containers"
+    help="Retain created agents containers."
 )
 @click.pass_context
 def stop(ctx, leave_containers):
+    """
+    Stop VFL master container.
+
+    :param ctx: Click context
+    :param leave_containers: Retain created master container
+    """
     logger.info('Stopping master container')
     client = ctx.obj.get('client', APIClient())
     try:
@@ -372,6 +447,11 @@ def stop(ctx, leave_containers):
 @master.command()
 @click.pass_context
 def status(ctx):
+    """
+    Get the status of created master`s container.
+
+    :param ctx: Click context
+    """
     container_label = ctx.obj['master_container_label']
     client = ctx.obj.get('client', APIClient())
     get_status(
@@ -388,11 +468,18 @@ def status(ctx):
     is_flag=True,
     show_default=True,
     default=False,
-    help="Follow log output"
+    help="Follow log output."
 )
-@click.option('--tail', type=str, default='all')
+@click.option('--tail', type=str, default='all', help='Number of lines to show from the end of the logs.')
 @click.pass_context
 def logs(ctx, follow, tail):
+    """
+    Retrieve master`s container logs present at the time of execution.
+
+    :param ctx: Click context
+    :param follow: Follow log output
+    :param tail: Number of lines to show from the end of the logs. Can be `all` or a positive integer
+    """
     client = APIClient()
     get_logs(
         agent_id=ctx.obj['master_container_name'],
@@ -422,7 +509,7 @@ def local(ctx, single_process, multi_process):
     """
     Local experiments (multi-process / single process) mode command group.
 
-    :param ctx: Click context passed through into group`s commands
+    :param ctx: Click context
     :param single_process: Run single process experiment
     :param multi_process: Run multiple process (dockerized) experiment
     """
@@ -439,15 +526,21 @@ def local(ctx, single_process, multi_process):
 
 
 @local.command()
-@click.option('--config-path', type=str, required=True)
+@click.option(
+    '--config-path',
+    type=str,
+    required=True,
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 @click.pass_context
 def start(ctx, config_path):
     """
     Start local experiment.
     For a multiprocess mode build and start VFL master and members containers.
+    Single-process mode starts a python process with each agent has a thread.
 
-    :param ctx: Passed from group Click context
-    :param config_path: Path to the VFL config file
+    :param ctx: Click context
+    :param config_path: Absolute path to the configuration file in `YAML` format
     """
     _test = is_test_environment()
     config = VFLConfig.load_and_validate(config_path)
@@ -466,11 +559,12 @@ def start(ctx, config_path):
             network: client.create_endpoint_config()
         })
 
-        data_path = config.data.host_path_data_dir
+        raise_path_not_exist(config.data.host_path_data_dir)
+
+        data_path = os.path.abspath(config.data.host_path_data_dir)
         configs_path = os.path.dirname(os.path.abspath(config_path))
 
         raise_path_not_exist(configs_path)
-        raise_path_not_exist(data_path)
 
         volumes = [f'{data_path}', f'{configs_path}']
         mounts_host_config = client.create_host_config(binds=[
@@ -528,6 +622,10 @@ def start(ctx, config_path):
         master = get_party_master(config)
         members = [get_party_member(config, member_rank=rank) for rank in range(config.common.world_size)]
         shared_party_info = dict()
+        if config.master.run_mlflow:
+            _mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
+            _mlflow.set_experiment(config.common.experiment_label)
+            _mlflow.start_run()
 
         def local_master_main():
             logger.info("Starting thread %s" % threading.current_thread().name)
@@ -567,6 +665,8 @@ def start(ctx, config_path):
 
         for thread in threads:
             thread.join()
+        if config.master.run_mlflow:
+            _mlflow.end_run()
 
 
 @local.command()
@@ -575,16 +675,17 @@ def start(ctx, config_path):
     is_flag=True,
     show_default=False,
     default=False,
-    help="Flag to retain created agents containers"
+    help="Retain created agents containers."
 )
 @click.pass_context
 def stop(ctx, leave_containers):
     """
     Stop local experiment.
     For a multiprocess mode stop and remove containers of the VFL master and members.
+    Does nothing for the single-process mode and is present for the CLI group coherency.
 
-    :param ctx: Passed from group Click context
-    :param leave_containers: Whether to leave stopped containers without removing them
+    :param ctx: Click context
+    :param leave_containers: Retain created agents containers (available for `multi-process` mode only)
     """
     _test = is_test_environment()
     if ctx.obj['multi_process'] and not ctx.obj['single_process']:
@@ -601,14 +702,17 @@ def stop(ctx, leave_containers):
 
 
 @local.command()
-@click.option('--agent-id', type=str, default=None)
+@click.option('--agent-id', type=str, default=None, help='ID of the agents` container.')
 @click.pass_context
 def status(ctx, agent_id):
     """
-    Print status of the experimental container(s).
+    For the `multi-process` mode print status of the experimental container(s).
+    If the `agent-id` is not passed, all the created members` containers statuses will be returned.
 
-    :param ctx: Passed from group Click context
-    :param agent_id: ID of the agent to print a status for
+    Does nothing for the single-process mode and is present for the CLI group coherency.
+
+    :param ctx: Click context
+    :param agent_id: ID of the agent`s container
     """
     if ctx.obj['multi_process'] and not ctx.obj['single_process']:
         _test = is_test_environment()
@@ -625,24 +729,24 @@ def status(ctx, agent_id):
 
 
 @local.command()
-@click.option('--agent-id', type=str, required=True)
+@click.option('--agent-id', type=str, required=True, help='ID of the agents` container.')
 @click.option(
     '--follow',
     is_flag=True,
     show_default=True,
     default=False,
-    help="Follow log output"
+    help="Follow log output."
 )
-@click.option('--tail', type=str, default='all')
+@click.option('--tail', type=str, default='all', help='Number of lines to show from the end of the logs.')
 @click.pass_context
 def logs(ctx, agent_id, follow, tail):
     """
     Print logs of the experimental container.
 
-    :param ctx: Passed from group Click context
-    :param agent_id: ID of the agent to print a status for
-    :param follow: Whether to continue streaming the new output from the logs
-    :param tail: Number of lines to show from the end of the logs
+    :param ctx: Click context
+    :param agent_id: ID of the agent`s container
+    :param follow: Follow log output
+    :param tail: Number of lines to show from the end of the logs. Can be `all` or a positive integer
     """
     if ctx.obj['multi_process'] and not ctx.obj['single_process']:
         client = ctx.obj.get('client', APIClient())
@@ -676,7 +780,7 @@ def test(ctx, multi_process, single_process):
     """
     Local tests (multi-process / single process) mode command group.
 
-    :param ctx: Click context passed through into group`s commands
+    :param ctx: Click context
     :param single_process: Run tests on single process experiment
     :param multi_process: Run tests on multiple process (dockerized) experiment
     """
@@ -693,14 +797,20 @@ def test(ctx, multi_process, single_process):
 
 @test.command()
 @click.pass_context
-@click.option('--config-path', type=str, required=True)
+@click.option(
+    '--config-path',
+    type=str,
+    required=True,
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 def start(ctx, config_path):
     """
     Start local test experiment.
     For a multiprocess mode run integration tests on started VFL master and members containers.
+    Single-process test will run tests within a python process.
 
-    :param ctx: Passed from group Click context
-    :param config_path: Path to the VFL config file
+    :param ctx: Click context
+    :param config_path: Absolute path to the configuration file in `YAML` format
     """
     config = VFLConfig.load_and_validate(config_path)
     if ctx.obj['multi_process'] and not ctx.obj['single_process']:
@@ -729,7 +839,7 @@ def start(ctx, config_path):
 
 @test.command()
 @click.pass_context
-@click.option('--config-path', type=str)
+@click.option('--config-path', type=str, help='Absolute path to the configuration file in `YAML` format.')
 @click.option(
     '--no-tests',
     is_flag=True,
@@ -740,11 +850,13 @@ def start(ctx, config_path):
 def stop(ctx, config_path, no_tests):
     """
     Stop local test experiment.
-    For a multiprocess mode run integration tests on stopped VFL master and members containers.
+    For a multiprocess mode run integration tests while stopping VFL master and members containers.
+    Does nothing for a single-process mode.
 
-    :param ctx: Passed from group Click context
-    :param config_path: Path to the VFL config file
-    :param no_tests: Whether to discard testing and remove test containers only
+    :param ctx: Click context
+    :param config_path: Absolute path to the configuration file in `YAML` format
+    :param no_tests: Remove test containers without launching Pytest. Useful if `start` command did not succeed,
+                     but containers have already been created
     """
     if config_path is None and not no_tests:
         raise SyntaxError('Specify `--config-path` or pass flag `--no-tests`')
@@ -776,13 +888,14 @@ def stop(ctx, config_path, no_tests):
 
 
 @test.command()
-@click.option('--agent-id', type=str, default=None)
+@click.option('--agent-id', type=str, default=None, help='ID of the agents` container.')
 def status(agent_id):
     """
     Print status of the experimental test container(s).
+    If the `agent-id` is not passed, all the created on test containers` statuses will be returned.
 
-    :param ctx: Passed from group Click context
-    :param agent_id: ID of the agent to print a status for
+    :param ctx: Click context
+    :param agent_id: ID of the agents` container
     """
     _test = True
     container_label = BASE_CONTAINER_LABEL + ('-test' if _test else '')
@@ -790,20 +903,22 @@ def status(agent_id):
 
 
 @test.command()
+@click.option('--agent-id', type=str, default=None, help='ID of the agents` container.')
+@click.option('--tail', type=str, default='all', help='Number of lines to show from the end of the logs.')
 @click.option(
-    '--agent-id',
+    '--config-path',
     type=str,
     default=None,
-    help='If the `agent-id` is passed, show container logs, otherwise, prints test report')
-@click.option('--tail', type=str, default='all')
-@click.option('--config-path', type=str, default=None)
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 def logs(agent_id, config_path, tail):
     """
     Print logs of the experimental test container or return path to tests` logs.
+    If the `agent-id` is passed, show container logs, otherwise, prints test report
 
-    :param agent_id: ID of the agent to print a status for (for container logs). If not passed, print Pytest report
-    :param config_path: Path to the VFL config file
-    :param tail: Number of lines to show from the end of the logs (for container logs)
+    :param agent_id: ID of the agents` container
+    :param config_path: Absolute path to the configuration file in `YAML` format
+    :param tail: Number of lines to show from the end of the logs
     """
     if agent_id is None and config_path is None:
         raise SyntaxError('Either `--agent-id` or `--config-path` argument must be specified.')
@@ -829,19 +944,24 @@ def report():
 
 
 @report.command()
-@click.option('--config-path', type=str, required=True)
+@click.option(
+    '--config-path',
+    type=str,
+    required=True,
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 @click.option(
     '--report-save-dir',
     type=str,
     default=None,
-    help='If not specified, uses `config.common.reports_export_folder` path to save results'
+    help='Directory to save the report.'
 )
 def export(config_path, report_save_dir):
     """
     Export MlFlow results into CSV format.
 
-    :param config_path: Path to the VFL config file
-    :param report_save_dir: Directory to save report. If not specified `config.common.reports_export_folder` is used
+    :param config_path: Absolute path to the configuration file in `YAML` format
+    :param report_save_dir: Directory to save the report. If not specified `config.common.reports_export_folder` is used
     """
     config = VFLConfig.load_and_validate(config_path)
     file_name = f'mlflow-experiment-{config.common.experiment_label}.csv'
@@ -859,12 +979,17 @@ def export(config_path, report_save_dir):
 
 
 @report.command()
-@click.option('--config-path', type=str, required=True)
+@click.option(
+    '--config-path',
+    type=str,
+    required=True,
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 def mlflow(config_path):
     """
     Print URI of the MlFlow experiment.
 
-    :param config_path: Path to the VFL config file
+    :param config_path: Absolute path to the configuration file in `YAML` format
     """
     config = VFLConfig.load_and_validate(config_path)
     mlflow_uri = f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}"
@@ -877,12 +1002,17 @@ def mlflow(config_path):
 
 
 @report.command()
-@click.option('--config-path', type=str, required=True)
+@click.option(
+    '--config-path',
+    type=str,
+    required=True,
+    help='Absolute path to the configuration file in `YAML` format.'
+)
 def prometheus(config_path):
     """
     Print Prometheus and Grafana URIs.
 
-    :param config_path: Path to the VFL config file
+    :param config_path: Absolute path to the configuration file in `YAML` format
     """
     config = VFLConfig.load_and_validate(config_path)
     logger.info(

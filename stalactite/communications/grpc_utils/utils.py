@@ -4,10 +4,8 @@ from dataclasses import dataclass, field
 import enum
 import logging
 import pickle
-from queue import Queue
 from typing import Any, Optional
 
-import grpc
 import torch
 import safetensors.torch
 from prometheus_client import Gauge, Summary
@@ -18,26 +16,8 @@ from stalactite.base import ParticipantFuture
 logger = logging.getLogger(__name__)
 
 
-class MultiElementQueue:
-    _lock = threading.Lock()
-    elements = list()
-
-    def put(self, value):
-        with self._lock:
-            self.elements.append(value)
-
-    def get(self):
-        with self._lock:
-            self.elements.pop()
-
-    def get_all(self):
-        with self._lock:
-            values = self.elements
-            self.elements = list()
-        return values
-
-
 class PrometheusMetric(enum.Enum):
+    """ Class holding Prometheus metrics. """
     number_of_connected_agents = Gauge('number_of_connected_agents', 'Active clients number', ['experiment_label'])
     execution_time = Summary(
         'member_task_execution_time',
@@ -61,19 +41,23 @@ class PrometheusMetric(enum.Enum):
     )
 
 
-
 class UnsupportedError(Exception):
+    """ Custom exception class for indicating that an unsupported method is called on a class. """
+
     def __init__(self, message: str = "Unsupported method for class."):
         super().__init__(message)
 
 
 class ArbiterServerError(Exception):
+    """ Custom exception class for errors related to the Arbiter server. """
+
     def __init__(self, message: str = "Arbiter server could not process the request."):
         super().__init__(message)
 
 
 @contextmanager
 def start_thread(*args, thread_timeout: float = 100., **kwargs):
+    """ Helper context manager to manage threads. """
     thread = threading.Thread(*args, **kwargs)
     try:
         thread.start()
@@ -83,6 +67,7 @@ def start_thread(*args, thread_timeout: float = 100., **kwargs):
 
 
 class Status(str, enum.Enum):
+    """ Enum representing different communicator world statuses. """
     not_started = 'not started'
     all_ready = 'all ready'
     waiting = 'waiting for others'
@@ -90,37 +75,36 @@ class Status(str, enum.Enum):
 
 
 class ClientStatus(str, enum.Enum):
+    """ Enum representing different client statuses. """
     alive = 'alive'
 
 
 @dataclass
 class MethodMessage:
+    """ Data class holding keyword arguments for serialization. """
     tensor_kwargs: dict[str, torch.Tensor] = field(default_factory=dict)
     other_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class SerializedMethodMessage:
+    """ Data class holding serialization keyword arguments for deserialization. """
     tensor_kwargs: dict[str, bytes] = field(default_factory=dict)
     other_kwargs: dict[str, bytes] = field(default_factory=dict)
 
 
 class MessageTypes(str, enum.Enum):
+    """ Enum representing different message types. """
     server_task = 'server'
     client_task = 'client'
     acknowledgment = 'ack'
 
 
 @dataclass
-class ParticipantTasks:
-    context: grpc.aio.ServicerContext
-    queue: Queue
-
-
-@dataclass
 class PreparedTask:
+    """ Helper data class holding Task info and future. """
     task_id: str
-    task_message: communicator_pb2
+    task_message: communicator_pb2.MainMessage
     task_future: ParticipantFuture
 
 
