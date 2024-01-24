@@ -18,9 +18,8 @@ poetry --version
 ```bash
 poetry config virtualenvs.in-project true # Create the virtualenv inside the project’s root directory.
 # You can configure poetry using official docs: https://python-poetry.org/docs/configuration/
-poetry shell # Start a new shell and activate the virtual environment
-poetry lock --no-update # Lock (without installing and updating) the dependencies
 poetry install # Install stalactite and dependencies
+poetry shell # Start a new shell and activate the virtual environment
 ```
 2. Check if the Stalactite CLI is working by running:
 ```bash

@@ -27,7 +27,6 @@ mlflow = "2.9.2" #
 pydantic = "^2.5.3"
 tenseal = "^0.3.14"
 
-
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.59.3"
 tox = "*"
@@ -54,10 +53,13 @@ use_parentheses = true
 force_grid_wrap = 0
 multi_line_output = 3
 include_trailing_comma = true
+extend_skip_glob = ["*/generated_code/*"]
 
 [tool.pylint.format]
 max-line-length = "120"
 ignore = "E203,W0511"
+ignore-paths = ["stalactite/communications/grpc_utils/generated_code/*"]
+
 
 [tool.black]
 line-length = 120
@@ -72,37 +74,43 @@ exclude = '''
 [tool.tox]
 legacy_tox_ini = """
     [tox]
-    envlist = py{39, 310, 311},test,codeformat,type
+    envlist = py{39, 310, 311},format,lint,type
 
-#    [gh-actions]
-#    python =
-#        3.9: py39
-#        3.10: py310
-#        3.11: py311
+    [gh-actions]
+    python =
+        3.9: py39
+        3.10: py310
+        3.11: py311
 
-    [testenv:test]
+    [testenv]
     description = tests
     allowlist_externals = poetry
     commands =
         poetry install
         poetry run pytest tests -v --ignore=tests/distributed_grpc
 
-    [testenv:codeformat]
-    description = run code formatters and linters
+    [testenv:format]
+    description = run code formatters
     skip_install = true
     deps =
         black
         isort
-        pylint
     commands =
         isort stalactite
         black stalactite
+
+    [testenv:lint]
+    description = run linters
+    skip_install = true
+    deps =
+        pylint
+    commands =
         pylint stalactite
 
     [testenv:type]
     description = run type checks
     deps =
-        pyre
+        pyre-check
     commands =
         pyre restart
 """
