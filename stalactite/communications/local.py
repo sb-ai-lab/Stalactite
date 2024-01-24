@@ -9,10 +9,17 @@ from copy import copy
 from dataclasses import dataclass
 from queue import Queue
 from threading import Thread
-from typing import List, Dict, Any, Optional, Union, cast, Set
+from typing import Any, Dict, List, Optional, Set, Union, cast
 
-from stalactite.base import PartyMaster, PartyMember, PartyCommunicator, ParticipantFuture, Party, PartyDataTensor, \
-    RecordsBatch
+from stalactite.base import (
+    ParticipantFuture,
+    Party,
+    PartyCommunicator,
+    PartyDataTensor,
+    PartyMaster,
+    PartyMember,
+    RecordsBatch,
+)
 from stalactite.communications.helpers import ParticipantType, _Method
 
 logger = logging.getLogger(__name__)
@@ -27,8 +34,10 @@ class _Event:
     data: Dict[str, Any]
 
     def __repr__(self) -> str:
-        return f"_Event(id={self.id}, method_name={self.method_name}, " \
-               f"from_id={self.from_uid}, parent_id={self.parent_id})"
+        return (
+            f"_Event(id={self.id}, method_name={self.method_name}, "
+            f"from_id={self.from_uid}, parent_id={self.parent_id})"
+        )
 
 
 @dataclass(frozen=True)
@@ -38,8 +47,9 @@ class _ParticipantInfo:
 
 
 class LocalPartyCommunicator(PartyCommunicator, ABC):
-    """ Base local communicator class. """
-    MEMBER_DATA_FIELDNAME = '__member_data__'
+    """Base local communicator class."""
+
+    MEMBER_DATA_FIELDNAME = "__member_data__"
 
     # todo: add docs
     # todo: introduce the single interface for that
@@ -49,15 +59,15 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
 
     @property
     def is_ready(self) -> bool:
-        """ Whether the communicator is ready. """
+        """Whether the communicator is ready."""
         return self._party_info is not None
 
     def randezvous(self):
-        """ Wait until all the participants of the party are initialized. """
+        """Wait until all the participants of the party are initialized."""
         logger.info("Party communicator %s: performing randezvous" % self.participant.id)
         self._party_info[self.participant.id] = _ParticipantInfo(
             type=ParticipantType.master if isinstance(self.participant, PartyMaster) else ParticipantType.member,
-            queue=Queue()
+            queue=Queue(),
         )
 
         # todo: allow to work with timeout for randezvous operation
@@ -68,8 +78,9 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
 
         logger.info("Party communicator %s: randezvous has been successfully performed" % self.participant.id)
 
-    def send(self, send_to_id: str, method_name: str, parent_id: Optional[str] = None,
-             require_answer: bool = True, **kwargs) -> ParticipantFuture:
+    def send(
+        self, send_to_id: str, method_name: str, parent_id: Optional[str] = None, require_answer: bool = True, **kwargs
+    ) -> ParticipantFuture:
         """
         Send task to VFL member or master.
 
@@ -84,19 +95,26 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         if send_to_id not in self._party_info:
             raise ValueError(f"Unknown receiver: {send_to_id}")
 
-        event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant.id,
-                       method_name=method_name, data=kwargs)
+        event = _Event(
+            id=str(uuid.uuid4()),
+            parent_id=parent_id,
+            from_uid=self.participant.id,
+            method_name=method_name,
+            data=kwargs,
+        )
 
         return self._publish_message(event, send_to_id, require_answer=require_answer)
 
-    def broadcast(self,
-                  method_name: str,
-                  mass_kwargs: Optional[List[Any]] = None,
-                  participating_members: Optional[List[str]] = None,
-                  parent_id: Optional[str] = None,
-                  require_answer: bool = True,
-                  include_current_participant: bool = False,
-                  **kwargs) -> List[ParticipantFuture]:
+    def broadcast(
+        self,
+        method_name: str,
+        mass_kwargs: Optional[List[Any]] = None,
+        participating_members: Optional[List[str]] = None,
+        parent_id: Optional[str] = None,
+        require_answer: bool = True,
+        include_current_participant: bool = False,
+        **kwargs,
+    ) -> List[ParticipantFuture]:
         """
         Broadcast tasks to VFL agents.
 
@@ -120,8 +138,10 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         if not mass_kwargs:
             mass_kwargs = [dict() for _ in members]
         elif mass_kwargs and len(mass_kwargs) != len(members):
-            raise ValueError(f"Length of arguments list ({len(mass_kwargs)}) is not equal "
-                             f"to the length of members ({len(members)})")
+            raise ValueError(
+                f"Length of arguments list ({len(mass_kwargs)}) is not equal "
+                f"to the length of members ({len(members)})"
+            )
         else:
             mass_kwargs = [{self.MEMBER_DATA_FIELDNAME: args} for args in mass_kwargs]
 
@@ -131,8 +151,13 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             if member_id == self.participant.id and not include_current_participant:
                 continue
 
-            event = _Event(id=str(uuid.uuid4()), parent_id=parent_id, from_uid=self.participant.id,
-                           method_name=method_name, data={**mkwargs, **kwargs})
+            event = _Event(
+                id=str(uuid.uuid4()),
+                parent_id=parent_id,
+                from_uid=self.participant.id,
+                method_name=method_name,
+                data={**mkwargs, **kwargs},
+            )
 
             future = self._publish_message(event, member_id, require_answer=require_answer)
             if future:
@@ -141,7 +166,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return futures
 
     def _publish_message(self, event: _Event, receiver_id: str, require_answer: bool) -> Optional[ParticipantFuture]:
-        """ Create a future for the Event. """
+        """Create a future for the Event."""
         logger.debug("Party communicator %s: sending to %s event %s" % (self.participant.id, receiver_id, event))
 
         future = ParticipantFuture(participant_id=receiver_id)
@@ -158,22 +183,21 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return future
 
     def _check_if_ready(self):
-        """ Raise an exception if the communicator was not initialized properly. """
+        """Raise an exception if the communicator was not initialized properly."""
         if not self.is_ready:
-            raise RuntimeError("Cannot proceed because communicator is not ready. "
-                               "Perhaps, randezvous has not been called or was unsuccessful")
+            raise RuntimeError(
+                "Cannot proceed because communicator is not ready. "
+                "Perhaps, randezvous has not been called or was unsuccessful"
+            )
 
 
 class LocalMasterPartyCommunicator(LocalPartyCommunicator):
-    """ Local Master communicator class.
+    """Local Master communicator class.
     This class is used as the communicator for master in local (single-process) VFL setup.
     """
 
     def __init__(
-            self,
-            participant: PartyMaster,
-            world_size: int,
-            shared_party_info: Optional[Dict[str, _ParticipantInfo]]
+        self, participant: PartyMaster, world_size: int, shared_party_info: Optional[Dict[str, _ParticipantInfo]]
     ):
         """
         Initialize master communicator with parameters.
@@ -211,7 +235,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
             raise
 
     def _run(self):
-        """ Process tasks scheduled in the queue for VFL master. """
+        """Process tasks scheduled in the queue for VFL master."""
         try:
             logger.info("Party communicator %s: starting event loop" % self.participant.id)
 
@@ -223,23 +247,29 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
                 if event.method_name == _Method.service_return_answer.value:
                     if event.parent_id not in self._event_futures:
                         # todo: replace with custom error
-                        raise ValueError(f"No awaiting future with id {event.parent_id}."
-                                         f"(Participant id {self.participant.id}. "
-                                         f"Event {event.id} from {event.from_uid})")
+                        raise ValueError(
+                            f"No awaiting future with id {event.parent_id}."
+                            f"(Participant id {self.participant.id}. "
+                            f"Event {event.id} from {event.from_uid})"
+                        )
 
-                    logger.debug("Party communicator %s: marking future %s as finished by answer of event %s"
-                                 % (self.participant.id, event.parent_id, event.id))
+                    logger.debug(
+                        "Party communicator %s: marking future %s as finished by answer of event %s"
+                        % (self.participant.id, event.parent_id, event.id)
+                    )
 
-                    if 'result' not in event.data:
+                    if "result" not in event.data:
                         # todo: replace with custom error
                         raise ValueError("No result in data")
 
                     future = self._event_futures.pop(event.parent_id)
-                    future.set_result(event.data['result'])
+                    future.set_result(event.data["result"])
                     future.done()
                 elif event.method_name == _Method.service_heartbeat.value:
-                    logger.info("Party communicator %s: received heartbeat from %s: %s"
-                                % (self.participant.id, event.id, event.data))
+                    logger.info(
+                        "Party communicator %s: received heartbeat from %s: %s"
+                        % (self.participant.id, event.id, event.data)
+                    )
                 elif event.method_name == _Method.finalize.value:
                     logger.info("Party communicator %s: finalized" % self.participant.id)
                     break
@@ -253,15 +283,12 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
 
 
 class LocalMemberPartyCommunicator(LocalPartyCommunicator):
-    """ gRPC Member communicator class.
+    """gRPC Member communicator class.
     This class is used as the communicator for member in local (single-process) VFL setup.
     """
 
     def __init__(
-            self,
-            participant: PartyMember,
-            world_size: int,
-            shared_party_info: Optional[Dict[str, _ParticipantInfo]]
+        self, participant: PartyMember, world_size: int, shared_party_info: Optional[Dict[str, _ParticipantInfo]]
     ):
         """
         Initialize member communicator with parameters.
@@ -290,7 +317,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
             raise
 
     def _run(self):
-        """ Process tasks scheduled in the queue for VFL member. """
+        """Process tasks scheduled in the queue for VFL member."""
         logger.info("Party communicator %s: starting event loop" % self.participant.id)
 
         supported_methods = [
@@ -300,12 +327,11 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
             _Method.finalize.value,
             _Method.update_weights.value,
             _Method.predict.value,
-            _Method.update_predict.value
+            _Method.update_predict.value,
         ]
 
         not_found_methods = [
-            method_name for method_name in supported_methods
-            if hasattr(self.participant.id, method_name)
+            method_name for method_name in supported_methods if hasattr(self.participant.id, method_name)
         ]
         if len(not_found_methods) > 0:
             raise RuntimeError(f"Found methods not supported by member {self.participant.id}: {not_found_methods}")
@@ -327,8 +353,13 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
 
                 result = method(*mkwargs, **kwargs)
 
-                self.send(send_to_id=event.from_uid, method_name=_Method.service_return_answer.value,
-                          parent_id=event.id, require_answer=False, result=result)
+                self.send(
+                    send_to_id=event.from_uid,
+                    method_name=_Method.service_return_answer.value,
+                    parent_id=event.id,
+                    require_answer=False,
+                    result=result,
+                )
 
                 if event.method_name == _Method.finalize.value:
                     break
@@ -339,7 +370,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
 
 
 class LocalPartyImpl(Party):
-    """ Helper Party class for tasks scheduling. """
+    """Helper Party class for tasks scheduling."""
 
     # todo: add logging to the methods
     def __init__(self, party_communicator: PartyCommunicator, op_timeout: Optional[float] = None):
@@ -354,20 +385,21 @@ class LocalPartyImpl(Party):
 
     @property
     def world_size(self) -> int:
-        """ Return number of the VFL members. """
+        """Return number of the VFL members."""
         return self.party_communicator.world_size
 
     @property
     def members(self) -> List[str]:
-        """ Return list of the VFL members. """
+        """Return list of the VFL members."""
         return self.party_communicator.members
 
     def _sync_broadcast_to_members(
-            self, *,
-            method_name: _Method,
-            mass_kwargs: Optional[List[Any]] = None,
-            participating_members: Optional[List[str]] = None,
-            **kwargs
+        self,
+        *,
+        method_name: _Method,
+        mass_kwargs: Optional[List[Any]] = None,
+        participating_members: Optional[List[str]] = None,
+        **kwargs,
     ) -> List[Any]:
         """
         Broadcast tasks to VFL agents using master communicator.
@@ -381,69 +413,69 @@ class LocalPartyImpl(Party):
             method_name=method_name.value,
             participating_members=participating_members,
             mass_kwargs=mass_kwargs,
-            **kwargs
+            **kwargs,
         )
 
-        logger.debug("Party broadcast: waiting for answer to event %s (waiting for %s secs)"
-                     % (method_name, self.op_timeout or "inf"))
+        logger.debug(
+            "Party broadcast: waiting for answer to event %s (waiting for %s secs)"
+            % (method_name, self.op_timeout or "inf")
+        )
 
         futures = concurrent.futures.wait(futures, timeout=self.op_timeout)
-        completed_futures, uncompleted_futures \
-            = cast(Set[ParticipantFuture], futures[0]), cast(Set[ParticipantFuture], futures[1])
+        completed_futures, uncompleted_futures = cast(Set[ParticipantFuture], futures[0]), cast(
+            Set[ParticipantFuture], futures[1]
+        )
 
         if len(uncompleted_futures) > 0:
             # todo: custom exception with additional info about uncompleted tasks
-            raise RuntimeError(f"Not all tasks have been completed. "
-                               f"Completed tasks: {len(completed_futures)}. "
-                               f"Uncompleted tasks: {len(uncompleted_futures)}.")
+            raise RuntimeError(
+                f"Not all tasks have been completed. "
+                f"Completed tasks: {len(completed_futures)}. "
+                f"Uncompleted tasks: {len(uncompleted_futures)}."
+            )
 
         logger.debug("Party broadcast for event %s has succesfully finished" % method_name)
-
+        participating_members = participating_members if participating_members else self.party_communicator.members
         fresults = {future.participant_id: future.result() for future in completed_futures}
-        return [fresults[member_id] for member_id in self.party_communicator.members]
+        return [fresults[member_id] for member_id in participating_members]
 
     def records_uids(self) -> List[List[str]]:
-        """ Collect records uids from VFL members. """
+        """Collect records uids from VFL members."""
         return cast(List[List[str]], self._sync_broadcast_to_members(method_name=_Method.records_uids))
 
     def register_records_uids(self, uids: List[str]):
-        """ Register records uids in VFL agents. """
+        """Register records uids in VFL agents."""
         self._sync_broadcast_to_members(method_name=_Method.register_records_uids, uids=uids)
 
     def initialize(self):
-        """ Initialize party communicators. """
+        """Initialize party communicators."""
         self._sync_broadcast_to_members(method_name=_Method.initialize)
 
     def finalize(self):
-        """ Finalize party communicators. """
+        """Finalize party communicators."""
         self._sync_broadcast_to_members(method_name=_Method.finalize)
 
     def update_weights(self, upd: PartyDataTensor):
-        """ Update model`s weights on agents. """
+        """Update model`s weights on agents."""
         self._sync_broadcast_to_members(method_name=_Method.update_weights, mass_kwargs=upd)
 
     def predict(self, uids: List[str], use_test: bool = False) -> PartyDataTensor:
-        """ Make predictions using VFL agents` models. """
+        """Make predictions using VFL agents` models."""
         return cast(
-            PartyDataTensor,
-            self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=True)
+            PartyDataTensor, self._sync_broadcast_to_members(method_name=_Method.predict, uids=uids, use_test=use_test)
         )
 
     def update_predict(
-            self,
-            participating_members: List[str],
-            batch: RecordsBatch,
-            previous_batch: RecordsBatch,
-            upd: PartyDataTensor
+        self, participating_members: List[str], batch: RecordsBatch, previous_batch: RecordsBatch, upd: PartyDataTensor
     ) -> PartyDataTensor:
-        """ Perform update_predict operation on the VFL agents. """
+        """Perform update_predict operation on the VFL agents."""
         return cast(
             PartyDataTensor,
             self._sync_broadcast_to_members(
                 method_name=_Method.update_predict,
-                mass_kwargs=upd,
+                mass_kwargs=upd[: len(participating_members)],
                 participating_members=participating_members,
                 batch=batch,
-                previous_batch=previous_batch
-            )
+                previous_batch=previous_batch,
+            ),
         )

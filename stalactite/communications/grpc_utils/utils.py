@@ -1,63 +1,62 @@
-import threading
-from contextlib import contextmanager
-from dataclasses import dataclass, field
 import enum
 import logging
 import pickle
+import threading
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
-import torch
 import safetensors.torch
+import torch
 from prometheus_client import Gauge, Summary
 
-from stalactite.communications.grpc_utils.generated_code import communicator_pb2
 from stalactite.base import ParticipantFuture
+from stalactite.communications.grpc_utils.generated_code import communicator_pb2
 
 logger = logging.getLogger(__name__)
 
 
 class PrometheusMetric(enum.Enum):
-    """ Class holding Prometheus metrics. """
-    number_of_connected_agents = Gauge('number_of_connected_agents', 'Active clients number', ['experiment_label'])
+    """Class holding Prometheus metrics."""
+
+    number_of_connected_agents = Gauge("number_of_connected_agents", "Active clients number", ["experiment_label"])
     execution_time = Summary(
-        'member_task_execution_time',
-        'Execution time in sec of the tasks on members',
-        ['experiment_label', 'client_id', 'task_type']
+        "member_task_execution_time",
+        "Execution time in sec of the tasks on members",
+        ["experiment_label", "client_id", "task_type"],
     )
     message_size = Summary(
-        'member_task_message_size',
-        'Size of the returned by member message containing results',
-        ['experiment_label', 'client_id', 'task_type']
+        "member_task_message_size",
+        "Size of the returned by member message containing results",
+        ["experiment_label", "client_id", "task_type"],
     )
     send_client_time = Summary(
-        'member_send_time',
-        'Time of the unary send operation to master until an acknowledgment is received',
-        ['experiment_label', 'client_id', 'task_type']
+        "member_send_time",
+        "Time of the unary send operation to master until an acknowledgment is received",
+        ["experiment_label", "client_id", "task_type"],
     )
     iteration_times = Summary(
-        'master_iteration_time',
-        'Time of iterations in the training loop',
-        ['experiment_label', 'iteration']
+        "master_iteration_time", "Time of iterations in the training loop", ["experiment_label", "iteration"]
     )
 
 
 class UnsupportedError(Exception):
-    """ Custom exception class for indicating that an unsupported method is called on a class. """
+    """Custom exception class for indicating that an unsupported method is called on a class."""
 
     def __init__(self, message: str = "Unsupported method for class."):
         super().__init__(message)
 
 
 class ArbiterServerError(Exception):
-    """ Custom exception class for errors related to the Arbiter server. """
+    """Custom exception class for errors related to the Arbiter server."""
 
     def __init__(self, message: str = "Arbiter server could not process the request."):
         super().__init__(message)
 
 
 @contextmanager
-def start_thread(*args, thread_timeout: float = 100., **kwargs):
-    """ Helper context manager to manage threads. """
+def start_thread(*args, thread_timeout: float = 100.0, **kwargs):
+    """Helper context manager to manage threads."""
     thread = threading.Thread(*args, **kwargs)
     try:
         thread.start()
@@ -67,42 +66,48 @@ def start_thread(*args, thread_timeout: float = 100., **kwargs):
 
 
 class Status(str, enum.Enum):
-    """ Enum representing different communicator world statuses. """
-    not_started = 'not started'
-    all_ready = 'all ready'
-    waiting = 'waiting for others'
-    finished = 'finished'
+    """Enum representing different communicator world statuses."""
+
+    not_started = "not started"
+    all_ready = "all ready"
+    waiting = "waiting for others"
+    finished = "finished"
 
 
 class ClientStatus(str, enum.Enum):
-    """ Enum representing different client statuses. """
-    alive = 'alive'
+    """Enum representing different client statuses."""
+
+    alive = "alive"
 
 
 @dataclass
 class MethodMessage:
-    """ Data class holding keyword arguments for serialization. """
+    """Data class holding keyword arguments for serialization."""
+
     tensor_kwargs: dict[str, torch.Tensor] = field(default_factory=dict)
     other_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class SerializedMethodMessage:
-    """ Data class holding serialization keyword arguments for deserialization. """
+    """Data class holding serialization keyword arguments for deserialization."""
+
     tensor_kwargs: dict[str, bytes] = field(default_factory=dict)
     other_kwargs: dict[str, bytes] = field(default_factory=dict)
 
 
 class MessageTypes(str, enum.Enum):
-    """ Enum representing different message types. """
-    server_task = 'server'
-    client_task = 'client'
-    acknowledgment = 'ack'
+    """Enum representing different message types."""
+
+    server_task = "server"
+    client_task = "client"
+    acknowledgment = "ack"
 
 
 @dataclass
 class PreparedTask:
-    """ Helper data class holding Task info and future. """
+    """Helper data class holding Task info and future."""
+
     task_id: str
     task_message: communicator_pb2.MainMessage
     task_future: ParticipantFuture
@@ -114,7 +119,7 @@ def load_data(serialized_tensor: bytes) -> torch.Tensor:
 
     :param serialized_tensor: Tensor to serialize
     """
-    return safetensors.torch.load(serialized_tensor)['tensor']
+    return safetensors.torch.load(serialized_tensor)["tensor"]
 
 
 def save_data(tensor: torch.Tensor):
@@ -123,7 +128,7 @@ def save_data(tensor: torch.Tensor):
 
     :param tensor: Tensor serialized with load_data function
     """
-    return safetensors.torch.save(tensors={'tensor': tensor})
+    return safetensors.torch.save(tensors={"tensor": tensor})
 
 
 def prepare_kwargs(kwargs: Optional[MethodMessage]) -> SerializedMethodMessage:
@@ -136,14 +141,14 @@ def prepare_kwargs(kwargs: Optional[MethodMessage]) -> SerializedMethodMessage:
         return SerializedMethodMessage()
     serialized_tensors = {}
     for key, value in kwargs.tensor_kwargs.items():
-        assert isinstance(value, torch.Tensor), 'MethodMessage.tensor_kwargs can contain only torch.Tensor-s as values'
+        assert isinstance(value, torch.Tensor), "MethodMessage.tensor_kwargs can contain only torch.Tensor-s as values"
         serialized_tensors[key] = save_data(value)
     other_kwargs = {}
     for key, value in kwargs.other_kwargs.items():
         if isinstance(value, torch.Tensor):
             logger.warning(
-                f'Got kwarg {key} as the field in MethodMessage.other_kwargs, '
-                'while it should be passed in MethodMessage.tensor_kwargs'
+                f"Got kwarg {key} as the field in MethodMessage.other_kwargs, "
+                "while it should be passed in MethodMessage.tensor_kwargs"
             )
         other_kwargs[key] = pickle.dumps(value)
 

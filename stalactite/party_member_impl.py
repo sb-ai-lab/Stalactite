@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 
+import scipy as sp
 import torch
 from datasets.dataset_dict import DatasetDict
 
@@ -11,8 +12,15 @@ logger = logging.getLogger(__name__)
 
 
 class PartyMemberImpl(PartyMember):
-    def __init__(self, uid: str, model_update_dim_size: int, member_record_uids: List[str], model: torch.nn.Module,
-                 dataset: DatasetDict, data_params: AttrDict):
+    def __init__(
+        self,
+        uid: str,
+        model_update_dim_size: int,
+        member_record_uids: List[str],
+        model: torch.nn.Module,
+        dataset: DatasetDict,
+        data_params: AttrDict,
+    ):
         self.id = uid
         self._uids = member_record_uids
         self._uids_to_use: Optional[List[str]] = None
@@ -48,11 +56,17 @@ class PartyMemberImpl(PartyMember):
         self.is_finalized = True
         logger.info("Member %s: has been finalized" % self.id)
 
+    def _prepare_data(self, uids: RecordsBatch):
+
+        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
+        U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
+        return U, S, Vh
+
     def update_weights(self, uids: RecordsBatch, upd: DataTensor):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
-        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        self._model.update_weights(X_train, upd)
+        U, S, Vh = self._prepare_data(uids)
+        self._model.update_weights(data_U=U, data_S=S, data_Vh=Vh, rhs=upd)
         logger.info("Member %s: successfully updated weights" % self.id)
 
     def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:

@@ -30,7 +30,7 @@ tenseal = "^0.3.14"
 
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.59.3"
-
+tox = "*"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^7.4.3"
@@ -46,6 +46,66 @@ log_cli = true
 log_cli_level = "DEBUG"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+[tool.isort]
+profile = "black"
+force_single_line = false
+use_parentheses = true
+force_grid_wrap = 0
+multi_line_output = 3
+include_trailing_comma = true
+
+[tool.pylint.format]
+max-line-length = "120"
+ignore = "E203,W0511"
+
+[tool.black]
+line-length = 120
+target-version = ['py39', 'py310', 'py311']
+exclude = '''
+/(
+  stalactite/communications/grpc_utils/generated_code/*
+)/
+'''
+
+
+[tool.tox]
+legacy_tox_ini = """
+    [tox]
+    envlist = py{39, 310, 311},test,codeformat,type
+
+#    [gh-actions]
+#    python =
+#        3.9: py39
+#        3.10: py310
+#        3.11: py311
+
+    [testenv:test]
+    description = tests
+    allowlist_externals = poetry
+    commands =
+        poetry install
+        poetry run pytest tests -v --ignore=tests/distributed_grpc
+
+    [testenv:codeformat]
+    description = run code formatters and linters
+    skip_install = true
+    deps =
+        black
+        isort
+        pylint
+    commands =
+        isort stalactite
+        black stalactite
+        pylint stalactite
+
+    [testenv:type]
+    description = run type checks
+    deps =
+        pyre
+    commands =
+        pyre restart
+"""
 
 [build-system]
 requires = ["poetry-core"]

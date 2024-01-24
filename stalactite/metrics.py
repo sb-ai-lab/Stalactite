@@ -1,9 +1,9 @@
-import torch
 import numpy as np
+import torch
 
 
 class ComputeAccuracy:
-    def __init__(self, name='Accuracy', positive_int=1, negative_int=-1, force_to_binary=True):
+    def __init__(self, name="Accuracy", positive_int=1, negative_int=-1, force_to_binary=True):
         """_summary_
 
         Args:
@@ -30,35 +30,19 @@ class ComputeAccuracy:
         return float(accuracy)
 
 
-class ComputeAccuracy_numpy():
-    def __init__(self, force_to_binary=True, is_linreg=True, is_multilabel=False):
+class ComputeAccuracy_numpy:
+    def __init__(self, force_to_binary=True):
         self.force_to_binary = force_to_binary
-        self.name = 'Accuracy'
-        self.is_linreg = is_linreg
-        self.is_multilabel = is_multilabel
-
-    @staticmethod
-    def accuracy_multilable(y_true, y_pred):
-        temp = 0
-        for i in range(y_true.shape[0]):
-            temp += sum(np.logical_and(y_true[i], y_pred[i])) / sum(np.logical_or(y_true[i], y_pred[i]))
-        return temp / y_true.shape[0]
+        self.name = "Accuracy"
 
     def compute(self, true_label, predictions):
         predictions = predictions.copy()
         true_label = true_label.copy()
 
         if self.force_to_binary:
-            if self.is_linreg:
-                predictions[predictions < 0] = -1
-                predictions[predictions > 0] = 1
-            else:
-                predictions[predictions < 0.5] = 0
-                predictions[predictions > 0.5] = 1
-
-        if self.is_multilabel:
-            return self.accuracy_multilable(true_label, predictions)
-
+            predictions[predictions < 0] = -1
+            predictions[predictions > 0] = 1
+        # import pdb; pdb.set_trace()
+        # accuracy = accuracy_score(true_label.squeeze(), predictions.squeeze())
         accuracy = np.sum(true_label.squeeze() == predictions.squeeze()) / true_label.squeeze().shape[0]
         return accuracy
-

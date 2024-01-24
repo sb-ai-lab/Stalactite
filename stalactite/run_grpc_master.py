@@ -7,7 +7,7 @@ from stalactite.data_utils import get_party_master
 
 
 @click.command()
-@click.option('--config-path', type=str, default='../configs/config.yml')
+@click.option("--config-path", type=str, default="../configs/config.yml")
 def main(config_path):
     config = VFLConfig.load_and_validate(config_path)
     if config.master.run_mlflow:
@@ -31,5 +31,5 @@ def main(config_path):
         mlflow.end_run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

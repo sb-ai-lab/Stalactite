@@ -1,0 +1,34 @@
+{
+  "site_package_search_strategy": "pep561",
+  "source_directories": [
+    "./stalactite"
+  ],
+  "ignore_all_errors": [
+    ".*/generated_code/.*"
+  ],
+  "search_path": [
+    ".",
+    {
+      "site-package": "tenseal"
+    },
+    {
+      "site-package": "grpc"
+    },
+    {
+      "site-package": "mlflow"
+    },
+    {
+      "site-package": "sklearn"
+    },
+    {
+      "site-package": "docker"
+    },
+    {
+      "site-package": "scipy"
+    },
+    {
+      "site-package": "datasets"
+    }
+  ]
+}
+

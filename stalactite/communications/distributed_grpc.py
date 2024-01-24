@@ -1,64 +1,68 @@
-from abc import ABC
 import asyncio
 import concurrent
-from concurrent import futures
-from copy import copy
 import logging
-from queue import Queue
 import threading
 import time
-from typing import Any, Union, Optional, Iterator, Coroutine, cast
 import uuid
+from abc import ABC
+from concurrent import futures
+from copy import copy
+from queue import Queue
+from typing import Any, Coroutine, Iterator, Optional, Union, cast
 
 import grpc
 import torch
 from prometheus_client import start_http_server
 
 from stalactite.base import (
-    PartyMaster,
-    PartyMember,
-    PartyCommunicator,
     ParticipantFuture,
     Party,
+    PartyCommunicator,
     PartyDataTensor,
+    PartyMaster,
+    PartyMember,
     RecordsBatch,
 )
-from stalactite.communications.helpers import _Method, METHOD_VALUES
-from stalactite.communications.grpc_utils.generated_code import communicator_pb2, communicator_pb2_grpc
+from stalactite.communications.grpc_utils.generated_code import (
+    communicator_pb2,
+    communicator_pb2_grpc,
+)
 from stalactite.communications.grpc_utils.grpc_servicer import GRpcCommunicatorServicer
 from stalactite.communications.grpc_utils.utils import (
-    Status,
     ClientStatus,
     MessageTypes,
     MethodMessage,
     PreparedTask,
     SerializedMethodMessage,
-    prepare_kwargs,
-    collect_kwargs,
-    start_thread,
+    Status,
     UnsupportedError,
+    collect_kwargs,
+    prepare_kwargs,
+    start_thread,
 )
+from stalactite.communications.helpers import METHOD_VALUES, _Method
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(sh)
 
 
 class GRpcPartyCommunicator(PartyCommunicator, ABC):
-    """ Base gRPC party communicator class. """
+    """Base gRPC party communicator class."""
+
     participant: Union[PartyMaster, PartyMember]
     logging_level = logging.INFO
     is_ready: bool = False
 
     def __init__(self, logging_level: Any = logging.INFO):
-        """ Initialize base GRpcPartyCommunicator class. Set the module logging level. """
+        """Initialize base GRpcPartyCommunicator class. Set the module logging level."""
         self.logging_level = logging_level
         logger.setLevel(logging_level)
 
     def raise_if_not_ready(self):
-        """ Raise an exception if the communicator was not initialized properly. """
+        """Raise an exception if the communicator was not initialized properly."""
         if not self.is_ready:
             raise RuntimeError(
                 "Cannot proceed because communicator is not ready. "
@@ -66,17 +70,17 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
             )
 
     def prepare_task(
-            self,
-            message_type: MessageTypes,
-            send_to_id: str,
-            agent_status: str,
-            method_name: _Method,
-            task_id: Optional[str] = None,
-            parent_id: Optional[str] = None,
-            parent_method_name: Optional[str] = None,
-            parent_task_execution_time: Optional[float] = None,
-            require_answer: bool = True,
-            message: Optional[MethodMessage] = None,
+        self,
+        message_type: MessageTypes,
+        send_to_id: str,
+        agent_status: str,
+        method_name: _Method,
+        task_id: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        parent_method_name: Optional[str] = None,
+        parent_task_execution_time: Optional[float] = None,
+        require_answer: bool = True,
+        message: Optional[MethodMessage] = None,
     ) -> PreparedTask:
         """
         Form a message containing Task information.
@@ -113,25 +117,27 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
 
 
 class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
-    """ gRPC Master communicator class.
+    """gRPC Master communicator class.
     This class is used as the communicator for master in gRPC server-based (distributed) VFL setup.
     """
-    MEMBER_DATA_FIELDNAME = '__member_data__'
+
+    MEMBER_DATA_FIELDNAME = "__member_data__"
 
     def __init__(
-            self,
-            participant: PartyMaster,
-            world_size: int,
-            port: Union[int, str],
-            host: str,
-            server_thread_pool_size: int = 10,
-            max_message_size: int = -1,
-            rendezvous_timeout: float = 3600.,
-            disconnect_idle_client_time: float = 120.,
-            prometheus_server_port: int = 8080,
-            run_prometheus: bool = False,
-            experiment_label: Optional[str] = None,
-            **kwargs,
+        self,
+        participant: PartyMaster,
+        world_size: int,
+        port: Union[int, str],
+        host: str,
+        server_thread_pool_size: int = 10,
+        max_message_size: int = -1,
+        rendezvous_timeout: float = 3600.0,
+        disconnect_idle_client_time: float = 120.0,
+        prometheus_server_port: int = 8080,
+        run_prometheus: bool = False,
+        experiment_label: Optional[str] = None,
+        time_between_idle_connections_checks: float = 3.0,
+        **kwargs,
     ):
         """
         Initialize master communicator with connection parameters.
@@ -147,6 +153,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                client disconnected
         :param prometheus_server_port: HTTP server on master started to report metrics to Prometheus
         :param run_prometheus: Whether to report heartbeat metrics to Prometheus
+        :param experiment_label: Label of the experiment used in prerequisites
+        :param time_between_idle_connections_checks: Time in sec between checking last client pings
         """
         self.participant = participant
         self.world_size = world_size
@@ -159,56 +167,57 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.run_prometheus = run_prometheus
         self.prometheus_server_port = prometheus_server_port
         self.experiment_label = experiment_label
+        self.time_between_idle_connections_checks = time_between_idle_connections_checks
 
-        self.server_thread: Optional[threading.Thread] = None
+        self.server_thread = None
         self.asyncio_event_loop = None
-        self.servicer: Optional[GRpcCommunicatorServicer] = None
+        self.servicer = None
 
         super(GRpcMasterPartyCommunicator, self).__init__(**kwargs)
 
     @property
     def servicer_initialized(self) -> bool:
-        """ Whether the gRPC server was started and CommunicatorServicer was initialized. """
+        """Whether the gRPC server was started and CommunicatorServicer was initialized."""
         return self.servicer is not None
 
     @property
     def status(self) -> Status:
-        """ Return status of the master communicator. """
+        """Return status of the master communicator."""
         if not self.servicer_initialized:
             return Status.not_started
         return self.servicer.status
 
     @property
     def number_connected_clients(self) -> int:
-        """ Return number of VFL agent members connected to the server. """
+        """Return number of VFL agent members connected to the server."""
         if not self.servicer_initialized:
             return 0
         return len(self.servicer.connected_clients)
 
     @property
     def members(self) -> list[str]:
-        """ List the VFL agent members` ids connected to the server. """
+        """List the VFL agent members` ids connected to the server."""
         return list(self.servicer.connected_clients.keys())
 
     def randezvous(self) -> None:
-        """ Wait until all the VFL agent members are connected to the gRPC server. """
+        """Wait until all the VFL agent members are connected to the gRPC server."""
         timer = time.time()
         if not self.servicer_initialized:
-            raise ValueError('Started rendezvous before initializing gRPC server and servicer')
+            raise ValueError("Started rendezvous before initializing gRPC server and servicer")
         while self.status != Status.all_ready:
             time.sleep(0.1)
             if time.time() - timer > self.rendezvous_timeout:
-                raise TimeoutError('Rendezvous timeout. You can try to set larger value in `rendezvous_timeout` param')
+                raise TimeoutError("Rendezvous timeout. You can try to set larger value in `rendezvous_timeout` param")
         if self.number_connected_clients != self.world_size:
-            raise RuntimeError('Rendezvous failed')
+            raise RuntimeError("Rendezvous failed")
 
     @property
     def is_ready(self) -> bool:
-        """ Return True if the gRPC server is ready to accept connections and process the requests. """
+        """Return True if the gRPC server is ready to accept connections and process the requests."""
         return self.server_thread.is_alive()
 
     def _get_tasks_from_main_queue(self) -> Optional[communicator_pb2.MainMessage]:
-        """ Get task scheduled for VFL master to process. """
+        """Get task scheduled for VFL master to process."""
         try:
             return self.servicer.main_tasks_queue.get_nowait()
         except asyncio.QueueEmpty:
@@ -233,7 +242,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
 
     @property
     def _server_tasks_futures(self) -> dict[str, ParticipantFuture]:
-        """ Get futures of the launched tasks. """
+        """Get futures of the launched tasks."""
         return self.servicer.tasks_futures
 
     def _add_server_task_future(self, task_id: str, future: ParticipantFuture) -> None:
@@ -246,16 +255,16 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.servicer.tasks_futures[task_id] = future
 
     def send(
-            self,
-            send_to_id: str,
-            method_name: _Method,
-            require_answer: bool = True,
-            task_id: Optional[str] = None,
-            parent_id: Optional[str] = None,
-            parent_method_name: Optional[str] = None,
-            parent_task_execution_time: Optional[float] = None,
-            message: Optional[MethodMessage] = None,
-            **kwargs
+        self,
+        send_to_id: str,
+        method_name: _Method,
+        require_answer: bool = True,
+        task_id: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        parent_method_name: Optional[str] = None,
+        parent_task_execution_time: Optional[float] = None,
+        message: Optional[MethodMessage] = None,
+        **kwargs,
     ) -> ParticipantFuture:
         """
         Send task to VFL member via gRPC channel.
@@ -305,15 +314,15 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         return future
 
     def broadcast(
-            self,
-            method_name: _Method,
-            mass_kwargs: Optional[list[torch.Tensor]] = None,
-            participating_members: Optional[list[str]] = None,
-            parent_id: Optional[str] = None,
-            require_answer: bool = True,
-            include_current_participant: bool = False,
-            message: Optional[MethodMessage] = None,
-            **kwargs
+        self,
+        method_name: _Method,
+        mass_kwargs: Optional[list[torch.Tensor]] = None,
+        participating_members: Optional[list[str]] = None,
+        parent_id: Optional[str] = None,
+        require_answer: bool = True,
+        include_current_participant: bool = False,
+        message: Optional[MethodMessage] = None,
+        **kwargs,
     ) -> list[ParticipantFuture]:
         """
         Broadcast tasks to VFL agents via gRPC channel.
@@ -386,7 +395,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         """
         try:
             if self.run_prometheus:
-                logger.info(f'Prometheus experiment label: {self.experiment_label}')
+                logger.info(f"Prometheus experiment label: {self.experiment_label}")
                 start_http_server(port=self.prometheus_server_port)
             self.servicer = GRpcCommunicatorServicer(
                 world_size=self.world_size,
@@ -399,12 +408,13 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 disconnect_idle_client_time=self.disconnect_idle_client_time,
                 run_prometheus=self.run_prometheus,
                 experiment_label=self.experiment_label,
+                time_between_idle_connections_checks=self.time_between_idle_connections_checks,
             )
             with start_thread(
-                    target=self._run_coroutine,
-                    args=(self.servicer.start_servicer_and_server(),),
-                    daemon=True,
-                    thread_timeout=2.,
+                target=self._run_coroutine,
+                args=(self.servicer.start_servicer_and_server(),),
+                daemon=True,
+                thread_timeout=2.0,
             ) as self.server_thread:
                 self.randezvous()
                 party = GRpcParty(party_communicator=self)
@@ -419,7 +429,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             raise
 
     def _run(self):
-        """ Process tasks scheduled in the queue for VFL master. """
+        """Process tasks scheduled in the queue for VFL master."""
         try:
             logger.info("Party communicator %s: starting event loop" % self.participant.id)
 
@@ -438,21 +448,23 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                     if task.method_name == _Method.service_return_answer.value:
                         if task.parent_id not in self._server_tasks_futures:
                             # todo: replace with custom error
-                            raise ValueError(f"No awaiting future with id {task.parent_id}."
-                                             f"(Participant id {self.participant.id}. "
-                                             f"Event {task.task_id} from {task.from_uid})")
+                            raise ValueError(
+                                f"No awaiting future with id {task.parent_id}."
+                                f"(Participant id {self.participant.id}. "
+                                f"Event {task.task_id} from {task.from_uid})"
+                            )
 
                         logger.debug(
                             "Party communicator %s: marking future %s as finished by answer of event %s"
                             % (self.participant.id, task.parent_id, task.task_id)
                         )
 
-                        if 'result' not in event_data:
+                        if "result" not in event_data:
                             # todo: replace with custom error
                             raise ValueError("No result in data")
 
                         future = self._server_tasks_futures.pop(task.parent_id)
-                        future.set_result(event_data['result'])
+                        future.set_result(event_data["result"])
                     elif task.method_name == _Method.finalize.value:
                         logger.info("Party communicator %s: finalized" % self.participant.id)
                         break
@@ -468,7 +480,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
 
 
 class GRpcParty(Party):
-    """ Helper Party class for tasks scheduling. """
+    """Helper Party class for tasks scheduling."""
+
     world_size: int
     members: list[str]
 
@@ -484,24 +497,25 @@ class GRpcParty(Party):
 
     @property
     def world_size(self) -> int:
-        """ Return number of the VFL members. """
+        """Return number of the VFL members."""
         return self.party_communicator.world_size
 
     @property
     def members(self) -> list[str]:
-        """ Return list of the VFL members identifiers. """
+        """Return list of the VFL members identifiers."""
         return self.party_communicator.members
 
     def _sync_broadcast_to_members(
-            self, *,
-            method_name: _Method,
-            mass_kwargs: Optional[list[Any]] = None,
-            participating_members: Optional[list[str]] = None,
-            parent_id: Optional[str] = None,
-            require_answer: bool = True,
-            include_current_participant: bool = False,
-            message: Optional[MethodMessage] = None,
-            **kwargs
+        self,
+        *,
+        method_name: _Method,
+        mass_kwargs: Optional[list[Any]] = None,
+        participating_members: Optional[list[str]] = None,
+        parent_id: Optional[str] = None,
+        require_answer: bool = True,
+        include_current_participant: bool = False,
+        message: Optional[MethodMessage] = None,
+        **kwargs,
     ) -> list[Any]:
         """
         Broadcast tasks to VFL agents using master communicator.
@@ -525,7 +539,7 @@ class GRpcParty(Party):
             parent_id=parent_id,
             require_answer=require_answer,
             include_current_participant=include_current_participant,
-            message=message
+            message=message,
         )
 
         logger.debug(
@@ -534,14 +548,17 @@ class GRpcParty(Party):
         )
 
         bc_futures = concurrent.futures.wait(bc_futures, timeout=self.op_timeout)
-        completed_futures, uncompleted_futures \
-            = cast(set[ParticipantFuture], bc_futures[0]), cast(set[ParticipantFuture], bc_futures[1])
+        completed_futures, uncompleted_futures = cast(set[ParticipantFuture], bc_futures[0]), cast(
+            set[ParticipantFuture], bc_futures[1]
+        )
 
         if len(uncompleted_futures) > 0:
             # todo: custom exception with additional info about uncompleted tasks
-            raise RuntimeError(f"Not all tasks have been completed. "
-                               f"Completed tasks: {len(completed_futures)}. "
-                               f"Uncompleted tasks: {len(uncompleted_futures)}.")
+            raise RuntimeError(
+                f"Not all tasks have been completed. "
+                f"Completed tasks: {len(completed_futures)}. "
+                f"Uncompleted tasks: {len(uncompleted_futures)}."
+            )
 
         logger.debug("Party broadcast for event %s has succesfully finished" % method_name)
 
@@ -549,77 +566,72 @@ class GRpcParty(Party):
         return [fresults[member_id] for member_id in self.party_communicator.members]
 
     def records_uids(self) -> list[list[str]]:
-        """ Collect records uids from VFL members. """
+        """Collect records uids from VFL members."""
         return cast(list[list[str]], self._sync_broadcast_to_members(method_name=_Method.records_uids))
 
     def register_records_uids(self, uids: list[str]):
-        """ Register records uids in VFL agents. """
+        """Register records uids in VFL agents."""
         self._sync_broadcast_to_members(
-            method_name=_Method.register_records_uids,
-            message=MethodMessage(other_kwargs={'uids': uids})
+            method_name=_Method.register_records_uids, message=MethodMessage(other_kwargs={"uids": uids})
         )
 
     def initialize(self):
-        """ Initialize party communicators. """
+        """Initialize party communicators."""
         self._sync_broadcast_to_members(method_name=_Method.initialize)
 
     def finalize(self):
-        """ Finalize party communicators. """
+        """Finalize party communicators."""
         self._sync_broadcast_to_members(method_name=_Method.finalize)
 
     def update_weights(self, upd: PartyDataTensor):
-        """ Update model`s weights on agents. """
+        """Update model`s weights on agents."""
         self._sync_broadcast_to_members(
             method_name=_Method.update_weights,
             mass_kwargs=upd,
         )
 
     def predict(self, uids: list[str], use_test: bool = False) -> PartyDataTensor:
-        """ Make predictions using VFL agents` models. """
+        """Make predictions using VFL agents` models."""
         return cast(
             PartyDataTensor,
             self._sync_broadcast_to_members(
-                method_name=_Method.predict,
-                message=MethodMessage(other_kwargs={'uids': uids, 'use_test': use_test})
-            )
+                method_name=_Method.predict, message=MethodMessage(other_kwargs={"uids": uids, "use_test": use_test})
+            ),
         )
 
     def update_predict(
-            self,
-            participating_members: list[str],
-            batch: RecordsBatch,
-            previous_batch: RecordsBatch,
-            upd: PartyDataTensor
+        self, participating_members: list[str], batch: RecordsBatch, previous_batch: RecordsBatch, upd: PartyDataTensor
     ) -> PartyDataTensor:
-        """ Perform update_predict operation on the VFL agents. """
+        """Perform update_predict operation on the VFL agents."""
         return cast(
             PartyDataTensor,
             self._sync_broadcast_to_members(
                 method_name=_Method.update_predict,
                 mass_kwargs=upd,
                 participating_members=participating_members,
-                message=MethodMessage(other_kwargs={'batch': batch, 'previous_batch': previous_batch})
-            )
+                message=MethodMessage(other_kwargs={"batch": batch, "previous_batch": previous_batch}),
+            ),
         )
 
 
 class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
-    """ gRPC Member communicator class.
+    """gRPC Member communicator class.
     This class is used as the communicator for member in gRPC server-based (distributed) VFL setup.
     """
-    MEMBER_DATA_FIELDNAME = '__member_data__'
+
+    MEMBER_DATA_FIELDNAME = "__member_data__"
 
     def __init__(
-            self,
-            participant: PartyMember,
-            master_host: str,
-            master_port: str,
-            max_message_size: int = -1,
-            heartbeat_interval: float = 2.,
-            task_requesting_pings_interval: float = 0.1,
-            sent_task_timout: float = 3600.,
-            rendezvous_timeout: float = 3600.,
-            **kwargs,
+        self,
+        participant: PartyMember,
+        master_host: str,
+        master_port: str,
+        max_message_size: int = -1,
+        heartbeat_interval: float = 2.0,
+        task_requesting_pings_interval: float = 0.1,
+        sent_task_timout: float = 3600.0,
+        rendezvous_timeout: float = 3600.0,
+        **kwargs,
     ):
         """
         Initialize member communicator with connection and task parameters.
@@ -654,19 +666,19 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         super(GRpcMemberPartyCommunicator, self).__init__(**kwargs)
 
     def _start_client(self):
-        """ Create a gRPC channel. Start a thread with heartbeats from the member. """
+        """Create a gRPC channel. Start a thread with heartbeats from the member."""
         self._grpc_channel = grpc.insecure_channel(
             f"{self.master_host}:{self.master_port}",
             options=[
-                ('grpc.max_send_message_length', self.max_message_size),
-                ('grpc.max_receive_message_length', self.max_message_size),
-            ]
+                ("grpc.max_send_message_length", self.max_message_size),
+                ("grpc.max_receive_message_length", self.max_message_size),
+            ],
         )
         self._stub = communicator_pb2_grpc.CommunicatorStub(self._grpc_channel)
         logger.info(f"Starting ping-pong with the server {self.master_host}:{self.master_port}")
         pingpong_responses = self._stub.Heartbeat(self._heartbeats(), wait_for_ready=True)
         self._heartbeats_thread = threading.Thread(
-            name='heartbeat-thread',
+            name="heartbeat-thread",
             target=self._read_server_heartbeats,
             args=(pingpong_responses,),
             daemon=True,
@@ -674,14 +686,14 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         self._heartbeats_thread.start()
 
     def _get_all_from_sent_time_queue(self) -> list[Any]:
-        """ Reset the self._sent_time queue, returning all the elements from it. """
+        """Reset the self._sent_time queue, returning all the elements from it."""
         with self._lock:
             elements = self._sent_time.queue
             self._sent_time = Queue()
             return list(elements)
 
     def _heartbeats(self):
-        """ Generate heartbeats messages. """
+        """Generate heartbeats messages."""
         while True:
             time.sleep(self.heartbeat_interval)
             heartbeat_message = communicator_pb2.HB(agent_name=self.participant.id, status=ClientStatus.alive)
@@ -690,7 +702,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             yield heartbeat_message
 
     def _task_requests(self):
-        """ Generate tasks requests to the master. """
+        """Generate tasks requests to the master."""
         while True:
             time.sleep(self.task_requesting_pings_interval)
             yield communicator_pb2.MainMessage(
@@ -711,8 +723,9 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             if self._master_id is None:
                 self._master_id = response.agent_name
             else:
-                assert self._master_id == response.agent_name, \
-                    "Unexpected behaviour: Master id changed during the experiment"
+                assert (
+                    self._master_id == response.agent_name
+                ), "Unexpected behaviour: Master id changed during the experiment"
 
     def _read_server_tasks(self, server_responses: Iterator[communicator_pb2.MainMessage]):
         """
@@ -722,21 +735,21 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         :param server_responses: Iterator of the server responses
         """
         for response in server_responses:
-            logger.debug(f'Got task {response.task_id} from {response.from_uid}')
+            logger.debug(f"Got task {response.task_id} from {response.from_uid}")
             self.server_tasks_queue.put(response)
 
     def randezvous(self) -> None:
-        """ Wait until VFL master identify readiness to start of all the VFL members. """
+        """Wait until VFL master identify readiness to start of all the VFL members."""
         timer = time.time()
         while self._world_status != Status.all_ready:
             time.sleep(0.1)
             if time.time() - timer > self.rendezvous_timeout:
-                raise TimeoutError('Rendezvous timeout. You can try to set larger value in `rendezvous_timeout` param')
-        logger.info(f'Client {self.participant.id} is ready to run')
+                raise TimeoutError("Rendezvous timeout. You can try to set larger value in `rendezvous_timeout` param")
+        logger.info(f"Client {self.participant.id} is ready to run")
 
     @property
     def is_ready(self) -> bool:
-        """ Return True if the VFL master is found and other members are alive. """
+        """Return True if the VFL master is found and other members are alive."""
         return (self._master_id is not None) and (self._world_status == Status.all_ready)
 
     def _add_task_future(self, task_id: str, future: ParticipantFuture) -> None:
@@ -750,16 +763,16 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         self.tasks_futures[task_id] = future
 
     def send(
-            self,
-            send_to_id: str,
-            method_name: _Method,
-            require_answer: bool = True,
-            task_id: Optional[str] = None,
-            parent_id: Optional[str] = None,
-            parent_method_name: Optional[str] = None,
-            parent_task_execution_time: Optional[float] = None,
-            message: Optional[MethodMessage] = None,
-            **kwargs
+        self,
+        send_to_id: str,
+        method_name: _Method,
+        require_answer: bool = True,
+        task_id: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        parent_method_name: Optional[str] = None,
+        parent_task_execution_time: Optional[float] = None,
+        message: Optional[MethodMessage] = None,
+        **kwargs,
     ) -> ParticipantFuture:
         """
         Send task to VFL master via gRPC channel.
@@ -780,7 +793,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
 
         if send_to_id not in (self._master_id, self.participant.id):
-            raise UnsupportedError('GRpcMemberPartyCommunicator cannot send to other Members')
+            raise UnsupportedError("GRpcMemberPartyCommunicator cannot send to other Members")
 
         prepared_task = self.prepare_task(
             message_type=MessageTypes.client_task,
@@ -801,7 +814,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         if send_to_id == self._master_id:
             start = time.time()
             res = self._stub.UnaryExchange(task_message, timeout=self.sent_task_timout)
-            assert res.message_type == MessageTypes.acknowledgment, 'Sent message was not acknowledged'
+            assert res.message_type == MessageTypes.acknowledgment, "Sent message was not acknowledged"
             sent_timing = time.time() - start
             self._sent_time.put(
                 communicator_pb2.SendTime(
@@ -822,19 +835,21 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         logger.debug("Party communicator %s: sent to %s event %s" % (self.participant.id, send_to_id, task_id))
         return future
 
-    def broadcast(self,
-                  method_name: _Method,
-                  mass_kwargs: Optional[list[Any]] = None,
-                  participating_members: Optional[list[str]] = None,
-                  parent_id: Optional[str] = None,
-                  require_answer: bool = True,
-                  include_current_participant: bool = False,
-                  **kwargs) -> list[ParticipantFuture]:
+    def broadcast(
+        self,
+        method_name: _Method,
+        mass_kwargs: Optional[list[Any]] = None,
+        participating_members: Optional[list[str]] = None,
+        parent_id: Optional[str] = None,
+        require_answer: bool = True,
+        include_current_participant: bool = False,
+        **kwargs,
+    ) -> list[ParticipantFuture]:
         """
         Broadcast task to VFL agents via gRPC channel.
         This method is unavailable for GRpcMemberPartyCommunicator as it cannot communcate with other members.
         """
-        raise UnsupportedError('GRpcMemberPartyCommunicator cannot broadcast to other Members')
+        raise UnsupportedError("GRpcMemberPartyCommunicator cannot broadcast to other Members")
 
     def run(self):
         """
@@ -851,11 +866,11 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         logger.info(f"Party communicator {self.participant.id} finished")
 
     def _start_receiving_tasks(self):
-        """ Start a thread with tasks requests to VFL master. """
+        """Start a thread with tasks requests to VFL master."""
         server_task_responses = self._stub.BidiExchange(self._task_requests(), wait_for_ready=True)
         logger.info("Starting pinging server for the tasks")
         self.tasks_thread = threading.Thread(
-            name='tasks-receive-thread',
+            name="tasks-receive-thread",
             target=self._read_server_tasks,
             args=(server_task_responses,),
             daemon=True,
@@ -863,7 +878,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         self.tasks_thread.start()
 
     def _run(self):
-        """ Process tasks scheduled in the queue for VFL member. """
+        """Process tasks scheduled in the queue for VFL member."""
         logger.info("Party communicator %s: starting event loop" % self.participant.id)
         while True:
             task = self.server_tasks_queue.get()
@@ -884,14 +899,14 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                 if isinstance(mkwargs, torch.Tensor):
                     mkwargs = [mkwargs]
                 else:
-                    raise ValueError('Mass kwargs must be torch.Tensor')
+                    raise ValueError("Mass kwargs must be torch.Tensor")
             else:
                 mkwargs = []
             start = time.time()
             result = method(*mkwargs, **kwargs)  # TODO put CPU heavy tasks in another thread?
             execution_time = time.time() - start
             client_msg = MethodMessage()
-            setattr(client_msg, METHOD_VALUES[task.method_name], {'result': result})
+            setattr(client_msg, METHOD_VALUES[task.method_name], {"result": result})
 
             self.send(
                 send_to_id=task.from_uid,
@@ -900,7 +915,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                 parent_method_name=task.method_name,
                 parent_task_execution_time=execution_time,
                 require_answer=False,
-                message=client_msg
+                message=client_msg,
             )
 
             if task.method_name == _Method.finalize.value:

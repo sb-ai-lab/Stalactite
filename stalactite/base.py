@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
 from dataclasses import dataclass
-from typing import List, Any, Optional, Iterator
+from typing import Any, Iterator, List, Optional
 
 import torch
 
@@ -60,19 +60,21 @@ class PartyCommunicator(ABC):
         ...
 
     @abstractmethod
-    def send(self, send_to_id: str,  method_name: str, require_answer: bool = True, **kwargs) -> ParticipantFuture:
+    def send(self, send_to_id: str, method_name: str, require_answer: bool = True, **kwargs) -> ParticipantFuture:
         ...
 
     # todo: shouldn't we replace it with message type?
     @abstractmethod
-    def broadcast(self,
-                  method_name: str,
-                  mass_kwargs: Optional[List[Any]] = None,
-                  participating_members: Optional[List[str]] = None,
-                  parent_id: Optional[str] = None,
-                  require_answer: bool = True,
-                  include_current_participant: bool = False,
-                  **kwargs) -> List[ParticipantFuture]:
+    def broadcast(
+        self,
+        method_name: str,
+        mass_kwargs: Optional[List[Any]] = None,
+        participating_members: Optional[List[str]] = None,
+        parent_id: Optional[str] = None,
+        require_answer: bool = True,
+        include_current_participant: bool = False,
+        **kwargs,
+    ) -> List[ParticipantFuture]:
         ...
 
     @abstractmethod
@@ -111,11 +113,7 @@ class Party(ABC):
 
     @abstractmethod
     def update_predict(
-            self,
-            participating_members: List[str],
-            batch: RecordsBatch,
-            previous_batch: RecordsBatch,
-            upd: PartyDataTensor
+        self, participating_members: List[str], batch: RecordsBatch, previous_batch: RecordsBatch, upd: PartyDataTensor
     ) -> PartyDataTensor:
         ...
 
@@ -142,10 +140,7 @@ class PartyMaster(ABC):
 
         self.master_initialize(party=party)
 
-        self.loop(
-            batcher=self.make_batcher(uids=uids, party=party),
-            party=party
-        )
+        self.loop(batcher=self.make_batcher(uids=uids, party=party), party=party)
 
         self.master_finalize(party=party)
         logger.info("Finished master %s" % self.id)
@@ -155,8 +150,10 @@ class PartyMaster(ABC):
         updates = self.make_init_updates(party.world_size)
 
         for titer in batcher:
-            logger.debug(f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                         % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch))
+            logger.debug(
+                f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
+                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
+            )
             iter_start_time = time.time()
 
             party_predictions = party.update_predict(
@@ -170,15 +167,19 @@ class PartyMaster(ABC):
             )
 
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
-                logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
-                             % (self.id, titer.seq_num, titer.epoch))
+                logger.debug(
+                    f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
+                    % (self.id, titer.seq_num, titer.epoch)
+                )
                 party_predictions = party.predict(batcher.uids)
                 predictions = self.aggregate(party.members, party_predictions, infer=True)
                 self.report_metrics(self.target, predictions, name="Train")
 
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
-                logger.debug(f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
-                             % (self.id, titer.seq_num, titer.epoch))
+                logger.debug(
+                    f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
+                    % (self.id, titer.seq_num, titer.epoch)
+                )
                 party_predictions = party.predict(uids=batcher.uids, use_test=True)
                 predictions = self.aggregate(party.members, party_predictions, infer=True)
                 self.report_metrics(self.test_target, predictions, name="Test")
@@ -188,10 +189,7 @@ class PartyMaster(ABC):
     def synchronize_uids(self, party: Party) -> List[str]:
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, party.world_size))
         all_records_uids = party.records_uids()
-        uids = itertools.chain(
-            self.target_uids,
-            (uid for member_uids in all_records_uids for uid in set(member_uids))
-        )
+        uids = itertools.chain(self.target_uids, (uid for member_uids in all_records_uids for uid in set(member_uids)))
         shared_uids = sorted([uid for uid, count in collections.Counter(uids).items() if count == party.world_size + 1])
 
         logger.debug("Master %s: registering shared uids f size %s" % (self.id, len(shared_uids)))
@@ -225,18 +223,19 @@ class PartyMaster(ABC):
         ...
 
     @abstractmethod
-    def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor,
-                  infer: bool = False) -> DataTensor:
+    def aggregate(
+        self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
+    ) -> DataTensor:
         ...
 
     @abstractmethod
     def compute_updates(
-            self,
-            participating_members: List[str],
-            predictions: DataTensor,
-            party_predictions: PartyDataTensor,
-            world_size: int,
-            subiter_seq_num: int
+        self,
+        participating_members: List[str],
+        predictions: DataTensor,
+        party_predictions: PartyDataTensor,
+        world_size: int,
+        subiter_seq_num: int,
     ) -> List[DataTensor]:
         ...
 
