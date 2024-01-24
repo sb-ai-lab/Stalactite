@@ -1,0 +1,58 @@
+version: '3.9'
+
+services:
+  prometheus-db:
+    image: prom/prometheus
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+    volumes:
+      -  "${DOCKER_COMPOSE_PATH}/configs/prometheus.yml:/etc/prometheus/prometheus.yml"
+#      - prometheus_storage:/prometheus
+    networks:
+      - vfl-network
+
+  grafana:
+    image: grafana/grafana-enterprise
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    volumes:
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/datasources:/etc/grafana/provisioning/datasources"
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/dashboards:/etc/grafana/provisioning/dashboards"
+#      - grafana_storage:/var/lib/grafana
+    environment:
+      - PROMETHEUS_HOST=prometheus-db
+      - PROMETHEUS_PORT=${PROMETHEUS_PORT}
+    networks:
+      - vfl-network
+
+  mlflow-vfl:
+    image: anastasiiazakharova/mlflow-server:2.3
+    command:
+      - "--backend-store-uri"
+      - 'postgresql+psycopg2://mlflow:mlflow@postgres-vfl:5432/mlflow'
+      - "--default-artifact-root"
+      - "/var/lib/mlruns"
+      - "--host"
+      - "0.0.0.0"
+#    volumes:
+#      - mlruns:/var/lib/mlruns
+    ports:
+      - ${MLFLOW_PORT}:5000
+    networks:
+      - vfl-network
+
+  postgres-vfl:
+    image: postgres:15.3
+    environment:
+      - POSTGRES_PASSWORD=mlflow
+      - POSTGRES_USER=mlflow
+      - POSTGRES_DB=mlflow
+      - PGDATA=/var/lib/postgresql/data/pgdata
+#    volumes:
+#      - /postgresql/data:/var/lib/postgresql/data
+    networks:
+      - vfl-network
+
+networks:
+  vfl-network:
+

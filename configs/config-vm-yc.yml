@@ -1,0 +1,48 @@
+common:
+  epochs: 5
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  batch_size: 1000
+  experiment_label: experiment-vms
+  reports_export_folder: "/home/gpusrvadmin/vfl-benchmark/reports"
+  rendezvous_timeout: 3600
+
+prerequisites:
+  mlflow_host: '158.160.118.171'
+  mlflow_port: '5555'
+  prometheus_host: '158.160.118.171'
+  prometheus_port: '9090'
+  grafana_port: '3001'
+
+data:
+  random_seed: 0
+  dataset_size: 1000
+  host_path_data_dir: "/home/gpusrvadmin/vfl-benchmark/data"
+
+grpc_server:
+  host: '0.0.0.0'
+  port: '50051'
+  max_message_size: -1
+  server_thread_pool_size: 10
+
+master:
+  container_host: '158.160.118.171'
+  run_mlflow: True
+  run_prometheus: True
+  logging_level: 'debug'
+  disconnect_idle_client_time: 120.
+  time_between_idle_connections_checks: 3.
+
+
+member:
+  logging_level: 'debug'
+  heartbeat_interval: 2.
+  task_requesting_pings_interval: 0.1
+  sent_task_timout: 3600
+
+grpc_arbiter:
+  use_arbiter: False
+docker:
+  docker_compose_command: "docker compose"
+  docker_compose_path: '/home/gpusrvadmin/vfl-benchmark/prerequisites'

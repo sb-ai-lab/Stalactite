@@ -1,0 +1,67 @@
+common:
+  epochs: 5
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  batch_size: 1000
+  experiment_label: experiment-vm
+  reports_export_folder: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/reports"
+  rendezvous_timeout: 3600
+
+prerequisites:
+  mlflow_host: 'node3.bdcl'
+  mlflow_port: '5555'
+  prometheus_host: 'node3.bdcl'
+  prometheus_port: '9090'
+  grafana_port: '3001'
+
+data:
+  random_seed: 0
+  dataset_size: 1000
+  host_path_data_dir: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data"
+
+grpc_server:
+  host: '0.0.0.0'
+  port: '50051'
+  max_message_size: -1
+  server_thread_pool_size: 10
+
+master:
+  container_host: 'node3.bdcl'
+  run_mlflow: True
+  run_prometheus: True
+  logging_level: 'debug'
+  disconnect_idle_client_time: 120.
+  time_between_idle_connections_checks: 3.
+
+
+member:
+  logging_level: 'debug'
+  heartbeat_interval: 2.
+  task_requesting_pings_interval: 0.1
+  sent_task_timout: 3600
+
+grpc_arbiter:
+  use_arbiter: True
+  container_host: 'node3.bdcl'
+  host: '0.0.0.0'
+  port: '50052'
+  max_message_size: -1
+  server_threadpool_max_workers: 10
+  grpc_operations_timeout: 300
+  ts_algorithm: CKKS
+  ts_poly_modulus_degree: 8192
+  ts_coeff_mod_bit_sizes:
+    - 60
+    - 40
+    - 40
+    - 60
+  ts_global_scale_pow: 20
+  ts_generate_relin_keys: True
+  ts_generate_galois_keys: True
+#  ts_plain_modulus:
+#  ts_context_path: /Users/anastasiazaharova/Desktop/vfl-benchmark/ts_context_test.txt
+
+docker:
+  docker_compose_command: "docker compose"
+  docker_compose_path: '/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/prerequisites'

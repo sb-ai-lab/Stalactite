@@ -1,6 +1,7 @@
 import collections
 import itertools
 import logging
+import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -129,6 +130,12 @@ class PartyMaster(ABC):
     target_uids: List[str]
     test_target: DataTensor
 
+    _iter_time: list[tuple[int, float]] = list()
+
+    @property
+    def train_timings(self) -> list:
+        return self._iter_time
+
     def run(self, party: Party):
         logger.info("Running master %s" % self.id)
         uids = self.synchronize_uids(party=party)
@@ -150,6 +157,7 @@ class PartyMaster(ABC):
         for titer in batcher:
             logger.debug(f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
                          % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch))
+            iter_start_time = time.time()
 
             party_predictions = party.update_predict(
                 titer.participating_members, titer.batch, titer.previous_batch, updates
@@ -174,6 +182,8 @@ class PartyMaster(ABC):
                 party_predictions = party.predict(uids=batcher.uids, use_test=True)
                 predictions = self.aggregate(party.members, party_predictions, infer=True)
                 self.report_metrics(self.test_target, predictions, name="Test")
+
+            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
     def synchronize_uids(self, party: Party) -> List[str]:
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, party.world_size))

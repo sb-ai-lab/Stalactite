@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+
+service Arbiter {
+  rpc DecodeMessage(DataMessage) returns (DataMessage) {}
+  rpc GetPublicKey(RequestResponse) returns (PublicContext) {}
+  rpc GenerateKeys(RequestResponse) returns (RequestResponse) {}
+}
+
+message RequestResponse {
+  string master_id = 1;
+  optional bool request_response = 2;
+  optional string error = 3;
+}
+
+message PublicContext {
+  string master_id = 1;
+  optional bytes pubkey = 2;
+  optional string error = 3;
+}
+
+message DataMessage {
+  string master_id = 1;
+  optional bytes encrypted_data = 2;
+  optional bytes decrypted_tensor = 3;
+  optional string error = 4;
+  repeated int32 data_shape = 5;
+}
+
