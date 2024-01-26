@@ -568,7 +568,10 @@ def start(ctx, config_path):
         def local_member_main(member: PartyMember):
             logger.info("Starting thread %s" % threading.current_thread().name)
             comm = LocalMemberPartyCommunicator(
-                participant=member, world_size=config.common.world_size, shared_party_info=shared_party_info
+                participant=member,
+                world_size=config.common.world_size,
+                shared_party_info=shared_party_info,
+                master_id=master.id,
             )
             comm.run()
             logger.info("Finishing thread %s" % threading.current_thread().name)
