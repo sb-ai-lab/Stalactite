@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional, Set, Union, cast
 
 from stalactite.base import (
     ParticipantFuture,
-    Party,
     PartyCommunicator,
     PartyDataTensor,
     PartyMaster,
@@ -62,21 +61,21 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         """Whether the communicator is ready."""
         return self._party_info is not None
 
-    def randezvous(self):
+    def rendezvous(self):
         """Wait until all the participants of the party are initialized."""
-        logger.info("Party communicator %s: performing randezvous" % self.participant.id)
+        logger.info("Party communicator %s: performing rendezvous" % self.participant.id)
         self._party_info[self.participant.id] = _ParticipantInfo(
             type=ParticipantType.master if isinstance(self.participant, PartyMaster) else ParticipantType.member,
             queue=Queue(),
         )
 
-        # todo: allow to work with timeout for randezvous operation
+        # todo: allow to work with timeout for rendezvous operation
         while len(self._party_info) < self.world_size + 1:
             time.sleep(0.1)
 
         self.members = [uid for uid, pinfo in self._party_info.items() if pinfo.type == ParticipantType.member]
 
-        logger.info("Party communicator %s: randezvous has been successfully performed" % self.participant.id)
+        logger.info("Party communicator %s: rendezvous has been successfully performed" % self.participant.id)
 
     def send(
         self, send_to_id: str, method_name: str, parent_id: Optional[str] = None, require_answer: bool = True, **kwargs
@@ -187,7 +186,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         if not self.is_ready:
             raise RuntimeError(
                 "Cannot proceed because communicator is not ready. "
-                "Perhaps, randezvous has not been called or was unsuccessful"
+                "Perhaps, rendezvous has not been called or was unsuccessful"
             )
 
 
@@ -219,7 +218,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
         """
         try:
             logger.info("Party communicator %s: running" % self.participant.id)
-            self.randezvous()
+            self.rendezvous()
             party = LocalPartyImpl(party_communicator=self)
 
             event_loop = Thread(name=f"event-loop-{self.participant.id}", daemon=True, target=self._run)
@@ -309,7 +308,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
         """
         try:
             logger.info("Party communicator %s: running" % self.participant.id)
-            self.randezvous()
+            self.rendezvous()
             self._run()
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:

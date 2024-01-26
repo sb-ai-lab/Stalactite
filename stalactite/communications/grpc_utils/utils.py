@@ -4,13 +4,13 @@ import pickle
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 import safetensors.torch
 import torch
 from prometheus_client import Gauge, Summary
 
-from stalactite.base import ParticipantFuture
+from stalactite.base import ParticipantFuture, MethodKwargs
 from stalactite.communications.grpc_utils.generated_code import communicator_pb2
 
 logger = logging.getLogger(__name__)
@@ -81,19 +81,12 @@ class ClientStatus(str, enum.Enum):
 
 
 @dataclass
-class MethodMessage:
-    """Data class holding keyword arguments for serialization."""
-
-    tensor_kwargs: dict[str, torch.Tensor] = field(default_factory=dict)
-    other_kwargs: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
 class SerializedMethodMessage:
     """Data class holding serialization keyword arguments for deserialization."""
 
     tensor_kwargs: dict[str, bytes] = field(default_factory=dict)
     other_kwargs: dict[str, bytes] = field(default_factory=dict)
+    prometheus_kwargs: dict[str, bytes] = field(default_factory=dict)
 
 
 class MessageTypes(str, enum.Enum):
@@ -110,7 +103,8 @@ class PreparedTask:
 
     task_id: str
     task_message: communicator_pb2.MainMessage
-    task_future: ParticipantFuture
+    # task_future: ParticipantFuture
+    task_future: Optional[ParticipantFuture] = field(default=None)
 
 
 def load_data(serialized_tensor: bytes) -> torch.Tensor:
@@ -131,43 +125,65 @@ def save_data(tensor: torch.Tensor):
     return safetensors.torch.save(tensors={"tensor": tensor})
 
 
-def prepare_kwargs(kwargs: Optional[MethodMessage]) -> SerializedMethodMessage:
+def prepare_kwargs(kwargs: Optional[MethodKwargs],
+                   prometheus_metrics: Optional[dict] = None) -> SerializedMethodMessage:
     """
     Serialize data fields for protobuf message.
 
     :param kwargs: MethodMessage containing Task data to be serialized
     """
-    if kwargs is None:
-        return SerializedMethodMessage()
     serialized_tensors = {}
-    for key, value in kwargs.tensor_kwargs.items():
-        assert isinstance(value, torch.Tensor), "MethodMessage.tensor_kwargs can contain only torch.Tensor-s as values"
-        serialized_tensors[key] = save_data(value)
     other_kwargs = {}
-    for key, value in kwargs.other_kwargs.items():
-        if isinstance(value, torch.Tensor):
-            logger.warning(
-                f"Got kwarg {key} as the field in MethodMessage.other_kwargs, "
-                "while it should be passed in MethodMessage.tensor_kwargs"
-            )
-        other_kwargs[key] = pickle.dumps(value)
+    prometheus_kwargs = {}
 
+    if kwargs is not None:
+        for key, value in kwargs.tensor_kwargs.items():
+            assert isinstance(value,
+                              torch.Tensor), "MethodMessage.tensor_kwargs can contain only torch.Tensor-s as values"
+            serialized_tensors[key] = save_data(value)
+
+        for key, value in kwargs.other_kwargs.items():
+            if isinstance(value, torch.Tensor):
+                logger.warning(
+                    f"Got kwarg {key} as the field in MethodMessage.other_kwargs, "
+                    "while it should be passed in MethodMessage.tensor_kwargs"
+                )
+            other_kwargs[key] = pickle.dumps(value)
+
+    if prometheus_metrics is not None:
+        for key, value in prometheus_metrics.items():
+            prometheus_kwargs[key] = pickle.dumps(value)
     return SerializedMethodMessage(
         tensor_kwargs=serialized_tensors,
         other_kwargs=other_kwargs,
+        prometheus_kwargs=prometheus_kwargs,
     )
 
 
-def collect_kwargs(message_kwargs: SerializedMethodMessage) -> dict:
+def collect_kwargs(
+        message_kwargs: SerializedMethodMessage, prometheus_metrics: Optional[dict[str, bytes]] = None
+) -> Tuple[MethodKwargs, dict, Any]:
     """
     Collect and deserialize protobuf message data fields.
 
     :param message_kwargs: SerializedMethodMessage containing Task data after serialization
     """
+    result = None
+
     tensor_kwargs = {}
     for key, value in message_kwargs.tensor_kwargs.items():
         tensor_kwargs[key] = load_data(value)
     other_kwargs = {}
     for key, value in message_kwargs.other_kwargs.items():
         other_kwargs[key] = pickle.loads(value)
-    return {**tensor_kwargs, **other_kwargs}
+    prometheus_kwargs = {}
+    if prometheus_metrics is not None:
+        for key, value in prometheus_metrics.items():
+            prometheus_kwargs[key] = pickle.loads(value)
+
+    if 'result' in tensor_kwargs:
+        result = tensor_kwargs.pop('result')
+    elif 'result' in other_kwargs:
+        result = other_kwargs.pop('result')
+
+    return MethodKwargs(tensor_kwargs=tensor_kwargs, other_kwargs=other_kwargs), prometheus_kwargs, result

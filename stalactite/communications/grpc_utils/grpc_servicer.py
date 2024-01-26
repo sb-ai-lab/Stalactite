@@ -13,7 +13,6 @@ from stalactite.communications.grpc_utils.generated_code import (
     communicator_pb2_grpc,
 )
 from stalactite.communications.grpc_utils.utils import (
-    MessageTypes,
     PrometheusMetric,
     Status,
 )
@@ -84,26 +83,21 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         self.status = Status.not_started
         self.connected_clients = dict()
 
-        self._server_tasks_queues: dict[str, asyncio.Queue[communicator_pb2.MainMessage]] = defaultdict(
-            lambda: asyncio.Queue()
-        )
-        self._main_tasks_queue: asyncio.Queue[communicator_pb2.MainMessage] = asyncio.Queue()
-        self._tasks_futures = dict()
+        self._received_tasks = defaultdict(dict)
+        self._tasks_to_send_queues = defaultdict(dict)
 
-    @property
-    def main_tasks_queue(self) -> asyncio.Queue:
-        """Return queue with tasks sent by VFL members."""
-        return self._main_tasks_queue
+    def put_to_received_tasks(self, message: communicator_pb2.MainMessage, receive_from_id: str):
+        self._received_tasks[message.method_name][receive_from_id] = message
 
-    @property
-    def tasks_queue(self) -> dict[str, asyncio.Queue]:
-        """Return dictionary of members` queues with associated scheduled tasks."""
-        return self._server_tasks_queues
-
-    @property
-    def tasks_futures(self) -> dict:
-        """Return dictionary of tasks futures."""
-        return self._tasks_futures
+    async def get_from_tasks_to_send_dict(
+            self, method_name: str, send_to_id: str, timeout: float = 30.
+    ) -> communicator_pb2.MainMessage:
+        timer_start = time.time()
+        while (message := self._tasks_to_send_queues.get(send_to_id, dict()).pop(method_name, None)) is None:
+            await asyncio.sleep(0.)
+            if time.time() - timer_start > timeout:
+                raise TimeoutError(f'Could not send task: {method_name} to {send_to_id}.')
+        return message
 
     @staticmethod
     def _message_size(message: Message) -> int:
@@ -233,44 +227,23 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         async for request in request_iterator:
             yield self.process_heartbeat(request)
 
-    async def UnaryExchange(
-        self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
+    async def SendToMaster(
+            self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
     ) -> communicator_pb2.MainMessage:
-        """Receive task response from member, return message indicating acknowledgment of the task received."""
-        await self.main_tasks_queue.put(request)
-        self._log_agents_metrics(
-            client_id=request.from_uid,
-            task_type=request.parent_method_name,
-            message_size=self._message_size(request),
-            execution_time=request.parent_task_execution_time,
-        )
+        self.put_to_received_tasks(message=request, receive_from_id=request.sender_id)
         return communicator_pb2.MainMessage(
-            message_type=MessageTypes.acknowledgment,
-            task_id=request.task_id,
+            sender_id=self.master_id,
         )
 
-    async def BidiExchange(
-        self,
-        request_iterator: AsyncIterator[communicator_pb2.MainMessage],
-        context: grpc.aio.ServicerContext,
-    ) -> None:
-        """Read members queries for task from master. Send task if scheduled in `self.tasks_queue`."""
-        read = asyncio.create_task(self.process_requests(request_iterator, context))
-        await read
-
-    async def process_requests(
-        self,
-        request_iterator: AsyncIterator[communicator_pb2.MainMessage],
-        context: grpc.aio.ServicerContext,
-    ) -> None:
-        """Process requests for tasks, check the readiness of the task for the member, send the task if ready."""
-        async for request in request_iterator:
-            client_id = request.from_uid
-            tasks_queue = self._server_tasks_queues.get(client_id)
-            if tasks_queue is not None:
-                try:
-                    task_message = tasks_queue.get_nowait()
-                    await context.write(task_message)
-                    logger.debug(f"Sent task {task_message.method_name} to {client_id} ({task_message.task_id})")
-                except asyncio.QueueEmpty:
-                    await asyncio.sleep(0.0)
+    async def RecvFromMaster(
+            self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
+    ) -> communicator_pb2.MainMessage:
+        get_task = asyncio.create_task(
+            self.get_from_tasks_to_send_dict(
+                method_name=request.method_name,
+                send_to_id=request.sender_id,
+                timeout=request.get_response_timeout
+            )
+        )
+        result = await get_task
+        return result
