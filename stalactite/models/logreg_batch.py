@@ -6,8 +6,8 @@ logger = logging.getLogger(__name__)
 
 
 class LogisticRegressionBatch(torch.nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, learning_rate: float = 0.001, momentum: float = 0.9,
-                 class_weights: torch.tensor = None, init_weights: float = None):
+    def __init__(self, input_dim: int, output_dim: int, learning_rate: float = 0.001, momentum: float = 0,
+                 class_weights: torch.Tensor = None, init_weights: float = None):
         """
         Args:
             input_dim (int): input dimension
@@ -20,7 +20,7 @@ class LogisticRegressionBatch(torch.nn.Module):
         self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
         self.optimizer = torch.optim.SGD(self.linear.parameters(), lr=learning_rate, momentum=momentum)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         return self.linear(x)
 
     def update_weights(self, x: torch.Tensor, gradients: torch.Tensor, is_single: bool = False) -> None:
