@@ -114,4 +114,9 @@ def get_party_member(config: VFLConfig, member_rank: int):
         model=LinearRegressionBatch(input_dim=member_data.model_update_dim_size, output_dim=1, reg_lambda=0.2),
         dataset=member_data.dataset,
         data_params=params[member_rank].data,
+        batch_size=config.common.batch_size,
+        epochs=config.common.epochs,
+        report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+        report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+
     )

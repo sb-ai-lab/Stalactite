@@ -20,11 +20,16 @@ def main(config_path):
         world_size=config.common.world_size,
         port=config.grpc_server.port,
         host=config.grpc_server.host,
+        server_thread_pool_size=config.grpc_server.server_threadpool_max_workers,
         max_message_size=config.grpc_server.max_message_size,
         logging_level=config.master.logging_level,
         prometheus_server_port=config.prerequisites.prometheus_server_port,
         run_prometheus=config.master.run_prometheus,
         experiment_label=config.common.experiment_label,
+        rendezvous_timeout=config.common.rendezvous_timeout,
+        disconnect_idle_client_time=config.master.disconnect_idle_client_time,
+        time_between_idle_connections_checks=config.master.time_between_idle_connections_checks,
+        recv_timeout=20,
     )
     comm.run()
     if config.master.run_mlflow:

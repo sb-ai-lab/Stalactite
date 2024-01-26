@@ -19,8 +19,13 @@ def main(config_path):
         participant=get_party_member(config, member_rank),
         master_host=grpc_host,
         master_port=config.grpc_server.port,
+        max_message_size=config.grpc_server.max_message_size,
         logging_level=config.member.logging_level,
         heartbeat_interval=config.member.heartbeat_interval,
+        task_requesting_pings_interval=config.member.task_requesting_pings_interval,
+        sent_task_timout=config.member.sent_task_timout,
+        rendezvous_timeout=config.common.rendezvous_timeout,
+        recv_timeout=20.
     )
     comm.run()
 
