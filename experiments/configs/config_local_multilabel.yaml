@@ -1,6 +1,6 @@
 common:
   random_seed: 0
-  parties_num: 3
+  parties_num: 2
 
 data:
   data_dir: /home/dmitriy/data/
