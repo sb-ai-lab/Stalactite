@@ -2,13 +2,12 @@ import logging
 
 import torch
 
-from .elm import solve_ols_svd
-
 logger = logging.getLogger(__name__)
 
 
 class LogisticRegressionBatch(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, learning_rate=0.001, **kw):
+    def __init__(self, input_dim: int, output_dim: int, learning_rate: float = 0.001, momentum: float = 0.9,
+                 class_weights: torch.tensor = None, init_weights: float = None):
         """
         Args:
             input_dim (int): input dimension
@@ -16,31 +15,26 @@ class LogisticRegressionBatch(torch.nn.Module):
         """
         super(LogisticRegressionBatch, self).__init__()
         self.linear = torch.nn.Linear(input_dim, output_dim, bias=False, device=None, dtype=None)
-        self.criterion = torch.nn.BCEWithLogitsLoss()
-        self.optimizer = torch.optim.SGD(self.linear.parameters(), lr=learning_rate)
-        # self.optimizer = torch.optim.Adam(self.linear.parameters(), lr=learning_rate)
-
+        if init_weights is not None:
+            self.linear.weight.data = torch.full((output_dim, input_dim), init_weights)
+        self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
+        self.optimizer = torch.optim.SGD(self.linear.parameters(), lr=learning_rate, momentum=momentum)
 
     def forward(self, x):
         return self.linear(x)
 
-    def update_weights(self, X, grads, is_single=False) -> None:
-        # todo: add docs
-        logger.debug("updating weights inside model")
+    def update_weights(self, x: torch.Tensor, gradients: torch.Tensor, is_single: bool = False) -> None:
         self.optimizer.zero_grad()
-        logits = self.forward(X)
+        logit = self.forward(x)
         if is_single:
-            loss = self.criterion(torch.squeeze(logits), grads.float())
+            loss = self.criterion(torch.squeeze(logit), gradients.float())
             loss.backward()
         else:
-            logits.backward(gradient=grads)
+            logit.backward(gradient=gradients)
         self.optimizer.step()
-        logger.debug("SUCCESS update weights")
 
-    def predict(self, X_pred):
-        Y_pred = self.forward(X_pred)
-        return Y_pred
+    def predict(self, x: torch.Tensor) -> torch.Tensor:
+        return self.forward(x)
 
-    def get_weights(self, ):
-        weights = self.linear.weight.clone()
-        return weights
+    def get_weights(self) -> torch.Tensor:
+        return self.linear.weight.clone()
