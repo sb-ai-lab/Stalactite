@@ -4,7 +4,7 @@ from stalactite.base import Batcher, RecordsBatch, TrainingIteration
 
 
 class ListBatcher(Batcher):
-    def __init__(self, epochs: int, members: List[str], uids: List[str], batch_size: int):
+    def __init__(self, epochs: int, members: Optional[List[str]], uids: List[str], batch_size: int):
         self.epochs = epochs
         self.members = members
         self.uids = uids
