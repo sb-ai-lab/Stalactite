@@ -4,6 +4,7 @@ from typing import List
 import torch
 import mlflow
 from sklearn import metrics
+from sklearn.metrics import roc_auc_score
 
 from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, Party
 from stalactite.metrics import ComputeAccuracy, ComputeAccuracy_numpy
@@ -90,7 +91,6 @@ class PartyMasterImpl(PartyMaster):
         self._check_if_ready()
         self.iteration_counter += 1
         y = self.target[self._batch_size*subiter_seq_num:self._batch_size*(subiter_seq_num+1)]
-
         for member_id in participating_members:
             party_predictions_for_upd = [v for k, v in self.party_predictions.items() if k != member_id]
             if len(party_predictions_for_upd) == 0:
@@ -124,7 +124,7 @@ class PartyMasterImplLogreg(PartyMasterImpl):
     def make_init_updates(self, world_size: int) -> PartyDataTensor:
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        return [torch.rand(self._batch_size, 1)/10e5 for _ in range(world_size)]
+        return [torch.zeros(self._batch_size, self.target.shape[1]) for _ in range(world_size)]
 
     def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor,
                   infer=False) -> DataTensor:
@@ -150,11 +150,12 @@ class PartyMasterImplLogreg(PartyMasterImpl):
         self._check_if_ready()
         self.iteration_counter += 1
         y = self.target[self._batch_size*subiter_seq_num:self._batch_size*(subiter_seq_num+1)]
+
         criterion = torch.nn.BCEWithLogitsLoss()
         loss = criterion(torch.squeeze(predictions), y.float())
         grads = torch.autograd.grad(outputs=loss, inputs=predictions)
 
-        for member_id in participating_members:
+        for i, member_id in enumerate(participating_members):
             self.updates[member_id] = grads[0]
 
         return [self.updates[member_id] for member_id in participating_members]
@@ -162,8 +163,12 @@ class PartyMasterImplLogreg(PartyMasterImpl):
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
         logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
                     f"Predictions size: {predictions.size()}" % self.id)
-        mae = metrics.mean_absolute_error(y, predictions.detach())
-        acc = ComputeAccuracy_numpy(is_linreg=False).compute(y.numpy(), predictions.detach().numpy())
+
+        y = y.numpy()
+        predictions = predictions.detach().numpy()
+
+        mae = metrics.mean_absolute_error(y, predictions)
+        acc = ComputeAccuracy_numpy(is_linreg=False).compute(y, predictions)
         logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
         logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
 
@@ -171,3 +176,8 @@ class PartyMasterImplLogreg(PartyMasterImpl):
             step = self.iteration_counter
             mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
             mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
+
+            for avg in ["macro", "micro"]:
+                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}",
+                                  roc_auc_score(y, predictions, average=avg), step=step,
+                                  )
