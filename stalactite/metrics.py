@@ -3,7 +3,7 @@ import numpy as np
 
 
 class ComputeAccuracy:
-    def __init__(self, name='Accuracy', positive_int=1, negative_int=-1, force_to_binary=True):
+    def __init__(self, name="Accuracy", positive_int=1, negative_int=-1, force_to_binary=True):
         """_summary_
 
         Args:
@@ -30,10 +30,10 @@ class ComputeAccuracy:
         return float(accuracy)
 
 
-class ComputeAccuracy_numpy():
+class ComputeAccuracy_numpy:
     def __init__(self, force_to_binary=True, is_linreg=True, is_multilabel=False):
         self.force_to_binary = force_to_binary
-        self.name = 'Accuracy'
+        self.name = "Accuracy"
         self.is_linreg = is_linreg
         self.is_multilabel = is_multilabel
 

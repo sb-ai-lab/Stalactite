@@ -19,13 +19,13 @@ class CommunicatorStub(object):
                 request_serializer=communicator__pb2.HB.SerializeToString,
                 response_deserializer=communicator__pb2.HB.FromString,
                 )
-        self.BidiExchange = channel.stream_stream(
-                '/Communicator/BidiExchange',
+        self.SendToMaster = channel.unary_unary(
+                '/Communicator/SendToMaster',
                 request_serializer=communicator__pb2.MainMessage.SerializeToString,
                 response_deserializer=communicator__pb2.MainMessage.FromString,
                 )
-        self.UnaryExchange = channel.unary_unary(
-                '/Communicator/UnaryExchange',
+        self.RecvFromMaster = channel.unary_unary(
+                '/Communicator/RecvFromMaster',
                 request_serializer=communicator__pb2.MainMessage.SerializeToString,
                 response_deserializer=communicator__pb2.MainMessage.FromString,
                 )
@@ -40,13 +40,15 @@ class CommunicatorServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def BidiExchange(self, request_iterator, context):
-        """Missing associated documentation comment in .proto file."""
+    def SendToMaster(self, request, context):
+        """rpc BidiExchange(stream MainMessage) returns (stream MainMessage) {}
+        rpc UnaryExchange(MainMessage) returns (MainMessage) {}
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def UnaryExchange(self, request, context):
+    def RecvFromMaster(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -60,13 +62,13 @@ def add_CommunicatorServicer_to_server(servicer, server):
                     request_deserializer=communicator__pb2.HB.FromString,
                     response_serializer=communicator__pb2.HB.SerializeToString,
             ),
-            'BidiExchange': grpc.stream_stream_rpc_method_handler(
-                    servicer.BidiExchange,
+            'SendToMaster': grpc.unary_unary_rpc_method_handler(
+                    servicer.SendToMaster,
                     request_deserializer=communicator__pb2.MainMessage.FromString,
                     response_serializer=communicator__pb2.MainMessage.SerializeToString,
             ),
-            'UnaryExchange': grpc.unary_unary_rpc_method_handler(
-                    servicer.UnaryExchange,
+            'RecvFromMaster': grpc.unary_unary_rpc_method_handler(
+                    servicer.RecvFromMaster,
                     request_deserializer=communicator__pb2.MainMessage.FromString,
                     response_serializer=communicator__pb2.MainMessage.SerializeToString,
             ),
@@ -98,7 +100,7 @@ class Communicator(object):
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def BidiExchange(request_iterator,
+    def SendToMaster(request,
             target,
             options=(),
             channel_credentials=None,
@@ -108,14 +110,14 @@ class Communicator(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(request_iterator, target, '/Communicator/BidiExchange',
+        return grpc.experimental.unary_unary(request, target, '/Communicator/SendToMaster',
             communicator__pb2.MainMessage.SerializeToString,
             communicator__pb2.MainMessage.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def UnaryExchange(request,
+    def RecvFromMaster(request,
             target,
             options=(),
             channel_credentials=None,
@@ -125,7 +127,7 @@ class Communicator(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/Communicator/UnaryExchange',
+        return grpc.experimental.unary_unary(request, target, '/Communicator/RecvFromMaster',
             communicator__pb2.MainMessage.SerializeToString,
             communicator__pb2.MainMessage.FromString,
             options, channel_credentials,

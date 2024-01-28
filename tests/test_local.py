@@ -81,7 +81,8 @@ def test_local_run():
         comm = LocalMemberPartyCommunicator(
             participant=member,
             world_size=members_count,
-            shared_party_info=shared_party_info
+            shared_party_info=shared_party_info,
+            master_id=master.id
         )
         comm.run()
         logger.info("Finishing thread %s" % threading.current_thread().name)

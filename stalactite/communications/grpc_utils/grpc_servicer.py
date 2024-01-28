@@ -1,19 +1,26 @@
 import asyncio
+import logging
 import time
 from collections import defaultdict
-import logging
-from typing import AsyncIterator, Any, Optional
 from concurrent import futures
+from typing import Any, AsyncIterator, Optional
 
 import grpc
 from google.protobuf.message import Message
-from stalactite.communications.grpc_utils.generated_code import communicator_pb2, communicator_pb2_grpc
-from stalactite.communications.grpc_utils.utils import Status, MessageTypes, PrometheusMetric
+
+from stalactite.communications.grpc_utils.generated_code import (
+    communicator_pb2,
+    communicator_pb2_grpc,
+)
+from stalactite.communications.grpc_utils.utils import (
+    PrometheusMetric,
+    Status,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(sh)
 
 
@@ -25,20 +32,20 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
     """
 
     def __init__(
-            self,
-            world_size: int,
-            master_id: str,
-            host: str,
-            port: str,
-            *args,
-            threadpool_max_workers: int = 10,
-            max_message_size: int = -1,
-            logging_level: Any = logging.INFO,
-            disconnect_idle_client_time: float = 120.,
-            run_prometheus: bool = False,
-            experiment_label: Optional[str] = None,
-            time_between_idle_connections_checks: float = 3.,
-            **kwargs
+        self,
+        world_size: int,
+        master_id: str,
+        host: str,
+        port: str,
+        *args,
+        threadpool_max_workers: int = 10,
+        max_message_size: int = -1,
+        logging_level: Any = logging.INFO,
+        disconnect_idle_client_time: float = 120.0,
+        run_prometheus: bool = False,
+        experiment_label: Optional[str] = None,
+        time_between_idle_connections_checks: float = 3.0,
+        **kwargs,
     ) -> None:
         """
         Initialize GRpcCommunicatorServicer with necessary connection arguments.
@@ -71,31 +78,26 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         self.time_between_idle_connections_checks = time_between_idle_connections_checks
 
         if self.run_prometheus and self.experiment_label is None:
-            raise RuntimeError('Experiment label (`experiment_label`) is not set. Cannot log heartbeats to Prometheus')
+            raise RuntimeError("Experiment label (`experiment_label`) is not set. Cannot log heartbeats to Prometheus")
 
         self.status = Status.not_started
         self.connected_clients = dict()
 
-        self._server_tasks_queues: dict[str, asyncio.Queue[communicator_pb2.MainMessage]] = defaultdict(
-            lambda: asyncio.Queue()
-        )
-        self._main_tasks_queue: asyncio.Queue[communicator_pb2.MainMessage] = asyncio.Queue()
-        self._tasks_futures = dict()
+        self._received_tasks = defaultdict(dict)
+        self._tasks_to_send_queues = defaultdict(dict)
 
-    @property
-    def main_tasks_queue(self) -> asyncio.Queue:
-        """ Return queue with tasks sent by VFL members. """
-        return self._main_tasks_queue
+    def put_to_received_tasks(self, message: communicator_pb2.MainMessage, receive_from_id: str):
+        self._received_tasks[message.method_name][receive_from_id] = message
 
-    @property
-    def tasks_queue(self) -> dict[str, asyncio.Queue]:
-        """ Return dictionary of members` queues with associated scheduled tasks. """
-        return self._server_tasks_queues
-
-    @property
-    def tasks_futures(self) -> dict:
-        """ Return dictionary of tasks futures. """
-        return self._tasks_futures
+    async def get_from_tasks_to_send_dict(
+            self, method_name: str, send_to_id: str, timeout: float = 30.
+    ) -> communicator_pb2.MainMessage:
+        timer_start = time.time()
+        while (message := self._tasks_to_send_queues.get(send_to_id, dict()).pop(method_name, None)) is None:
+            await asyncio.sleep(0.)
+            if time.time() - timer_start > timeout:
+                raise TimeoutError(f'Could not send task: {method_name} to {send_to_id}.')
+        return message
 
     @staticmethod
     def _message_size(message: Message) -> int:
@@ -113,7 +115,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         :param iteration_times: List of the iteration number and time pairs
         """
         if self.run_prometheus:
-            logger.debug('Reporting `master_iteration_time` to Prometheus')
+            logger.debug("Reporting `master_iteration_time` to Prometheus")
             for iter_num, iter_time in iteration_times:
                 PrometheusMetric.iteration_times.value.labels(
                     experiment_label=self.experiment_label,
@@ -130,7 +132,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         :param execution_time: Task execution time
         """
         if self.run_prometheus:
-            logger.debug('Reporting metrics to Prometheus')
+            logger.debug("Reporting metrics to Prometheus")
             PrometheusMetric.message_size.value.labels(
                 experiment_label=self.experiment_label,
                 client_id=client_id,
@@ -143,28 +145,28 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
             ).observe(execution_time)
 
     async def start_servicer_and_server(self):
-        """ Launch gRPC server and servicer. """
+        """Launch gRPC server and servicer."""
         server = grpc.aio.server(
             futures.ThreadPoolExecutor(max_workers=self.threadpool_max_workers),
             options=[
-                ('grpc.max_send_message_length', self.max_message_size),
-                ('grpc.max_receive_message_length', self.max_message_size)
-            ]
+                ("grpc.max_send_message_length", self.max_message_size),
+                ("grpc.max_receive_message_length", self.max_message_size),
+            ],
         )
         communicator_pb2_grpc.add_CommunicatorServicer_to_server(self, server)
         server.add_insecure_port(f"{self.host}:{self.port}")  # TODO SSL goes here
-        logger.info(f'Starting server at {self.host}:{self.port}')
+        logger.info(f"Starting server at {self.host}:{self.port}")
         asyncio.create_task(self._check_active_connections())
         await server.start()
         await server.wait_for_termination()
 
     def _log_agents_status(self) -> None:
-        """ Log number of active clients to the Prometheus. """
+        """Log number of active clients to the Prometheus."""
         if self.run_prometheus:
-            logger.debug('Reporting `number_of_connected_agents` to Prometheus.')
-            PrometheusMetric.number_of_connected_agents.value \
-                .labels(experiment_label=self.experiment_label) \
-                .set(len(self.connected_clients))
+            logger.debug("Reporting `number_of_connected_agents` to Prometheus.")
+            PrometheusMetric.number_of_connected_agents.value.labels(experiment_label=self.experiment_label).set(
+                len(self.connected_clients)
+            )
 
     def _log_communication_time(self, client_id: str, timings: list[communicator_pb2.SendTime]) -> None:
         """
@@ -174,7 +176,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         :param timings: List of the SendTime objects containing unary send time
         """
         if self.run_prometheus:
-            logger.debug('Reporting `member_send_time` to Prometheus.')
+            logger.debug("Reporting `member_send_time` to Prometheus.")
             for timing in timings:
                 PrometheusMetric.send_client_time.value.labels(
                     experiment_label=self.experiment_label,
@@ -217,52 +219,31 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         )
 
     async def Heartbeat(
-            self,
-            request_iterator: AsyncIterator[communicator_pb2.HB],
-            context: grpc.aio.ServicerContext,
+        self,
+        request_iterator: AsyncIterator[communicator_pb2.HB],
+        context: grpc.aio.ServicerContext,
     ) -> AsyncIterator[communicator_pb2.HB]:
-        """ Process heartbeats from member. Send world status back to member. """
+        """Process heartbeats from member. Send world status back to member."""
         async for request in request_iterator:
             yield self.process_heartbeat(request)
 
-    async def UnaryExchange(
+    async def SendToMaster(
             self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
     ) -> communicator_pb2.MainMessage:
-        """ Receive task response from member, return message indicating acknowledgment of the task received. """
-        await self.main_tasks_queue.put(request)
-        self._log_agents_metrics(
-            client_id=request.from_uid,
-            task_type=request.parent_method_name,
-            message_size=self._message_size(request),
-            execution_time=request.parent_task_execution_time,
-        )
+        self.put_to_received_tasks(message=request, receive_from_id=request.sender_id)
         return communicator_pb2.MainMessage(
-            message_type=MessageTypes.acknowledgment,
-            task_id=request.task_id,
+            sender_id=self.master_id,
         )
 
-    async def BidiExchange(
-            self,
-            request_iterator: AsyncIterator[communicator_pb2.MainMessage],
-            context: grpc.aio.ServicerContext,
-    ) -> None:
-        """ Read members queries for task from master. Send task if scheduled in `self.tasks_queue`. """
-        read = asyncio.create_task(self.process_requests(request_iterator, context))
-        await read
-
-    async def process_requests(
-            self,
-            request_iterator: AsyncIterator[communicator_pb2.MainMessage],
-            context: grpc.aio.ServicerContext,
-    ) -> None:
-        """ Process requests for tasks, check the readiness of the task for the member, send the task if ready. """
-        async for request in request_iterator:
-            client_id = request.from_uid
-            tasks_queue = self._server_tasks_queues.get(client_id)
-            if tasks_queue is not None:
-                try:
-                    task_message = tasks_queue.get_nowait()
-                    await context.write(task_message)
-                    logger.debug(f'Sent task {task_message.method_name} to {client_id} ({task_message.task_id})')
-                except asyncio.QueueEmpty:
-                    await asyncio.sleep(0.)
+    async def RecvFromMaster(
+            self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
+    ) -> communicator_pb2.MainMessage:
+        get_task = asyncio.create_task(
+            self.get_from_tasks_to_send_dict(
+                method_name=request.method_name,
+                send_to_id=request.sender_id,
+                timeout=request.get_response_timeout
+            )
+        )
+        result = await get_task
+        return result

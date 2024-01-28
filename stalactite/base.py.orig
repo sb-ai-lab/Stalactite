@@ -50,7 +50,7 @@ class PartyCommunicator(ABC):
     members: List[str]
 
     @abstractmethod
-    def randezvous(self):
+    def rendezvous(self):
         ...
 
     @property

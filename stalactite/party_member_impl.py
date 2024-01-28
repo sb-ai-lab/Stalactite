@@ -2,18 +2,34 @@ import logging
 from typing import List, Optional
 
 import torch
+import scipy as sp
 from datasets.dataset_dict import DatasetDict
 
-from stalactite.base import DataTensor, PartyMember, RecordsBatch
+from stalactite.base import DataTensor, PartyMember, RecordsBatch, Batcher
 from stalactite.data_loader import AttrDict
+from stalactite.batching import ListBatcher
+
 
 logger = logging.getLogger(__name__)
 
 
 class PartyMemberImpl(PartyMember):
-    def __init__(self, uid: str, model_update_dim_size: int, member_record_uids: List[str], model: torch.nn.Module,
-                 dataset: DatasetDict, data_params: AttrDict):
+    def __init__(
+        self,
+        uid: str,
+        epochs: int,
+        batch_size: int,
+        model_update_dim_size: int,
+        member_record_uids: List[str],
+        model: torch.nn.Module,
+        dataset: DatasetDict,
+        data_params: AttrDict,
+        report_train_metrics_iteration: int,
+        report_test_metrics_iteration: int,
+    ):
         self.id = uid
+        self.epochs = epochs
+        self._batch_size = batch_size
         self._uids = member_record_uids
         self._uids_to_use: Optional[List[str]] = None
         self.is_initialized = False
@@ -25,6 +41,25 @@ class PartyMemberImpl(PartyMember):
         self._model = model
         self._dataset = dataset
         self._data_params = data_params
+        self.report_train_metrics_iteration = report_train_metrics_iteration
+        self.report_test_metrics_iteration = report_test_metrics_iteration
+
+        self._batcher = None
+
+    def _create_batcher(self, epochs: int, uids: List[str], batch_size: int) -> Batcher:
+        logger.info("Member %s: making a batcher for uids" % (self.id))
+        self._check_if_ready()
+        self._batcher = ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
+
+    @property
+    def batcher(self) -> Batcher:
+        if self._batcher is None:
+            if self._uids_to_use is None:
+                raise RuntimeError('Cannot create batcher, you must `register_records_uids` first.')
+            self._create_batcher(epochs=self.epochs, uids=self._uids_to_use, batch_size=self._batch_size)
+        else:
+            logger.info("Member %s: using created batcher" % (self.id))
+        return self._batcher
 
     def records_uids(self) -> List[str]:
         logger.info("Member %s: reporting existing record uids" % self.id)
@@ -47,6 +82,11 @@ class PartyMemberImpl(PartyMember):
         self._weights = None
         self.is_finalized = True
         logger.info("Member %s: has been finalized" % self.id)
+
+    def _prepare_data(self, uids: RecordsBatch):
+        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
+        U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
+        return U, S, Vh
 
     def update_weights(self, uids: RecordsBatch, upd: DataTensor):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))

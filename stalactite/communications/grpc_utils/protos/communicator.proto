@@ -3,8 +3,8 @@ syntax = "proto3";
 
 service Communicator {
   rpc Heartbeat(stream HB) returns (stream HB) {}
-  rpc BidiExchange(stream MainMessage) returns (stream MainMessage) {}
-  rpc UnaryExchange(MainMessage) returns (MainMessage) {}
+  rpc SendToMaster(MainMessage) returns (MainMessage) {}
+  rpc RecvFromMaster(MainMessage) returns (MainMessage) {}
 }
 
 
@@ -20,18 +20,12 @@ message HB{
   repeated SendTime send_timings = 3;
 }
 
-
 message MainMessage {
-  string message_type = 1;
-  optional bool require_answer = 2;
-  optional string status = 3;
-  optional string task_id = 4;
-  optional string parent_id = 5;
-  optional string from_uid = 6;
-  optional string method_name = 7;
-  optional string parent_method_name = 8;
-  optional float parent_task_execution_time = 9;
-  map<string, bytes> tensor_kwargs = 10;
-  map<string, bytes> other_kwargs = 11;
+  string sender_id = 1;
+  optional string task_id = 2;
+  optional string method_name = 3;
+  map<string, bytes> tensor_kwargs = 4;
+  map<string, bytes> other_kwargs = 5;
+  map<string, bytes> prometheus_metrics = 6;
+  optional float get_response_timeout = 7;
 }
-

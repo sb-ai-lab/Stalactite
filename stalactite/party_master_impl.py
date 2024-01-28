@@ -6,25 +6,31 @@ import mlflow
 from sklearn import metrics
 from sklearn.metrics import roc_auc_score
 
-from stalactite.base import PartyMaster, DataTensor, Batcher, PartyDataTensor, Party
+from stalactite.base import Batcher, DataTensor, PartyDataTensor, PartyMaster
 from stalactite.metrics import ComputeAccuracy, ComputeAccuracy_numpy
 from stalactite.batching import ListBatcher, ConsecutiveListBatcher
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+sh = logging.StreamHandler()
+sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logger.addHandler(sh)
 
 
 class PartyMasterImpl(PartyMaster):
-    def __init__(self,
-                 uid: str,
-                 epochs: int,
-                 report_train_metrics_iteration: int,
-                 report_test_metrics_iteration: int,
-                 target: DataTensor,
-                 test_target: DataTensor,
-                 target_uids: List[str],
-                 batch_size: int,
-                 model_update_dim_size: int,
-                 run_mlflow: bool = False):
+    def __init__(
+            self,
+            uid: str,
+            epochs: int,
+            report_train_metrics_iteration: int,
+            report_test_metrics_iteration: int,
+            target: DataTensor,
+            test_target: DataTensor,
+            target_uids: List[str],
+            batch_size: int,
+            model_update_dim_size: int,
+            run_mlflow: bool = False,
+    ):
         self.id = uid
         self.epochs = epochs
         self.report_train_metrics_iteration = report_train_metrics_iteration
@@ -36,20 +42,21 @@ class PartyMasterImpl(PartyMaster):
         self.is_finalized = False
         self._batch_size = batch_size
         self._weights_dim = model_update_dim_size
-        self.iteration_counter = 0
         self.run_mlflow = run_mlflow
+
+        self.iteration_counter = 0
         self.party_predictions = dict()
         self.updates = dict()
 
-    def master_initialize(self, party: Party):
+    def initialize(self):
         logger.info("Master %s: initializing" % self.id)
-        party.initialize()
         self.is_initialized = True
 
-    def make_batcher(self, uids: List[str], party: Party) -> Batcher:
+    def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
         logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
-        return ListBatcher(epochs=self.epochs, members=party.members, uids=uids, batch_size=self._batch_size)
+        assert party_members is not None, 'Master is trying to initialize batcher without members list'
+        return ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
 
     def make_init_updates(self, world_size: int) -> PartyDataTensor:
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
@@ -57,8 +64,9 @@ class PartyMasterImpl(PartyMaster):
         return [torch.rand(self._batch_size) for _ in range(world_size)]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
-        logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
-                    f"Predictions size: {predictions.size()}" % self.id)
+        logger.info(
+            f"Master %s: reporting metrics. Y dim: {y.size()}. " f"Predictions size: {predictions.size()}" % self.id
+        )
         mae = metrics.mean_absolute_error(y, predictions.detach())
         acc = ComputeAccuracy().compute(y, predictions.detach())
         logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
@@ -69,8 +77,9 @@ class PartyMasterImpl(PartyMaster):
             mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
             mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
 
-    def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor,
-                  infer=False) -> DataTensor:
+    def aggregate(
+            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+    ) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
         if not infer:
@@ -80,17 +89,20 @@ class PartyMasterImpl(PartyMaster):
 
         return torch.sum(torch.stack(party_predictions, dim=1), dim=1)
 
-    def compute_updates(self,
-                        participating_members: List[str],
-                        predictions: DataTensor,
-                        party_predictions: PartyDataTensor,
-                        world_size: int,
-                        subiter_seq_num: int) -> List[DataTensor]:
+    def compute_updates(
+            self,
+            participating_members: List[str],
+            predictions: DataTensor,
+            party_predictions: PartyDataTensor,
+            world_size: int,
+            subiter_seq_num: int,
+    ) -> List[DataTensor]:
 
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        y = self.target[self._batch_size*subiter_seq_num:self._batch_size*(subiter_seq_num+1)]
+        y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
+
         for member_id in participating_members:
             party_predictions_for_upd = [v for k, v in self.party_predictions.items() if k != member_id]
             if len(party_predictions_for_upd) == 0:
@@ -101,20 +113,18 @@ class PartyMasterImpl(PartyMaster):
 
         return [self.updates[member_id] for member_id in participating_members]
 
-    def master_finalize(self, party: Party):
+    def finalize(self):
         logger.info("Master %s: finalizing" % self.id)
         self._check_if_ready()
-        party.finalize()
         self.is_finalized = True
 
     def _check_if_ready(self):
         if not self.is_initialized and not self.is_finalized:
-            raise RuntimeError("The member has not been initialized")
+            raise RuntimeError("The master has not been initialized")
 
 
 class PartyMasterImplConsequently(PartyMasterImpl):
-
-    def make_batcher(self, uids: List[str], party: Party) -> Batcher:
+    def make_batcher(self, uids: List[str], party) -> Batcher:
         logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
         return ConsecutiveListBatcher(epochs=self.epochs, members=party.members, uids=uids, batch_size=self._batch_size)

@@ -1,7 +1,7 @@
 import random
-from typing import List, Optional, Iterator
+from typing import Iterator, List, Optional
 
-from stalactite.base import Batcher, TrainingIteration, RecordsBatch
+from stalactite.base import Batcher, RecordsBatch, TrainingIteration
 
 
 class ListBatcher(Batcher):
@@ -47,7 +47,6 @@ class ListBatcher(Batcher):
 
 
 class ConsecutiveListBatcher(ListBatcher):
-
     def __iter__(self) -> Iterator[TrainingIteration]:
         def _iter_func():
             iter_num = 0
@@ -68,4 +67,5 @@ class ConsecutiveListBatcher(ListBatcher):
                     iter_num += 1
                     iter_in_batch += 1
                     previous_batch = batch
+
         return _iter_func()
