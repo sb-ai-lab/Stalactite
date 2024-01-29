@@ -8,12 +8,12 @@ from stalactite.data_utils import get_party_member
 
 
 @click.command()
-@click.option('--config-path', type=str, default='../configs/config.yml')
+@click.option("--config-path", type=str, default="../configs/config.yml")
 def main(config_path):
-    member_rank = int(os.environ.get('RANK', 0))
+    member_rank = int(os.environ.get("RANK", 0))
     config = VFLConfig.load_and_validate(config_path)
 
-    grpc_host = os.environ.get('GRPC_SERVER_HOST', config.master.container_host)
+    grpc_host = os.environ.get("GRPC_SERVER_HOST", config.master.container_host)
 
     comm = GRpcMemberPartyCommunicator(
         participant=get_party_member(config, member_rank),
@@ -25,9 +25,10 @@ def main(config_path):
         task_requesting_pings_interval=config.member.task_requesting_pings_interval,
         sent_task_timout=config.member.sent_task_timout,
         rendezvous_timeout=config.common.rendezvous_timeout,
+        recv_timeout=20.
     )
     comm.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -7,7 +7,7 @@ from stalactite.data_utils import get_party_master
 
 
 @click.command()
-@click.option('--config-path', type=str, default='../configs/config.yml')
+@click.option("--config-path", type=str, default="../configs/config.yml")
 def main(config_path):
     config = VFLConfig.load_and_validate(config_path)
     if config.master.run_mlflow:
@@ -29,11 +29,12 @@ def main(config_path):
         rendezvous_timeout=config.common.rendezvous_timeout,
         disconnect_idle_client_time=config.master.disconnect_idle_client_time,
         time_between_idle_connections_checks=config.master.time_between_idle_connections_checks,
+        recv_timeout=20,
     )
     comm.run()
     if config.master.run_mlflow:
         mlflow.end_run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
