@@ -24,7 +24,8 @@ class PartyMasterImpl(PartyMaster):
                  target_uids: List[str],
                  batch_size: int,
                  model_update_dim_size: int,
-                 run_mlflow: bool = False):
+                 run_mlflow: bool = False,
+                 class_weights: torch.Tensor = None):
         self.id = uid
         self.epochs = epochs
         self.report_train_metrics_iteration = report_train_metrics_iteration
@@ -40,6 +41,7 @@ class PartyMasterImpl(PartyMaster):
         self.run_mlflow = run_mlflow
         self.party_predictions = dict()
         self.updates = dict()
+        self.class_weights = class_weights
 
     def master_initialize(self, party: Party):
         logger.info("Master %s: initializing" % self.id)
@@ -151,7 +153,7 @@ class PartyMasterImplLogreg(PartyMasterImpl):
         self.iteration_counter += 1
         y = self.target[self._batch_size*subiter_seq_num:self._batch_size*(subiter_seq_num+1)]
 
-        criterion = torch.nn.BCEWithLogitsLoss()
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
         loss = criterion(torch.squeeze(predictions), y.float())
         grads = torch.autograd.grad(outputs=loss, inputs=predictions)
 

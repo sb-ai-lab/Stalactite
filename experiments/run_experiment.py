@@ -152,10 +152,7 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
                 break
 
             if model_name == "linreg":
-
-                u, s, vt = sp.linalg.svd(x_train, full_matrices=False, overwrite_a=False, check_finite=False)
-                model.update_weights(data_U=u, data_S=s, data_Vh=vt, rhs=y_train)
-
+                model.update_weights(X_train=x_train, rhs=y_train)
             elif model_name == "logreg":
                 model.update_weights(x_train, y_train, is_single=True)
                 train_predictions = torch.sigmoid(model.predict(x_train_all)).detach().numpy()
@@ -287,7 +284,8 @@ def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_coun
                 target_uids=target_uids,
                 batch_size=batch_size,
                 model_update_dim_size=0,
-                run_mlflow=True
+                run_mlflow=True,
+                class_weights=class_weights
             )
 
         elif model_name == "logreg":
@@ -301,7 +299,8 @@ def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_coun
                 target_uids=target_uids,
                 batch_size=batch_size,
                 model_update_dim_size=0,
-                run_mlflow=True
+                run_mlflow=True,
+                class_weights=class_weights
             )
         else:
             master = PartyMasterImpl(
@@ -314,7 +313,8 @@ def run_vfl(exp_uid: str, params, datasets_list: List[DatasetDict], members_coun
                 target_uids=target_uids,
                 batch_size=batch_size,
                 model_update_dim_size=0,
-                run_mlflow=True
+                run_mlflow=True,
+                class_weights=class_weights
             )
 
         members = [
@@ -392,6 +392,7 @@ def main():
     model_name = os.environ.get("MODEL_NAME")
     learning_rate = float(os.environ.get("LR", 0.01))
     use_smm = bool(int(os.environ.get("USE_SMM", 1)))
+    use_class_weights = bool(int(os.environ.get("USE_CLASS_WEIGHTS", 1)))
 
     # models input dims for 1, 2, 3 and 5 members
     if ds_name.lower() == "mnist":
@@ -469,7 +470,8 @@ def main():
             run_single_member(
                 exp_uid=exp_uid, datasets_list=datasets_list, member_id=member_id, batch_size=batch_size,
                 ds_size=train_size, epochs=epochs, input_dims=input_dims_list[members_count-1],
-                members_count=members_count, model_name=model_name, lr=learning_rate, ds_name=ds_name
+                members_count=members_count, model_name=model_name, lr=learning_rate, ds_name=ds_name,
+                use_class_weights=use_class_weights
             )
             break
 
@@ -477,7 +479,8 @@ def main():
         run_vfl(
             exp_uid=exp_uid, params=params, datasets_list=datasets_list, members_count=members_count,
             batch_size=batch_size, ds_size=train_size, epochs=epochs, input_dims=input_dims_list[members_count-1],
-            is_consequently=is_consequently, model_name=model_name, lr=learning_rate, ds_name=ds_name
+            is_consequently=is_consequently, model_name=model_name, lr=learning_rate, ds_name=ds_name,
+            use_class_weights=use_class_weights
             )
     else:
         raise ValueError(f"Unrecognized mode: {mode}. Please choose one of the following: single or vfl")
