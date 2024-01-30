@@ -1,0 +1,19 @@
+common:
+  epochs: 5
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  batch_size: 1000
+  experiment_label: experiment-vm
+  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports"
+  vfl_model_name: linreg
+  is_consequently: False
+  learning_rate: 0.01
+  use_class_weights: False
+
+
+data:
+  random_seed: 0
+  dataset_size: 1000
+  dataset: 'mnist'
+  use_smm: False

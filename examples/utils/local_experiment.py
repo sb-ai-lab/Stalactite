@@ -129,11 +129,11 @@ def load_parameters(config: VFLConfig):
 # примеры в нормальный вид
 # local distributed
 # distributed
-def main(config_path: Optional[str] = None):
+def run(config_path: Optional[str] = None):
     if config_path is None:
         config_path = os.environ.get(
             'SINGLE_MEMBER_CONFIG_PATH',
-            os.path.join(Path(__file__).parent.parent.parent, 'configs/local-linreg-seq-mnist.yml')
+            os.path.join(Path(__file__).parent.parent.parent, 'configs/linreg-mnist-local.yml')
         )
     config = VFLConfig.load_and_validate(config_path)
 
@@ -295,4 +295,4 @@ def main(config_path: Optional[str] = None):
 
 
 if __name__ == "__main__":
-    main()
+    run()
