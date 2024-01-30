@@ -21,13 +21,13 @@ from stalactite.models.linreg_batch import LinearRegressionBatch
 from stalactite.models.logreg_batch import LogisticRegressionBatch
 from stalactite.party_member_impl import PartyMemberImpl
 from stalactite.data_loader import load, init, DataPreprocessor
+from stalactite.data_preprocessors import ImagePreprocessor
 from stalactite.batching import ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
-
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -62,14 +62,14 @@ def load_parameters(config: VFLConfig):
     if config.data.dataset.lower() == "mnist":
         input_dims_list = [[619], [304, 315], [204, 250, 165], [], [108, 146, 150, 147, 68]]
         params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_mnist.yaml"))
-    elif config.data.dataset.lower() == "sbol":
-        smm = "smm_" if config.data.use_smm else ""
-        dim = 1356 if smm == "smm_" else 1345
-        input_dims_list = [[0], [1345, 11]]
-        params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_multilabel.yaml"))
-    else:
-        input_dims_list = [[100], [40, 60], [20, 50, 30], [], [10, 5, 45, 15, 25]]
-        params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_multilabel.yaml"))
+    # elif config.data.dataset.lower() == "sbol":
+    #     smm = "smm_" if config.data.use_smm else ""
+    #     dim = 1356 if smm == "smm_" else 1345
+    #     input_dims_list = [[0], [1345, 11]]
+    #     params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_multilabel.yaml"))
+    # else:
+    #     input_dims_list = [[100], [40, 60], [20, 50, 30], [], [10, 5, 45, 15, 25]]
+    #     params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_multilabel.yaml"))
 
     for m in range(config.common.world_size):
         if config.common.vfl_model_name == "linreg":
@@ -81,45 +81,48 @@ def load_parameters(config: VFLConfig):
 
     if config.data.dataset.lower() == "mnist":
         dataset, _ = load(params)
-        datasets_list = []
-        for m in range(config.common.world_size):
-            logger.info(f"preparing dataset for member: {m}")
-            dp = DataPreprocessor(dataset, params[m].data, member_id=m)
-            tmp_dataset, _ = dp.preprocess()
-            datasets_list.append(tmp_dataset)
 
-    elif config.data.dataset.lower() == "multilabel":
-        dataset = {}
-        for m in range(config.common.world_size):
-            dataset[m] = datasets.load_from_disk(os.path.join(BASE_PATH, f"data/sber_ds_vfl/multilabel_ds_parts{config.common.world_size}/part_{m}"))
+        # datasets_list = []
+        # for m in range(config.common.world_size):
+        #     logger.info(f"preparing dataset for member: {m}")
+        #     dp = DataPreprocessor(dataset, params[m].data, member_id=m)
+        #     tmp_dataset, _ = dp.preprocess()
+        #     datasets_list.append(tmp_dataset)
+        # todo: add processor here
+        processors = [ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()]
 
-        datasets_list = []
-        for m in range(config.common.world_size):
-            logger.info(f"preparing dataset for member: {m}")
-            dp = DataPreprocessor(dataset, params[m].data, member_id=m)
-            tmp_dataset, _ = dp.preprocess()
-            datasets_list.append(tmp_dataset)
+    # elif config.data.dataset.lower() == "multilabel":
+    #     dataset = {}
+    #     for m in range(config.common.world_size):
+    #         dataset[m] = datasets.load_from_disk(os.path.join(BASE_PATH, f"data/sber_ds_vfl/multilabel_ds_parts{config.common.world_size}/part_{m}"))
+    #
+    #     datasets_list = []
+    #     for m in range(config.common.world_size):
+    #         logger.info(f"preparing dataset for member: {m}")
+    #         dp = DataPreprocessor(dataset, params[m].data, member_id=m)
+    #         tmp_dataset, _ = dp.preprocess()
+    #         datasets_list.append(tmp_dataset)
 
-    elif config.data.dataset.lower() == "sbol":
-        if smm != "":
-            ds_name = "sbol_smm"
-        dataset = {}
-        ds_path = f"vfl_multilabel_sber_sample{sample_size}_parts{config.common.world_size}"
-
-        for m in range(config.common.world_size):
-            dataset[m] = datasets.load_from_disk(
-                os.path.join(BASE_PATH, f"data/sber_ds_vfl/{ds_path}/part_{m}")
-            )
-        datasets_list = []
-        for m in range(config.common.world_size):
-            logger.info(f"preparing dataset for member: {m}")
-            dp = DataPreprocessor(dataset, params[m].data, member_id=m)
-            tmp_dataset, _ = dp.preprocess()
-            datasets_list.append(tmp_dataset)
+    # elif config.data.dataset.lower() == "sbol":
+    #     if smm != "":
+    #         ds_name = "sbol_smm"
+    #     dataset = {}
+    #     ds_path = f"vfl_multilabel_sber_sample{sample_size}_parts{config.common.world_size}"
+    #
+    #     for m in range(config.common.world_size):
+    #         dataset[m] = datasets.load_from_disk(
+    #             os.path.join(BASE_PATH, f"data/sber_ds_vfl/{ds_path}/part_{m}")
+    #         )
+    #     datasets_list = []
+    #     for m in range(config.common.world_size):
+    #         logger.info(f"preparing dataset for member: {m}")
+    #         dp = DataPreprocessor(dataset, params[m].data, member_id=m)
+    #         tmp_dataset, _ = dp.preprocess()
+    #         datasets_list.append(tmp_dataset)
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return input_dims_list, params, datasets_list
+    return input_dims_list, params, processors #datasets_list
 
 # parametrized file __main__ run() с хардкод
 
@@ -173,25 +176,22 @@ def run(config_path: Optional[str] = None):
     if config.master.run_mlflow:
         mlflow.log_params(log_params)
 
-    input_dims_list, params, datasets_list = load_parameters(config)
-
-
-
+    input_dims_list, params, processors = load_parameters(config)
 
     # TODO DATAPREPROCESSING
     num_dataset_records = [200 + random.randint(100, 1000) for _ in range(config.common.world_size)]
     shared_record_uids = [str(i) for i in range(config.data.dataset_size)]
     target_uids = shared_record_uids
 
-    targets = datasets_list[0]["train_train"][label_col][:config.data.dataset_size]
-    test_targets = datasets_list[0]["train_val"][label_col]
-    if 'logreg' in model_name:
-        targets = targets[:, classes_idx]
-        test_targets = test_targets[:, classes_idx]
-        class_weights = compute_class_weights(classes_idx, targets) if config.common.use_class_weights else None
-        if config.master.run_mlflow:
-            mlflow.log_param("class_weights", class_weights)
-        compute_class_distribution(classes_idx=classes_idx, y=test_targets, name="test")
+    # targets = datasets_list[0]["train_train"][label_col][:config.data.dataset_size]
+    # test_targets = datasets_list[0]["train_val"][label_col]
+    # if 'logreg' in model_name:
+    #     targets = targets[:, classes_idx]
+    #     test_targets = test_targets[:, classes_idx]
+    #     class_weights = compute_class_weights(classes_idx, targets) if config.common.use_class_weights else None
+    #     if config.master.run_mlflow:
+    #         mlflow.log_param("class_weights", class_weights)
+    #     compute_class_distribution(classes_idx=classes_idx, y=test_targets, name="test")
 
     members_datasets_uids = [
         [*shared_record_uids, *(str(uuid.uuid4()) for _ in range(num_records - len(shared_record_uids)))]
@@ -210,8 +210,9 @@ def run(config_path: Optional[str] = None):
         epochs=config.common.epochs,
         report_train_metrics_iteration=config.common.report_train_metrics_iteration,
         report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-        target=targets,
-        test_target=test_targets,
+        processor=processors[0],
+        # target=targets,
+        # test_target=test_targets,
         target_uids=target_uids,
         batch_size=config.common.batch_size,
         model_update_dim_size=0,
@@ -223,7 +224,7 @@ def run(config_path: Optional[str] = None):
             input_dim=input_dims_list[config.common.world_size - 1][member_rank],
             output_dim=n_labels,
             learning_rate=config.common.learning_rate,
-            class_weights=class_weights,
+            class_weights=None,
             init_weights=0.005
         )
     else:
@@ -239,8 +240,9 @@ def run(config_path: Optional[str] = None):
             model_update_dim_size=input_dims_list[config.common.world_size - 1][member_rank],
             member_record_uids=member_uids,
             model=model(member_rank),
-            dataset=datasets_list[member_rank],
-            data_params=params[member_rank]['data'],
+            # dataset=datasets_list[member_rank],
+            # data_params=params[member_rank]['data'],
+            processor=processors[member_rank],
             batch_size=config.common.batch_size,
             epochs=config.common.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,

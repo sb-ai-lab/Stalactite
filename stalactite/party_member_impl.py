@@ -21,10 +21,11 @@ class PartyMemberImpl(PartyMember):
         model_update_dim_size: int,
         member_record_uids: List[str],
         model: torch.nn.Module,
-        dataset: DatasetDict,
-        data_params: AttrDict,
+        # dataset: DatasetDict,
+        # data_params: AttrDict,
         report_train_metrics_iteration: int,
         report_test_metrics_iteration: int,
+        processor=None
     ):
         self.id = uid
         self.epochs = epochs
@@ -38,11 +39,11 @@ class PartyMemberImpl(PartyMember):
         self._data: Optional[DataTensor] = None
         self.iterations_counter = 0
         self._model = model
-        self._dataset = dataset
-        self._data_params = data_params
+        # self._dataset = dataset
+        # self._data_params = data_params
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
-
+        self.processor = processor
         self._batcher = None
 
     def _create_batcher(self, epochs: int, uids: List[str], batch_size: int) -> Batcher:
@@ -72,6 +73,8 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: initializing" % self.id)
         self._weights = torch.rand(self._weights_dim)
         self._data = torch.rand(len(self._uids_to_use), self._weights_dim)
+        self._dataset = self.processor.fit_transform()
+        self._data_params = self.processor.data_params
         self.is_initialized = True
         logger.info("Member %s: has been initialized" % self.id)
 
