@@ -70,7 +70,7 @@ def load_parameters(config_path: str):
         dim = 1356 if smm == "smm_" else 1345
         input_dims_list = [[0], [1345, 11]]
         # params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_multilabel.yaml"))
-        params = init(config_path=os.path.abspath(config_path))
+        # params = init(config_path=os.path.abspath(config_path))
     # else:
     #     input_dims_list = [[100], [40, 60], [20, 50, 30], [], [10, 5, 45, 15, 25]]
     #     params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_multilabel.yaml"))
@@ -85,7 +85,9 @@ def load_parameters(config_path: str):
 
     if config.data.dataset.lower() == "mnist":
         dataset, _ = load(params)
-        processors = [ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()]
+        processors = [
+            ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()
+        ]
 
     elif config.data.dataset.lower() == "sbol":
 
@@ -93,10 +95,11 @@ def load_parameters(config_path: str):
 
         for m in range(config.common.world_size):
             dataset[m] = datasets.load_from_disk(
-                os.path.join(f"{params.host_path_data_dir}/part_{m}")
+                os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
             )
-        processors = [TabularPreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in
-                      dataset.items()]
+        processors = [
+            TabularPreprocessor(dataset=dataset[i], member_id=i, data_params=config.data) for i, v in dataset.items()
+        ]
         input_dims_list = [[0], [1345, 11]]
 
         # if smm != "":
@@ -111,7 +114,7 @@ def load_parameters(config_path: str):
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return input_dims_list, params, processors #datasets_list
+    return input_dims_list, config.data, processors #datasets_list
 
 # parametrized file __main__ run() с хардкод
 
@@ -137,9 +140,10 @@ def run(config_path: Optional[str] = None):
 
 
     if 'logreg' in model_name:
+
         classes_idx = [x for x in range(19)]
         # remove classes with low positive targets rate
-        classes_idx = [x for x in classes_idx if x not in [18, 3, 12, 14]]
+        # classes_idx = [x for x in classes_idx if x not in [18, 3, 12, 14]]
     else:
         classes_idx = list()
     n_labels = len(classes_idx)
@@ -158,8 +162,6 @@ def run(config_path: Optional[str] = None):
         "n_labels": n_labels,
 
     }
-
-    label_col = "labels" if 'logreg' in model_name else 'label'
 
     if config.master.run_mlflow:
         mlflow.log_params(log_params)

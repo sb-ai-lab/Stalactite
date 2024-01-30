@@ -17,4 +17,6 @@ data:
   dataset_size: 1000
   dataset: 'sbol'
   use_smm: True
-  host_path_data_dir: "/home/dmitriy/data/vfl_multilabel_sber_sample1000_parts2"  #/Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl #  #
+  host_path_data_dir: "/home/dmitriy/data/vfl_multilabel_sber_sample10000_parts2"  #/Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl #
+  features_key: "features_part_"
+  label_key: "labels"
