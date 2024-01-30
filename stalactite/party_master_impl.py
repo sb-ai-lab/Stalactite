@@ -24,32 +24,36 @@ class PartyMasterImpl(PartyMaster):
         epochs: int,
         report_train_metrics_iteration: int,
         report_test_metrics_iteration: int,
-        target: DataTensor,
-        test_target: DataTensor,
+        # target: DataTensor,
+        # test_target: DataTensor,
         target_uids: List[str],
         batch_size: int,
         model_update_dim_size: int,
+        processor=None,  # todo: add type
         run_mlflow: bool = False,
     ):
         self.id = uid
         self.epochs = epochs
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
-        self.target = target
-        self.test_target = test_target
+        # self.target = target
+        # self.test_target = test_target
         self.target_uids = target_uids
         self.is_initialized = False
         self.is_finalized = False
         self._batch_size = batch_size
         self._weights_dim = model_update_dim_size
         self.run_mlflow = run_mlflow
-
+        self.processor = processor
         self.iteration_counter = 0
         self.party_predictions = dict()
         self.updates = dict()
 
     def initialize(self):
         logger.info("Master %s: initializing" % self.id)
+        ds = self.processor.fit_transform()
+        self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_name]
+        self.test_target = ds[self.processor.data_params.train_split][self.processor.data_params.label_name]
         self.is_initialized = True
 
     def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:

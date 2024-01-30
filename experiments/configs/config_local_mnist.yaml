@@ -3,7 +3,7 @@ common:
   parties_num: 2
 
 data:
-  data_dir: /Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl
+  data_dir: /home/dmitriy/data #/Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split

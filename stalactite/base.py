@@ -179,6 +179,8 @@ class PartyMaster(ABC):
 
         collected_uids_results = [task.result for task in records_uids_results]
 
+        self.initialize()
+
         uids = self.synchronize_uids(collected_uids_results, world_size=communicator.world_size)
         communicator.broadcast(
             Method.register_records_uids,
@@ -190,7 +192,6 @@ class PartyMaster(ABC):
             Method.initialize,
             participating_members=communicator.members,
         )
-        self.initialize()
 
         self.loop(batcher=self.make_batcher(uids=uids, party_members=communicator.members), communicator=communicator)
 
