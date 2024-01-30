@@ -29,7 +29,7 @@ class PartyMasterImpl(PartyMaster):
         target_uids: List[str],
         batch_size: int,
         model_update_dim_size: int,
-        processor=None,  # todo: add type
+        processor=None,
         run_mlflow: bool = False,
     ):
         self.id = uid
