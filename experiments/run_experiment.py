@@ -396,7 +396,7 @@ def main():
     # models input dims for 1, 2, 3 and 5 members
     if ds_name.lower() == "mnist":
         input_dims_list = [[619], [304, 315], [204, 250, 165], [], [108, 146, 150, 147, 68]]
-        params = init(config_path="../experiments/configs/config_local_mnist.yaml")
+        params = init(config_path="../examples/configs/linreg-mnist-local.yml")
     elif ds_name.lower() == "sbol":
         smm = "smm_" if use_smm else ""
         dim = 1356 if smm == "smm_" else 1345

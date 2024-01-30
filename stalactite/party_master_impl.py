@@ -53,7 +53,7 @@ class PartyMasterImpl(PartyMaster):
         logger.info("Master %s: initializing" % self.id)
         ds = self.processor.fit_transform()
         self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
-        self.test_target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
+        self.test_target = ds[self.processor.data_params.test_split][self.processor.data_params.label_key]
         self.is_initialized = True
 
     def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:

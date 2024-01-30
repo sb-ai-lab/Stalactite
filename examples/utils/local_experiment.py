@@ -54,14 +54,17 @@ def compute_class_distribution(classes_idx: list, y: torch.Tensor, name: str) ->
             raise ValueError(f"class {c_idx} has no label 1")
 
 
-def load_parameters(config: VFLConfig):
-    BASE_PATH = Path(__file__).parent.parent.parent
+def load_parameters(config_path: str):
+    # BASE_PATH = Path(__file__).parent.parent.parent
+
+    config = VFLConfig.load_and_validate(config_path)
     sample_size = int(os.environ.get("SAMPLE_SIZE", 10000))
 
     # models input dims for 1, 2, 3 and 5 members
     if config.data.dataset.lower() == "mnist":
-        input_dims_list = [[619], [304, 315], [204, 250, 165], [], [108, 146, 150, 147, 68]]
-        params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_mnist.yaml"))
+        input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
+        # params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_mnist.yaml"))
+        params = init(config_path=os.path.abspath(config_path))
     # elif config.data.dataset.lower() == "sbol":
     #     smm = "smm_" if config.data.use_smm else ""
     #     dim = 1356 if smm == "smm_" else 1345
@@ -176,7 +179,7 @@ def run(config_path: Optional[str] = None):
     if config.master.run_mlflow:
         mlflow.log_params(log_params)
 
-    input_dims_list, params, processors = load_parameters(config)
+    input_dims_list, params, processors = load_parameters(config_path)
 
     # TODO DATAPREPROCESSING
     num_dataset_records = [200 + random.randint(100, 1000) for _ in range(config.common.world_size)]

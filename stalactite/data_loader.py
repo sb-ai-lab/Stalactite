@@ -61,11 +61,11 @@ def load_yaml_config(yaml_path):
             raise ValueError("Yaml error - check yaml file")
 
 
-def init(config_path="../experiments/configs/config_local_mnist.yaml"):
+def init(config_path="../examples/configs/linreg-mnist-local.yaml"):
 
     config = AttrDict(load_yaml_config(config_path))
 
-    seed = config.common.random_seed
+    seed = config.data.random_seed
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -74,14 +74,14 @@ def init(config_path="../experiments/configs/config_local_mnist.yaml"):
 
     tmp_args = init_simulation_sp(attr())
     joint_config = AttrDict({})
-    for ii in range(config.common.parties_num):
+    for ii in range(config.common.world_size):
         joint_config[ii] = AttrDict(load_yaml_config(config_path))
 
         joint_config[ii].common.update(vars(tmp_args))
         joint_config[ii].data.features_key = joint_config[ii].data.features_key + str(ii)
 
     joint_config["joint_config"] = True
-    joint_config["parties"] = list(range(config.common.parties_num))
+    joint_config["parties"] = list(range(config.common.world_size))
     config = joint_config
 
     return config
@@ -92,7 +92,7 @@ def load(args):
     data_params_update = {}
     for ii in args["parties"]:
         params = args[ii].data
-        part_path = os.path.join(str(Path(params.data_dir)), params.dataset, f"{params.dataset_part_prefix}{ii}")
+        part_path = os.path.join(str(Path(params.host_path_data_dir)), params.dataset, f"{params.dataset_part_prefix}{ii}")
         ds = load_splitted_part(part_path, split_feature_prefix="image", new_name_split_feature=None)
         data[ii] = ds
         stat_dict_update = compute_dataset_info_params(ds, params.features_prefix, params.label_prefix)

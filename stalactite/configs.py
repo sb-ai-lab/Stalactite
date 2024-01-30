@@ -2,7 +2,7 @@ import logging
 import os
 import warnings
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Union, List
 
 import tenseal as ts
 import yaml
@@ -111,6 +111,13 @@ class DataConfig(BaseModel):
         description='Dataset type. One of `mnist`, `sbol`, `smm`'
     ) # TODO
     use_smm: bool = Field(default=False) # TODO
+    dataset_part_prefix: str = Field(default='part_')
+    train_split: str = Field(default='train_train')
+    test_split: str = Field(default='train_val')
+    features_data_preprocessors: List[str] = Field(default_factory=list)
+    label_data_preprocessors: List[str] = Field(default_factory=list)
+    features_key: str = Field(default="image_part_")
+    label_key: str = Field(default="label")
 
 
 class PrerequisitesConfig(BaseModel):
