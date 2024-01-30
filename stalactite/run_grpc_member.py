@@ -16,7 +16,7 @@ def main(config_path):
     grpc_host = os.environ.get("GRPC_SERVER_HOST", config.master.container_host)
 
     comm = GRpcMemberPartyCommunicator(
-        participant=get_party_member(config, member_rank),
+        participant=get_party_member(config_path, config, member_rank),
         master_host=grpc_host,
         master_port=config.grpc_server.port,
         max_message_size=config.grpc_server.max_message_size,

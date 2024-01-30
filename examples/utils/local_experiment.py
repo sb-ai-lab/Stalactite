@@ -13,7 +13,7 @@ import mlflow
 import numpy as np
 import datasets
 import scipy as sp
-from sklearn.metrics import mean_absolute_error,  roc_auc_score, precision_recall_curve, auc
+from sklearn.metrics import mean_absolute_error, roc_auc_score, precision_recall_curve, auc
 from datasets import DatasetDict
 from sklearn.linear_model import LogisticRegression as LogRegSklearn
 
@@ -92,7 +92,8 @@ def load_parameters(config_path: str):
         #     tmp_dataset, _ = dp.preprocess()
         #     datasets_list.append(tmp_dataset)
         # todo: add processor here
-        processors = [ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()]
+        processors = [ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in
+                      dataset.items()]
 
     # elif config.data.dataset.lower() == "multilabel":
     #     dataset = {}
@@ -125,15 +126,9 @@ def load_parameters(config_path: str):
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return input_dims_list, params, processors #datasets_list
+    return input_dims_list, params, processors  # datasets_list
 
-# parametrized file __main__ run() с хардкод
 
-# TODO
-# запушить ветку заребейзив ветку Димы на себя -> pr в мейн
-# loop (dima)
-# local distributed
-# distributed
 def run(config_path: Optional[str] = None):
     if config_path is None:
         config_path = os.environ.get(
@@ -149,7 +144,6 @@ def run(config_path: Optional[str] = None):
 
     model_name = config.common.vfl_model_name
 
-
     if 'logreg' in model_name:
         classes_idx = [x for x in range(19)]
         # remove classes with low positive targets rate
@@ -157,7 +151,6 @@ def run(config_path: Optional[str] = None):
     else:
         classes_idx = list()
     n_labels = len(classes_idx)
-
 
     log_params = {
         "ds_size": config.data.dataset_size,

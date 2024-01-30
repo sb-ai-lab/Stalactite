@@ -16,7 +16,7 @@ def main(config_path):
         mlflow.start_run()
 
     comm = GRpcMasterPartyCommunicator(
-        participant=get_party_master(config),
+        participant=get_party_master(config_path, config),
         world_size=config.common.world_size,
         port=config.grpc_server.port,
         host=config.grpc_server.host,

@@ -1,0 +1,94 @@
+#common:
+#  epochs: 5
+#  report_train_metrics_iteration: 1
+#  report_test_metrics_iteration: 1
+#  world_size: 2
+#  batch_size: 1000
+#  experiment_label: experiment-mnist
+#  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports"
+#  vfl_model_name: linreg
+#  is_consequently: False
+#  learning_rate: 0.01
+#  use_class_weights: False
+##  random_seed: 0 # TODO
+
+
+data:
+  random_seed: 0
+  dataset_size: 1000
+  dataset: 'mnist'
+  use_smm: False
+  host_path_data_dir: /mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data/sber_ds_vfl # /home/dmitriy/data #
+  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
+  train_split: "train_train" # name of the train split
+  test_split: "train_val" # name of the test split
+  features_data_preprocessors: [ PILImageToTensor(features_key), FullDataTensor(features_key), RemoveZeroStdColumns, SkLearnStandardScaler ]
+  label_data_preprocessors: [ FullDataTensor(label_key), ]
+  features_key: "image_part_"
+  label_key: "label"
+
+common:
+  epochs: 5
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  batch_size: 1000
+  experiment_label: experiment-multiproc
+  reports_export_folder: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/reports"
+  vfl_model_name: linreg
+  is_consequently: False
+  learning_rate: 0.01
+  use_class_weights: False
+
+prerequisites:
+  mlflow_host: 'node3.bdcl'
+  mlflow_port: '5555'
+  prometheus_host: 'node3.bdcl'
+  prometheus_port: '9090'
+  grafana_port: '3001'
+
+#data:
+#  random_seed: 0
+#  dataset_size: 1000
+#  host_path_data_dir: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data"
+
+grpc_server:
+  host: '0.0.0.0'
+  port: '50051'
+  max_message_size: -1
+
+master:
+  container_host: 'node3.bdcl'
+  run_mlflow: True
+  run_prometheus: True
+  logging_level: 'debug'
+  disconnect_idle_client_time: 120.
+
+member:
+  logging_level: 'debug'
+  heartbeat_interval: 2.
+
+grpc_arbiter:
+  use_arbiter: False
+#  container_host: 'node3.bdcl'
+#  host: '0.0.0.0'
+#  port: '50052'
+#  max_message_size: -1
+#  server_threadpool_max_workers: 10
+#  use_arbiter: True
+#  ts_algorithm: CKKS
+#  ts_poly_modulus_degree: 8192
+#  ts_coeff_mod_bit_sizes:
+#    - 60
+#    - 40
+#    - 40
+#    - 60
+#  ts_global_scale_pow: 20
+#  ts_generate_relin_keys: True
+#  ts_generate_galois_keys: True
+##  ts_plain_modulus:
+##  ts_context_path: /Users/anastasiazaharova/Desktop/vfl-benchmark/ts_context_test.txt
+
+docker:
+  docker_compose_command: "docker compose"
+  docker_compose_path: '/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/prerequisites'
