@@ -21,7 +21,7 @@ from stalactite.models.linreg_batch import LinearRegressionBatch
 from stalactite.models.logreg_batch import LogisticRegressionBatch
 from stalactite.party_member_impl import PartyMemberImpl
 from stalactite.data_loader import load, init, DataPreprocessor
-from stalactite.data_preprocessors import ImagePreprocessor
+from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
 from stalactite.batching import ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
@@ -65,25 +65,42 @@ def load_parameters(config_path: str):
         input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
         # params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_mnist.yaml"))
         params = init(config_path=os.path.abspath(config_path))
-    # elif config.data.dataset.lower() == "sbol":
-    #     smm = "smm_" if config.data.use_smm else ""
-    #     dim = 1356 if smm == "smm_" else 1345
-    #     input_dims_list = [[0], [1345, 11]]
-    #     params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_multilabel.yaml"))
+    elif config.data.dataset.lower() == "sbol":
+        smm = "smm_" if config.data.use_smm else ""
+        dim = 1356 if smm == "smm_" else 1345
+        input_dims_list = [[0], [1345, 11]]
+        # params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_multilabel.yaml"))
+        params = init(config_path=os.path.abspath(config_path))
     # else:
     #     input_dims_list = [[100], [40, 60], [20, 50, 30], [], [10, 5, 45, 15, 25]]
     #     params = init(config_path=os.path.join(BASE_PATH, "experiments/configs/config_local_multilabel.yaml"))
 
-    for m in range(config.common.world_size):
-        if config.common.vfl_model_name == "linreg":
-            params[m].data.dataset = f"mnist_binary38_parts{config.common.world_size}"
-        elif config.common.vfl_model_name == "logreg" or "catboost":
-            params[m].data.dataset = f"mnist_binary01_38_parts{config.common.world_size}"
-        else:
-            raise ValueError("Unknown model name {}".format(config.common.vfl_model_name))
+    # for m in range(config.common.world_size):
+    #     if config.common.vfl_model_name == "linreg":
+    #         params[m].data.dataset = f"mnist_binary38_parts{config.common.world_size}"
+    #     elif config.common.vfl_model_name == "logreg" or "catboost":
+    #         params[m].data.dataset = f"mnist_binary01_38_parts{config.common.world_size}"
+    #     else:
+    #         raise ValueError("Unknown model name {}".format(config.common.vfl_model_name))
 
     if config.data.dataset.lower() == "mnist":
         dataset, _ = load(params)
+        processors = [ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()]
+
+    elif config.data.dataset.lower() == "sbol":
+
+        dataset = {}
+
+        for m in range(config.common.world_size):
+            dataset[m] = datasets.load_from_disk(
+                os.path.join(f"{params.host_path_data_dir}/part_{m}")
+            )
+        processors = [TabularPreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in
+                      dataset.items()]
+        input_dims_list = [[0], [1345, 11]]
+
+        # if smm != "":
+        #     ds_name = "sbol_smm"
 
         # datasets_list = []
         # for m in range(config.common.world_size):
@@ -91,37 +108,6 @@ def load_parameters(config_path: str):
         #     dp = DataPreprocessor(dataset, params[m].data, member_id=m)
         #     tmp_dataset, _ = dp.preprocess()
         #     datasets_list.append(tmp_dataset)
-        # todo: add processor here
-        processors = [ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()]
-
-    # elif config.data.dataset.lower() == "multilabel":
-    #     dataset = {}
-    #     for m in range(config.common.world_size):
-    #         dataset[m] = datasets.load_from_disk(os.path.join(BASE_PATH, f"data/sber_ds_vfl/multilabel_ds_parts{config.common.world_size}/part_{m}"))
-    #
-    #     datasets_list = []
-    #     for m in range(config.common.world_size):
-    #         logger.info(f"preparing dataset for member: {m}")
-    #         dp = DataPreprocessor(dataset, params[m].data, member_id=m)
-    #         tmp_dataset, _ = dp.preprocess()
-    #         datasets_list.append(tmp_dataset)
-
-    # elif config.data.dataset.lower() == "sbol":
-    #     if smm != "":
-    #         ds_name = "sbol_smm"
-    #     dataset = {}
-    #     ds_path = f"vfl_multilabel_sber_sample{sample_size}_parts{config.common.world_size}"
-    #
-    #     for m in range(config.common.world_size):
-    #         dataset[m] = datasets.load_from_disk(
-    #             os.path.join(BASE_PATH, f"data/sber_ds_vfl/{ds_path}/part_{m}")
-    #         )
-    #     datasets_list = []
-    #     for m in range(config.common.world_size):
-    #         logger.info(f"preparing dataset for member: {m}")
-    #         dp = DataPreprocessor(dataset, params[m].data, member_id=m)
-    #         tmp_dataset, _ = dp.preprocess()
-    #         datasets_list.append(tmp_dataset)
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
@@ -157,7 +143,6 @@ def run(config_path: Optional[str] = None):
     else:
         classes_idx = list()
     n_labels = len(classes_idx)
-
 
     log_params = {
         "ds_size": config.data.dataset_size,

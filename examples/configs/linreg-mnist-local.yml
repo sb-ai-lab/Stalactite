@@ -5,7 +5,7 @@ common:
   world_size: 2
   batch_size: 1000
   experiment_label: experiment-mnist
-  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports"
+  reports_export_folder: "/home/dmitriy/data/reports" #/Users/anastasiazaharova/Desktop/vfl-benchmark/reports"
   vfl_model_name: linreg
   is_consequently: False
   learning_rate: 0.01
@@ -18,7 +18,7 @@ data:
   dataset_size: 1000
   dataset: 'mnist'
   use_smm: False
-  host_path_data_dir: /Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl # /home/dmitriy/data #
+  host_path_data_dir: "/home/dmitriy/data"  #/Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl #  #
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
