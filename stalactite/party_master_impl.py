@@ -52,8 +52,8 @@ class PartyMasterImpl(PartyMaster):
     def initialize(self):
         logger.info("Master %s: initializing" % self.id)
         ds = self.processor.fit_transform()
-        self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_name]
-        self.test_target = ds[self.processor.data_params.train_split][self.processor.data_params.label_name]
+        self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
+        self.test_target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
         self.is_initialized = True
 
     def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
@@ -105,7 +105,7 @@ class PartyMasterImpl(PartyMaster):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        y = self.target[self._batch_size * subiter_seq_num : self._batch_size * (subiter_seq_num + 1)]
+        y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
 
         for member_id in participating_members:
             party_predictions_for_upd = [v for k, v in self.party_predictions.items() if k != member_id]

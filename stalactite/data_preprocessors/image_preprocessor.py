@@ -31,10 +31,9 @@ class ImagePreprocessor:
         for split_dict, split_data in zip([train_split_data, test_split_data], [data_train, data_test]):
             split_dict[feature_name] = image2tensor.fit_transform(split_data)
             for preprocessors in [full_data_tensor, remove_zero_std, standard_scaler]:
-                a = split_dict[feature_name]
                 split_dict[feature_name] = preprocessors.fit_transform(split_dict[feature_name])
 
-            split_dict[label_name] = full_data_tensor.fit_transform(torch.tensor(split_data[label_name]))
+            split_dict[label_name] = split_data[label_name] #todo: revise#full_data_tensor.fit_transform(torch.tensor(split_data[label_name]))
 
         ds_train = datasets.Dataset.from_dict(train_split_data, split=train_split_key)
         ds_test = datasets.Dataset.from_dict(test_split_data, split=test_split_key)

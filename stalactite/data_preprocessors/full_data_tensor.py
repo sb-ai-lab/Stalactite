@@ -16,7 +16,8 @@ class FullDataTensor(DataPreprocessor):
         return self._transform(inp_data)
 
     def _transform(self, inp_data):
-        num_rows = inp_data.num_rows
+
+        num_rows = inp_data.num_rows #todo: refactor
 
         tnsr = torch.as_tensor(inp_data[self.input_feature_name][0:num_rows])
 
