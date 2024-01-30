@@ -1,14 +1,13 @@
 import logging
 from typing import List, Optional
 
-import torch
 import scipy as sp
+import torch
 from datasets.dataset_dict import DatasetDict
 
-from stalactite.base import DataTensor, PartyMember, RecordsBatch, Batcher
-from stalactite.data_loader import AttrDict
+from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
 from stalactite.batching import ListBatcher
-
+from stalactite.data_loader import AttrDict
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ class PartyMemberImpl(PartyMember):
     def batcher(self) -> Batcher:
         if self._batcher is None:
             if self._uids_to_use is None:
-                raise RuntimeError('Cannot create batcher, you must `register_records_uids` first.')
+                raise RuntimeError("Cannot create batcher, you must `register_records_uids` first.")
             self._create_batcher(epochs=self.epochs, uids=self._uids_to_use, batch_size=self._batch_size)
         else:
             logger.info("Member %s: using created batcher" % (self.id))
@@ -66,7 +65,7 @@ class PartyMemberImpl(PartyMember):
         return self._uids
 
     def register_records_uids(self, uids: List[str]):
-        logger.info("Member %s: registering uids to be used: %s" % (self.id, uids))
+        logger.info("Member %s: registering %s uids to be used." % (self.id, len(uids)))
         self._uids_to_use = uids
 
     def initialize(self):
@@ -96,7 +95,7 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: successfully updated weights" % self.id)
 
     def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
-        logger.info("Member %s: predicting. Batch: %s" % (self.id, uids))
+        logger.info("Member %s: predicting. Batch size: %s" % (self.id, len(uids)))
         self._check_if_ready()
         if use_test:
             logger.info("Member %s: using test data" % self.id)

@@ -1,7 +1,7 @@
 import logging
 
-import torch
 import scipy as sp
+import torch
 
 from .elm import solve_ols_svd
 

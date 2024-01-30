@@ -45,3 +45,6 @@ stalactite --help
 3. You can run tests or check out the examples to see whether everything is working (`experiments/README.md`)
 
 [//]: # (TODO add examples)
+# local examples
+# stalactite CLI
+# distributed launch

@@ -1,14 +1,14 @@
 import logging
 from typing import List
 
-import torch
 import mlflow
+import torch
 from sklearn import metrics
 from sklearn.metrics import roc_auc_score
 
 from stalactite.base import Batcher, DataTensor, PartyDataTensor, PartyMaster
+from stalactite.batching import ConsecutiveListBatcher, ListBatcher
 from stalactite.metrics import ComputeAccuracy, ComputeAccuracy_numpy
-from stalactite.batching import ListBatcher, ConsecutiveListBatcher
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -19,17 +19,17 @@ logger.addHandler(sh)
 
 class PartyMasterImpl(PartyMaster):
     def __init__(
-            self,
-            uid: str,
-            epochs: int,
-            report_train_metrics_iteration: int,
-            report_test_metrics_iteration: int,
-            target: DataTensor,
-            test_target: DataTensor,
-            target_uids: List[str],
-            batch_size: int,
-            model_update_dim_size: int,
-            run_mlflow: bool = False,
+        self,
+        uid: str,
+        epochs: int,
+        report_train_metrics_iteration: int,
+        report_test_metrics_iteration: int,
+        target: DataTensor,
+        test_target: DataTensor,
+        target_uids: List[str],
+        batch_size: int,
+        model_update_dim_size: int,
+        run_mlflow: bool = False,
     ):
         self.id = uid
         self.epochs = epochs
@@ -55,7 +55,7 @@ class PartyMasterImpl(PartyMaster):
     def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
         logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
-        assert party_members is not None, 'Master is trying to initialize batcher without members list'
+        assert party_members is not None, "Master is trying to initialize batcher without members list"
         return ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
 
     def make_init_updates(self, world_size: int) -> PartyDataTensor:
@@ -78,7 +78,7 @@ class PartyMasterImpl(PartyMaster):
             mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
 
     def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+        self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
     ) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
@@ -90,18 +90,18 @@ class PartyMasterImpl(PartyMaster):
         return torch.sum(torch.stack(party_predictions, dim=1), dim=1)
 
     def compute_updates(
-            self,
-            participating_members: List[str],
-            predictions: DataTensor,
-            party_predictions: PartyDataTensor,
-            world_size: int,
-            subiter_seq_num: int,
+        self,
+        participating_members: List[str],
+        predictions: DataTensor,
+        party_predictions: PartyDataTensor,
+        world_size: int,
+        subiter_seq_num: int,
     ) -> List[DataTensor]:
 
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
+        y = self.target[self._batch_size * subiter_seq_num : self._batch_size * (subiter_seq_num + 1)]
 
         for member_id in participating_members:
             party_predictions_for_upd = [v for k, v in self.party_predictions.items() if k != member_id]
@@ -136,8 +136,9 @@ class PartyMasterImplLogreg(PartyMasterImpl):
         self._check_if_ready()
         return [torch.zeros(self._batch_size, self.target.shape[1]) for _ in range(world_size)]
 
-    def aggregate(self, participating_members: List[str], party_predictions: PartyDataTensor,
-                  infer=False) -> DataTensor:
+    def aggregate(
+        self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+    ) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
         if not infer:
@@ -149,17 +150,19 @@ class PartyMasterImplLogreg(PartyMasterImpl):
             predictions = torch.sigmoid(torch.sum(torch.stack(party_predictions, dim=1), dim=1))
         return predictions
 
-    def compute_updates(self,
-                        participating_members: List[str],
-                        predictions: DataTensor,
-                        party_predictions: PartyDataTensor,
-                        world_size: int,
-                        subiter_seq_num: int) -> List[DataTensor]:
+    def compute_updates(
+        self,
+        participating_members: List[str],
+        predictions: DataTensor,
+        party_predictions: PartyDataTensor,
+        world_size: int,
+        subiter_seq_num: int,
+    ) -> List[DataTensor]:
 
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        y = self.target[self._batch_size*subiter_seq_num:self._batch_size*(subiter_seq_num+1)]
+        y = self.target[self._batch_size * subiter_seq_num : self._batch_size * (subiter_seq_num + 1)]
 
         criterion = torch.nn.BCEWithLogitsLoss()
         loss = criterion(torch.squeeze(predictions), y.float())
@@ -171,8 +174,9 @@ class PartyMasterImplLogreg(PartyMasterImpl):
         return [self.updates[member_id] for member_id in participating_members]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
-        logger.info(f"Master %s: reporting metrics. Y dim: {y.size()}. "
-                    f"Predictions size: {predictions.size()}" % self.id)
+        logger.info(
+            f"Master %s: reporting metrics. Y dim: {y.size()}. " f"Predictions size: {predictions.size()}" % self.id
+        )
 
         y = y.numpy()
         predictions = predictions.detach().numpy()
@@ -188,6 +192,8 @@ class PartyMasterImplLogreg(PartyMasterImpl):
             mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
 
             for avg in ["macro", "micro"]:
-                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}",
-                                  roc_auc_score(y, predictions, average=avg), step=step,
-                                  )
+                mlflow.log_metric(
+                    f"{name.lower()}_roc_auc_{avg}",
+                    roc_auc_score(y, predictions, average=avg),
+                    step=step,
+                )

@@ -1,16 +1,13 @@
-import os
 import copy
-import yaml
+import os
 import random
 from pathlib import Path
 from typing import Dict, List
 
-import torch
 import datasets
 import numpy as np
-
-from typing import Dict, List
-from pathlib import Path
+import torch
+import yaml
 
 from stalactite import data_preprocessors
 
@@ -95,12 +92,10 @@ def load(args):
     data_params_update = {}
     for ii in args["parties"]:
         params = args[ii].data
-        part_path = Path(params.data_dir) / params.dataset / f"{params.dataset_part_prefix}{ii}"
+        part_path = os.path.join(str(Path(params.data_dir)), params.dataset, f"{params.dataset_part_prefix}{ii}")
         ds = load_splitted_part(part_path, split_feature_prefix="image", new_name_split_feature=None)
         data[ii] = ds
-        stat_dict_update = compute_dataset_info_params(
-            ds, params.features_prefix, params.label_prefix
-        )
+        stat_dict_update = compute_dataset_info_params(ds, params.features_prefix, params.label_prefix)
         data_params_update[ii] = stat_dict_update
     return data, data_params_update
 

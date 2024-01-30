@@ -25,7 +25,7 @@ def main(config_path):
         task_requesting_pings_interval=config.member.task_requesting_pings_interval,
         sent_task_timout=config.member.sent_task_timout,
         rendezvous_timeout=config.common.rendezvous_timeout,
-        recv_timeout=20.
+        recv_timeout=20.0,
     )
     comm.run()
 

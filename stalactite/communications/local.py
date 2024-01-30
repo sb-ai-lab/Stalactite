@@ -14,14 +14,14 @@ from threading import Thread
 from typing import Any, Dict, List, Optional, Set, Union, cast
 
 from stalactite.base import (
+    Method,
+    MethodKwargs,
     ParticipantFuture,
     PartyCommunicator,
     PartyDataTensor,
     PartyMaster,
     PartyMember,
     RecordsBatch,
-    Method,
-    MethodKwargs,
     Task,
 )
 from stalactite.communications.helpers import ParticipantType, _Method
@@ -71,12 +71,12 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         logger.info("Party communicator %s: rendezvous has been successfully performed" % self.participant.id)
 
     def send(
-            self,
-            send_to_id: str,
-            method_name: Method,
-            method_kwargs: Optional[MethodKwargs] = None,
-            result: Optional[Any] = None,
-            **kwargs
+        self,
+        send_to_id: str,
+        method_name: Method,
+        method_kwargs: Optional[MethodKwargs] = None,
+        result: Optional[Any] = None,
+        **kwargs,
     ) -> Task:
         self._check_if_ready()
         if send_to_id not in self._party_info:
@@ -101,7 +101,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             with self._lock:
                 task = self._party_info[part_id].received_tasks.get(method_name, dict()).pop(receive_from_id, None)
             if time.time() - timer_start > self.recv_timeout:
-                raise TimeoutError(f'Could not receive task: {method_name} from {receive_from_id}.')
+                raise TimeoutError(f"Could not receive task: {method_name} from {receive_from_id}.")
         return task
 
     def recv(self, task: Task, recv_results: bool = False) -> Task:
@@ -113,24 +113,26 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         # TODO move to ParentClass
 
     def scatter(
-            self,
-            method_name: Method,
-            method_kwargs: Optional[List[MethodKwargs]] = None,
-            result: Optional[Any] = None,
-            participating_members: Optional[List[str]] = None,
-            **kwargs,
+        self,
+        method_name: Method,
+        method_kwargs: Optional[List[MethodKwargs]] = None,
+        result: Optional[Any] = None,
+        participating_members: Optional[List[str]] = None,
+        **kwargs,
     ) -> List[Task]:
 
         if participating_members is None:
             participating_members = self.members
 
-        assert len(set(participating_members).difference(set(self.members))) == 0, \
-            'Some of the members are disconnected, cannot perform collective operation'
+        assert (
+            len(set(participating_members).difference(set(self.members))) == 0
+        ), "Some of the members are disconnected, cannot perform collective operation"
 
         if method_kwargs is not None:
-            assert len(method_kwargs) == len(participating_members), \
-                f'Number of tasks in scatter operation ({len(method_kwargs)}) is not equal to the ' \
-                f'`participating_members` number ({len(participating_members)})'
+            assert len(method_kwargs) == len(participating_members), (
+                f"Number of tasks in scatter operation ({len(method_kwargs)}) is not equal to the "
+                f"`participating_members` number ({len(participating_members)})"
+            )
         else:
             method_kwargs = [None for _ in range(len(participating_members))]
 
@@ -148,21 +150,21 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return tasks
 
     def broadcast(
-            self,
-            method_name: Method,
-            method_kwargs: Optional[MethodKwargs] = None,
-            result: Optional[Any] = None,
-            participating_members: Optional[List[str]] = None,
-            include_current_participant: bool = False,
-            **kwargs,
+        self,
+        method_name: Method,
+        method_kwargs: Optional[MethodKwargs] = None,
+        result: Optional[Any] = None,
+        participating_members: Optional[List[str]] = None,
+        include_current_participant: bool = False,
+        **kwargs,
     ) -> List[Task]:
         if self.participant.id not in participating_members and include_current_participant:
             participating_members.append(self.participant.id)
 
         if method_kwargs is not None and not isinstance(method_kwargs, MethodKwargs):
             raise TypeError(
-                'communicator.broadcast `method_kwargs` must be either None or MethodKwargs. '
-                f'Got {type(method_kwargs)}'
+                "communicator.broadcast `method_kwargs` must be either None or MethodKwargs. "
+                f"Got {type(method_kwargs)}"
             )
 
         tasks = []
@@ -186,19 +188,20 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         if not self.is_ready:
             raise RuntimeError(
                 "Cannot proceed because communicator is not ready. "
-                "Perhaps, rendezvous has not been called or was unsuccessful")
+                "Perhaps, rendezvous has not been called or was unsuccessful"
+            )
 
 
 class LocalMasterPartyCommunicator(LocalPartyCommunicator):
     """Local Master communicator class.
-    This class is used as the communicator for master in local (single-process) VFL setup.    """
+    This class is used as the communicator for master in local (single-process) VFL setup."""
 
     def __init__(
-            self,
-            participant: PartyMaster,
-            world_size: int,
-            shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-            recv_timeout: float = 20.
+        self,
+        participant: PartyMaster,
+        world_size: int,
+        shared_party_info: Optional[Dict[str, _ParticipantInfo]],
+        recv_timeout: float = 120.0,
     ):
         """
         Initialize master communicator with parameters.
@@ -233,15 +236,15 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
 
 class LocalMemberPartyCommunicator(LocalPartyCommunicator):
     """gRPC Member communicator class.
-    This class is used as the communicator for member in local (single-process) VFL setup.    """
+    This class is used as the communicator for member in local (single-process) VFL setup."""
 
     def __init__(
-            self,
-            participant: PartyMember,
-            master_id: str,
-            world_size: int,
-            shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-            recv_timeout: float = 20.,
+        self,
+        participant: PartyMember,
+        master_id: str,
+        world_size: int,
+        shared_party_info: Optional[Dict[str, _ParticipantInfo]],
+        recv_timeout: float = 120.0,
     ):
         """
         Initialize member communicator with parameters.

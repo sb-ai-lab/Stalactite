@@ -10,7 +10,7 @@ import safetensors.torch
 import torch
 from prometheus_client import Gauge, Summary
 
-from stalactite.base import ParticipantFuture, MethodKwargs
+from stalactite.base import MethodKwargs, ParticipantFuture
 from stalactite.communications.grpc_utils.generated_code import communicator_pb2
 
 logger = logging.getLogger(__name__)
@@ -125,8 +125,9 @@ def save_data(tensor: torch.Tensor):
     return safetensors.torch.save(tensors={"tensor": tensor})
 
 
-def prepare_kwargs(kwargs: Optional[MethodKwargs],
-                   prometheus_metrics: Optional[dict] = None) -> SerializedMethodMessage:
+def prepare_kwargs(
+    kwargs: Optional[MethodKwargs], prometheus_metrics: Optional[dict] = None
+) -> SerializedMethodMessage:
     """
     Serialize data fields for protobuf message.
 
@@ -138,8 +139,9 @@ def prepare_kwargs(kwargs: Optional[MethodKwargs],
 
     if kwargs is not None:
         for key, value in kwargs.tensor_kwargs.items():
-            assert isinstance(value,
-                              torch.Tensor), "MethodMessage.tensor_kwargs can contain only torch.Tensor-s as values"
+            assert isinstance(
+                value, torch.Tensor
+            ), "MethodMessage.tensor_kwargs can contain only torch.Tensor-s as values"
             serialized_tensors[key] = save_data(value)
 
         for key, value in kwargs.other_kwargs.items():
@@ -161,7 +163,7 @@ def prepare_kwargs(kwargs: Optional[MethodKwargs],
 
 
 def collect_kwargs(
-        message_kwargs: SerializedMethodMessage, prometheus_metrics: Optional[dict[str, bytes]] = None
+    message_kwargs: SerializedMethodMessage, prometheus_metrics: Optional[dict[str, bytes]] = None
 ) -> Tuple[MethodKwargs, dict, Any]:
     """
     Collect and deserialize protobuf message data fields.
@@ -181,9 +183,9 @@ def collect_kwargs(
         for key, value in prometheus_metrics.items():
             prometheus_kwargs[key] = pickle.loads(value)
 
-    if 'result' in tensor_kwargs:
-        result = tensor_kwargs.pop('result')
-    elif 'result' in other_kwargs:
-        result = other_kwargs.pop('result')
+    if "result" in tensor_kwargs:
+        result = tensor_kwargs.pop("result")
+    elif "result" in other_kwargs:
+        result = other_kwargs.pop("result")
 
     return MethodKwargs(tensor_kwargs=tensor_kwargs, other_kwargs=other_kwargs), prometheus_kwargs, result

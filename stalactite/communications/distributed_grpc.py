@@ -6,19 +6,19 @@ import uuid
 from abc import ABC
 from collections import defaultdict
 from queue import Queue
-from typing import Any, Coroutine, Iterator, Optional, Union, List
+from typing import Any, Coroutine, Iterator, List, Optional, Union
 
 import grpc
 from prometheus_client import start_http_server
 
 from stalactite.base import (
+    Method,
+    MethodKwargs,
     ParticipantFuture,
     PartyCommunicator,
     PartyMaster,
     PartyMember,
-    MethodKwargs,
     Task,
-    Method,
 )
 from stalactite.communications.grpc_utils.generated_code import (
     communicator_pb2,
@@ -42,7 +42,7 @@ sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(sh)
 
-PROMETHEUS_METRICS_PREFIX = '__prometheus_'
+PROMETHEUS_METRICS_PREFIX = "__prometheus_"
 
 
 class GRpcPartyCommunicator(PartyCommunicator, ABC):
@@ -52,7 +52,11 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
     logging_level = logging.INFO
     is_ready: bool = False
 
-    def __init__(self, logging_level: Any = logging.INFO, recv_timeout: float = 120., ):
+    def __init__(
+        self,
+        logging_level: Any = logging.INFO,
+        recv_timeout: float = 120.0,
+    ):
         """Initialize base GRpcPartyCommunicator class. Set the module logging level."""
         self.logging_level = logging_level
         self.recv_timeout = recv_timeout
@@ -76,20 +80,20 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
     MEMBER_DATA_FIELDNAME = "__member_data__"
 
     def __init__(
-            self,
-            participant: PartyMaster,
-            world_size: int,
-            port: Union[int, str],
-            host: str,
-            server_thread_pool_size: int = 10,
-            max_message_size: int = -1,
-            rendezvous_timeout: float = 3600.0,
-            disconnect_idle_client_time: float = 120.0,
-            prometheus_server_port: int = 8080,
-            run_prometheus: bool = False,
-            experiment_label: Optional[str] = None,
-            time_between_idle_connections_checks: float = 3.0,
-            **kwargs,
+        self,
+        participant: PartyMaster,
+        world_size: int,
+        port: Union[int, str],
+        host: str,
+        server_thread_pool_size: int = 10,
+        max_message_size: int = -1,
+        rendezvous_timeout: float = 3600.0,
+        disconnect_idle_client_time: float = 120.0,
+        prometheus_server_port: int = 8080,
+        run_prometheus: bool = False,
+        experiment_label: Optional[str] = None,
+        time_between_idle_connections_checks: float = 3.0,
+        **kwargs,
     ):
         """
         Initialize master communicator with connection parameters.
@@ -172,12 +176,12 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.servicer._tasks_to_send_queues[send_to_id][message.method_name] = message
 
     def send(
-            self,
-            send_to_id: str,
-            method_name: Method,
-            method_kwargs: Optional[MethodKwargs] = None,
-            result: Optional[Any] = None,
-            **kwargs
+        self,
+        send_to_id: str,
+        method_name: Method,
+        method_kwargs: Optional[MethodKwargs] = None,
+        result: Optional[Any] = None,
+        **kwargs,
     ) -> Task:
         """
         Send task to VFL member via gRPC channel.
@@ -203,11 +207,11 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
 
         if result is not None:
-            attr = METHOD_VALUES.get(method_name, 'other_kwargs')
+            attr = METHOD_VALUES.get(method_name, "other_kwargs")
             if method_kwargs is None:
                 method_kwargs = MethodKwargs()
             kwargs = getattr(method_kwargs, attr)
-            kwargs['result'] = result
+            kwargs["result"] = result
             setattr(method_kwargs, attr, kwargs)
 
         message_kwargs = prepare_kwargs(method_kwargs, prometheus_metrics=prometheus_metrics)
@@ -231,24 +235,26 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         return Task(id=task_id, method_name=method_name, to_id=send_to_id, from_id=self.participant.id)
 
     def scatter(
-            self,
-            method_name: Method,
-            method_kwargs: Optional[List[MethodKwargs]] = None,
-            result: Optional[Any] = None,
-            participating_members: Optional[List[str]] = None,
-            **kwargs,
+        self,
+        method_name: Method,
+        method_kwargs: Optional[List[MethodKwargs]] = None,
+        result: Optional[Any] = None,
+        participating_members: Optional[List[str]] = None,
+        **kwargs,
     ) -> List[Task]:
 
         if participating_members is None:
             participating_members = self.members
 
-        assert len(set(participating_members).difference(set(self.members))) == 0, \
-            'Some of the members are disconnected, cannot perform collective operation'
+        assert (
+            len(set(participating_members).difference(set(self.members))) == 0
+        ), "Some of the members are disconnected, cannot perform collective operation"
 
         if method_kwargs is not None:
-            assert len(method_kwargs) == len(participating_members), \
-                f'Number of tasks in scatter operation ({len(method_kwargs)}) is not equal to the ' \
-                f'`participating_members` number ({len(participating_members)})'
+            assert len(method_kwargs) == len(participating_members), (
+                f"Number of tasks in scatter operation ({len(method_kwargs)}) is not equal to the "
+                f"`participating_members` number ({len(participating_members)})"
+            )
         else:
             method_kwargs = [None for _ in range(len(participating_members))]
 
@@ -266,13 +272,13 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         return tasks
 
     def broadcast(
-            self,
-            method_name: Method,
-            method_kwargs: Optional[MethodKwargs] = None,
-            result: Optional[Any] = None,
-            participating_members: Optional[List[str]] = None,
-            include_current_participant: bool = False,
-            **kwargs,
+        self,
+        method_name: Method,
+        method_kwargs: Optional[MethodKwargs] = None,
+        result: Optional[Any] = None,
+        participating_members: Optional[List[str]] = None,
+        include_current_participant: bool = False,
+        **kwargs,
     ) -> List[Task]:
 
         if self.participant.id not in participating_members and include_current_participant:
@@ -280,8 +286,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
 
         if method_kwargs is not None and not isinstance(method_kwargs, MethodKwargs):
             raise TypeError(
-                'communicator.broadcast `method_kwargs` must be either None or MethodKwargs. '
-                f'Got {type(method_kwargs)}'
+                "communicator.broadcast `method_kwargs` must be either None or MethodKwargs. "
+                f"Got {type(method_kwargs)}"
             )
 
         tasks = []
@@ -298,13 +304,16 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         return tasks
 
     def get_from_received_tasks(
-            self, method_name: str, receive_from_id: str, timeout: float = 30.,
+        self,
+        method_name: str,
+        receive_from_id: str,
+        timeout: float = 30.0,
     ) -> communicator_pb2.MainMessage:
         # TODO add logging of left in the queue tasks
         timer_start = time.time()
         while (message := self.servicer._received_tasks.get(method_name, dict()).pop(receive_from_id, None)) is None:
             if time.time() - timer_start > timeout:
-                raise TimeoutError(f'Could not receive task: {method_name} from {receive_from_id}.')
+                raise TimeoutError(f"Could not receive task: {method_name} from {receive_from_id}.")
             continue
         return message
 
@@ -317,13 +326,12 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
 
         if task.from_id != received_message.sender_id and not recv_results:
             raise RuntimeError(
-                f'Received task.from_id ({task.from_id}) differs from '
-                f'`sender_id` ({received_message.sender_id})'
+                f"Received task.from_id ({task.from_id}) differs from " f"`sender_id` ({received_message.sender_id})"
             )
         elif task.to_id != received_message.sender_id and recv_results:
             raise RuntimeError(
-                f'Received task.to_id ({task.to_id}) differs from `sender_id` ({received_message.sender_id}). '
-                'Check `recv_results` kwarg in recv / gather operation.'
+                f"Received task.to_id ({task.to_id}) differs from `sender_id` ({received_message.sender_id}). "
+                "Check `recv_results` kwarg in recv / gather operation."
             )
 
         received_kwargs, prometheus_metrics, result = collect_kwargs(
@@ -382,10 +390,10 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 time_between_idle_connections_checks=self.time_between_idle_connections_checks,
             )
             with start_thread(
-                    target=self._run_coroutine,
-                    args=(self.servicer.start_servicer_and_server(),),
-                    daemon=True,
-                    thread_timeout=2.0,
+                target=self._run_coroutine,
+                args=(self.servicer.start_servicer_and_server(),),
+                daemon=True,
+                thread_timeout=2.0,
             ) as self.server_thread:
                 self.rendezvous()
                 self.participant.run(self)
@@ -405,16 +413,16 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
     MEMBER_DATA_FIELDNAME = "__member_data__"
 
     def __init__(
-            self,
-            participant: PartyMember,
-            master_host: str,
-            master_port: str,
-            max_message_size: int = -1,
-            heartbeat_interval: float = 2.0,
-            task_requesting_pings_interval: float = 0.1,
-            sent_task_timout: float = 3600.0,
-            rendezvous_timeout: float = 3600.0,
-            **kwargs,
+        self,
+        participant: PartyMember,
+        master_host: str,
+        master_port: str,
+        max_message_size: int = -1,
+        heartbeat_interval: float = 2.0,
+        task_requesting_pings_interval: float = 0.1,
+        sent_task_timout: float = 3600.0,
+        rendezvous_timeout: float = 3600.0,
+        **kwargs,
     ):
         """
         Initialize member communicator with connection and task parameters.
@@ -499,7 +507,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                 self._master_id = response.agent_name
             else:
                 assert (
-                        self._master_id == response.agent_name
+                    self._master_id == response.agent_name
                 ), "Unexpected behaviour: Master id changed during the experiment"
 
     def rendezvous(self) -> None:
@@ -517,12 +525,12 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         return (self._master_id is not None) and (self._world_status == Status.all_ready)
 
     def send(
-            self,
-            send_to_id: str,
-            method_name: Method,
-            method_kwargs: Optional[MethodKwargs] = None,
-            result: Optional[Any] = None,
-            **kwargs
+        self,
+        send_to_id: str,
+        method_name: Method,
+        method_kwargs: Optional[MethodKwargs] = None,
+        result: Optional[Any] = None,
+        **kwargs,
     ) -> Task:
         """
         Send task to VFL master via gRPC channel.
@@ -552,11 +560,11 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
 
         if result is not None:
-            attr = METHOD_VALUES.get(method_name, 'other_kwargs')
+            attr = METHOD_VALUES.get(method_name, "other_kwargs")
             if method_kwargs is None:
                 method_kwargs = MethodKwargs()
             kwargs = getattr(method_kwargs, attr)
-            kwargs['result'] = result
+            kwargs["result"] = result
             setattr(method_kwargs, attr, kwargs)
 
         message_kwargs = prepare_kwargs(method_kwargs, prometheus_metrics=prometheus_metrics)
@@ -590,23 +598,23 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         return Task(id=task_id, method_name=method_name, to_id=send_to_id, from_id=self.participant.id)
 
     def scatter(
-            self,
-            method_name: Method,
-            method_kwargs: Optional[List[MethodKwargs]] = None,
-            result: Optional[Any] = None,
-            participating_members: Optional[List[str]] = None,
-            **kwargs,
+        self,
+        method_name: Method,
+        method_kwargs: Optional[List[MethodKwargs]] = None,
+        result: Optional[Any] = None,
+        participating_members: Optional[List[str]] = None,
+        **kwargs,
     ) -> List[Task]:
         raise UnsupportedError("GRpcMemberPartyCommunicator cannot scatter to other Members")
 
     def broadcast(
-            self,
-            method_name: Method,
-            method_kwargs: Optional[MethodKwargs] = None,
-            result: Optional[Any] = None,
-            participating_members: Optional[List[str]] = None,
-            include_current_participant: bool = False,
-            **kwargs,
+        self,
+        method_name: Method,
+        method_kwargs: Optional[MethodKwargs] = None,
+        result: Optional[Any] = None,
+        participating_members: Optional[List[str]] = None,
+        include_current_participant: bool = False,
+        **kwargs,
     ) -> List[Task]:
         """
         Broadcast task to VFL agents via gRPC channel.
@@ -621,12 +629,12 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         if task.from_id == self.participant.id:
             received_message = self._received_tasks.get(task.method_name, dict()).pop(self.participant.id, None)
             if received_message is None:
-                raise RuntimeError(f'Tried to receive task ({task.method_name}) from self before sending it to self.')
+                raise RuntimeError(f"Tried to receive task ({task.method_name}) from self before sending it to self.")
         else:
             if self.participant.id != task.to_id:
                 raise RuntimeError(
-                    f'Tried to receive task for another participant: self.id {self.participant.id}; '
-                    f'Task to_id: {task.to_id}'
+                    f"Tried to receive task for another participant: self.id {self.participant.id}; "
+                    f"Task to_id: {task.to_id}"
                 )
             request_message = communicator_pb2.MainMessage(
                 sender_id=self.participant.id,
@@ -638,8 +646,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
 
         if task.from_id != received_message.sender_id:
             raise RuntimeError(
-                f'Received task.from_id ({task.from_id}) differs from '
-                f'`sender_id` ({received_message.sender_id})'
+                f"Received task.from_id ({task.from_id}) differs from " f"`sender_id` ({received_message.sender_id})"
             )
 
         received_kwargs, prometheus_metrics, result = collect_kwargs(
@@ -651,7 +658,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         )
 
         if prometheus_metrics:
-            logger.warning('Got `prometheus_metrics` from master to member. This is not supposed to happen.')
+            logger.warning("Got `prometheus_metrics` from master to member. This is not supposed to happen.")
 
         return Task(
             method_name=received_message.method_name,

@@ -12,10 +12,7 @@ from stalactite.communications.grpc_utils.generated_code import (
     communicator_pb2,
     communicator_pb2_grpc,
 )
-from stalactite.communications.grpc_utils.utils import (
-    PrometheusMetric,
-    Status,
-)
+from stalactite.communications.grpc_utils.utils import PrometheusMetric, Status
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -90,13 +87,13 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         self._received_tasks[message.method_name][receive_from_id] = message
 
     async def get_from_tasks_to_send_dict(
-            self, method_name: str, send_to_id: str, timeout: float = 30.
+        self, method_name: str, send_to_id: str, timeout: float = 30.0
     ) -> communicator_pb2.MainMessage:
         timer_start = time.time()
         while (message := self._tasks_to_send_queues.get(send_to_id, dict()).pop(method_name, None)) is None:
-            await asyncio.sleep(0.)
+            await asyncio.sleep(0.0)
             if time.time() - timer_start > timeout:
-                raise TimeoutError(f'Could not send task: {method_name} to {send_to_id}.')
+                raise TimeoutError(f"Could not send task: {method_name} to {send_to_id}.")
         return message
 
     @staticmethod
@@ -228,7 +225,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
             yield self.process_heartbeat(request)
 
     async def SendToMaster(
-            self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
+        self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
     ) -> communicator_pb2.MainMessage:
         self.put_to_received_tasks(message=request, receive_from_id=request.sender_id)
         return communicator_pb2.MainMessage(
@@ -236,13 +233,11 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         )
 
     async def RecvFromMaster(
-            self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
+        self, request: communicator_pb2.MainMessage, context: grpc.aio.ServicerContext
     ) -> communicator_pb2.MainMessage:
         get_task = asyncio.create_task(
             self.get_from_tasks_to_send_dict(
-                method_name=request.method_name,
-                send_to_id=request.sender_id,
-                timeout=request.get_response_timeout
+                method_name=request.method_name, send_to_id=request.sender_id, timeout=request.get_response_timeout
             )
         )
         result = await get_task

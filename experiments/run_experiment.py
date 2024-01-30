@@ -154,7 +154,7 @@ def run_single_member(exp_uid: str, datasets_list: List[DatasetDict], member_id:
             if model_name == "linreg":
 
                 u, s, vt = sp.linalg.svd(x_train, full_matrices=False, overwrite_a=False, check_finite=False)
-                model.update_weights(data_U=u, data_S=s, data_Vh=vt, rhs=y_train)
+                model.update_weights(data_U=u, data_S=s, data_Vh=vt, rhs=y_train) # TODO
 
             elif model_name == "logreg":
                 model.update_weights(x_train, y_train, is_single=True)
@@ -381,7 +381,7 @@ def main():
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(os.environ.get("EXPERIMENT", "local_sbol"))
 
-    ds_name = os.environ.get("DATASET", "MNIST")
+    ds_name = os.environ.get("DATASET", "MNIST") # TODO
     sample_size = int(os.environ.get("SAMPLE_SIZE", 10000))
     train_size = int(os.environ.get("TRAIN_SIZE", 1000))
     is_consequently = bool(int(os.environ.get("IS_CONSEQUENTLY")))

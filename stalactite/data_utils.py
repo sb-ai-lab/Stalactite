@@ -118,5 +118,4 @@ def get_party_member(config: VFLConfig, member_rank: int):
         epochs=config.common.epochs,
         report_train_metrics_iteration=config.common.report_train_metrics_iteration,
         report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-
     )

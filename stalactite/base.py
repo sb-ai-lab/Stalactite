@@ -106,12 +106,12 @@ class PartyCommunicator(ABC):
 
     @abstractmethod
     def send(
-            self,
-            send_to_id: str,
-            method_name: Method,
-            method_kwargs: Optional[MethodKwargs] = None,
-            result: Optional[Any] = None,
-            **kwargs
+        self,
+        send_to_id: str,
+        method_name: Method,
+        method_kwargs: Optional[MethodKwargs] = None,
+        result: Optional[Any] = None,
+        **kwargs,
     ) -> Task:
         ...
 
@@ -121,24 +121,24 @@ class PartyCommunicator(ABC):
 
     @abstractmethod
     def broadcast(
-            self,
-            method_name: Method,
-            method_kwargs: Optional[MethodKwargs] = None,
-            result: Optional[Any] = None,
-            participating_members: Optional[List[str]] = None,
-            include_current_participant: bool = False,
-            **kwargs,
+        self,
+        method_name: Method,
+        method_kwargs: Optional[MethodKwargs] = None,
+        result: Optional[Any] = None,
+        participating_members: Optional[List[str]] = None,
+        include_current_participant: bool = False,
+        **kwargs,
     ) -> List[Task]:
         ...
 
     @abstractmethod
     def scatter(
-            self,
-            method_name: Method,
-            method_kwargs: Optional[List[MethodKwargs]] = None,
-            result: Optional[Any] = None,
-            participating_members: Optional[List[str]] = None,
-            **kwargs,
+        self,
+        method_name: Method,
+        method_kwargs: Optional[List[MethodKwargs]] = None,
+        result: Optional[Any] = None,
+        participating_members: Optional[List[str]] = None,
+        **kwargs,
     ) -> List[Task]:  # TODO
         ...
 
@@ -182,7 +182,7 @@ class PartyMaster(ABC):
         uids = self.synchronize_uids(collected_uids_results, world_size=communicator.world_size)
         communicator.broadcast(
             Method.register_records_uids,
-            method_kwargs=MethodKwargs(other_kwargs={'uids': uids}),
+            method_kwargs=MethodKwargs(other_kwargs={"uids": uids}),
             participating_members=communicator.members,
         )
 
@@ -214,9 +214,10 @@ class PartyMaster(ABC):
                 Method.update_predict,
                 method_kwargs=[
                     MethodKwargs(
-                        tensor_kwargs={'upd': participant_updates},
-                        other_kwargs={'previous_batch': titer.previous_batch, 'batch': titer.batch},
-                    ) for participant_updates in updates
+                        tensor_kwargs={"upd": participant_updates},
+                        other_kwargs={"previous_batch": titer.previous_batch, "batch": titer.batch},
+                    )
+                    for participant_updates in updates
                 ],
                 participating_members=titer.participating_members,
             )
@@ -230,7 +231,7 @@ class PartyMaster(ABC):
                 predictions,
                 party_predictions,
                 communicator.world_size,
-                titer.subiter_seq_num
+                titer.subiter_seq_num,
             )
 
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
@@ -240,8 +241,8 @@ class PartyMaster(ABC):
                 )
                 predict_tasks = communicator.broadcast(
                     Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={'uids': batcher.uids}),
-                    participating_members=titer.participating_members
+                    method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids}),
+                    participating_members=titer.participating_members,
                 )
                 party_predictions = [task.result for task in communicator.gather(predict_tasks, recv_results=True)]
 
@@ -255,8 +256,8 @@ class PartyMaster(ABC):
                 )
                 predict_test_tasks = communicator.broadcast(
                     Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={'uids': batcher.uids, 'use_test': True}),
-                    participating_members=titer.participating_members
+                    method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids, "use_test": True}),
+                    participating_members=titer.participating_members,
                 )
 
                 party_predictions_test = [
@@ -271,9 +272,7 @@ class PartyMaster(ABC):
     def synchronize_uids(self, collected_uids: list[list[str]], world_size: int) -> List[str]:
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, world_size))
         uids = itertools.chain(self.target_uids, (uid for member_uids in collected_uids for uid in set(member_uids)))
-        shared_uids = sorted(
-            [uid for uid, count in collections.Counter(uids).items() if count == world_size + 1]
-        )
+        shared_uids = sorted([uid for uid, count in collections.Counter(uids).items() if count == world_size + 1])
         logger.debug("Master %s: registering shared uids f size %s" % (self.id, len(shared_uids)))
         set_shared_uids = set(shared_uids)
         uid2idx = {uid: i for i, uid in enumerate(self.target_uids) if uid in set_shared_uids}
@@ -302,18 +301,18 @@ class PartyMaster(ABC):
 
     @abstractmethod
     def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
+        self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
     ) -> DataTensor:
         ...
 
     @abstractmethod
     def compute_updates(
-            self,
-            participating_members: List[str],
-            predictions: DataTensor,
-            party_predictions: PartyDataTensor,
-            world_size: int,
-            subiter_seq_num: int,
+        self,
+        participating_members: List[str],
+        predictions: DataTensor,
+        party_predictions: PartyDataTensor,
+        world_size: int,
+        subiter_seq_num: int,
     ) -> List[DataTensor]:
         ...
 
@@ -340,28 +339,19 @@ class PartyMember(ABC):
             Task(method_name=Method.records_uids, from_id=self.master_id, to_id=self.id)
         )
         uids = self._execute_received_task(synchronize_uids_task)
-        communicator.send(
-            self.master_id,
-            Method.records_uids,
-            result=uids
-        )
+        communicator.send(self.master_id, Method.records_uids, result=uids)
 
         register_records_uids_task = communicator.recv(
             Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
         )
         self._execute_received_task(register_records_uids_task)
 
-        initialize_task = communicator.recv(
-            Task(method_name=Method.initialize, from_id=self.master_id, to_id=self.id)
-        )
+        initialize_task = communicator.recv(Task(method_name=Method.initialize, from_id=self.master_id, to_id=self.id))
         self._execute_received_task(initialize_task)
 
-        self.loop(batcher=self.batcher,
-                  communicator=communicator)
+        self.loop(batcher=self.batcher, communicator=communicator)
 
-        finalize_task = communicator.recv(
-            Task(method_name=Method.finalize, from_id=self.master_id, to_id=self.id)
-        )
+        finalize_task = communicator.recv(Task(method_name=Method.finalize, from_id=self.master_id, to_id=self.id))
         self._execute_received_task(finalize_task)
         logger.info("Finished member %s" % self.id)
 
@@ -393,11 +383,7 @@ class PartyMember(ABC):
                     Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id)
                 )
                 predictions = self._execute_received_task(predict_task)
-                communicator.send(
-                    self.master_id,
-                    Method.predict,
-                    result=predictions
-                )
+                communicator.send(self.master_id, Method.predict, result=predictions)
 
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
                 logger.debug(
@@ -408,11 +394,7 @@ class PartyMember(ABC):
                     Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id)
                 )
                 predictions = self._execute_received_task(predict_task)
-                communicator.send(
-                    self.master_id,
-                    Method.predict,
-                    result=predictions
-                )
+                communicator.send(self.master_id, Method.predict, result=predictions)
 
             self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 

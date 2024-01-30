@@ -1,5 +1,5 @@
-import torch
 import numpy as np
+import torch
 
 
 class ComputeAccuracy:
@@ -61,4 +61,3 @@ class ComputeAccuracy_numpy:
 
         accuracy = np.sum(true_label.squeeze() == predictions.squeeze()) / true_label.squeeze().shape[0]
         return accuracy
-

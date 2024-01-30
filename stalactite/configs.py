@@ -72,11 +72,11 @@ def load_yaml_config(yaml_path: Union[str, Path]) -> dict:
 class CommonConfig(BaseModel):
     """Common experimental parameters config."""
 
-    epochs: int = Field(description="Number of epochs to train a model")
-    world_size: int = Field(description="Number of the VFL member agents (without the master)")
+    epochs: int = Field(default=3, description="Number of epochs to train a model")
+    world_size: int = Field(default=2, description="Number of the VFL member agents (without the master)")
     report_train_metrics_iteration: int = Field(default=1)
     report_test_metrics_iteration: int = Field(default=1)
-    batch_size: int = Field(default=10, description="Batch size used for training")
+    batch_size: int = Field(default=100, description="Batch size used for training")
     experiment_label: str = Field(
         default="default-experiment",
         description="Experiment name used in prerequisites, if unset, defaults to `default-experiment`",
@@ -84,7 +84,14 @@ class CommonConfig(BaseModel):
     reports_export_folder: str = Field(
         default=Path(__file__).parent, description="Folder for exporting tests` and experiments` reports"
     )
-    rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec.")
+    rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec")
+    vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn'] = Field(
+        default='linreg',
+        description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`'
+    )
+    is_consequently: bool = Field(default=False, description='Run linear regression updates in sequential mode')
+    use_class_weights: bool = Field(default=False, description='Logistic regression') # TODO
+    learning_rate: float = Field(default=0.01, description='Learning rate')
 
     @field_validator("reports_export_folder")
     @classmethod
@@ -97,8 +104,13 @@ class DataConfig(BaseModel):
     """Experimental data parameters config."""
 
     random_seed: int = Field(default=0, description="Experiment data random seed (including random, numpy, torch)")
-    dataset_size: int = Field(description="Number of dataset rows to use")
-    host_path_data_dir: str = Field(description="Path to datasets` directory")
+    dataset_size: int = Field(default=1000, description="Number of dataset rows to use")
+    host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
+    dataset: Literal['mnist', 'sbol', 'smm'] = Field(
+        default='mnist',
+        description='Dataset type. One of `mnist`, `sbol`, `smm`'
+    ) # TODO
+    use_smm: bool = Field(default=False) # TODO
 
 
 class PrerequisitesConfig(BaseModel):
@@ -245,8 +257,8 @@ class VFLConfig(BaseModel):
 
         if self.grpc_arbiter.use_arbiter:
             if (
-                f"{self.grpc_arbiter.host}:{self.grpc_arbiter.port}"
-                == f"{self.grpc_server.host}:{self.grpc_server.port}"
+                    f"{self.grpc_arbiter.host}:{self.grpc_arbiter.port}"
+                    == f"{self.grpc_server.host}:{self.grpc_server.port}"
             ):
                 raise ValueError(
                     f"Arbiter port {self.grpc_arbiter.port} is the same to "
