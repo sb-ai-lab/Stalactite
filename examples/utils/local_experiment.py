@@ -123,10 +123,9 @@ def load_parameters(config: VFLConfig):
 
 # parametrized file __main__ run() с хардкод
 
-# спрятать этот код
+# TODO
 # запушить ветку заребейзив ветку Димы на себя -> pr в мейн
 # loop (dima)
-# примеры в нормальный вид
 # local distributed
 # distributed
 def run(config_path: Optional[str] = None):
