@@ -55,7 +55,7 @@ class GRpcPartyCommunicator(PartyCommunicator, ABC):
     def __init__(
         self,
         logging_level: Any = logging.INFO,
-        recv_timeout: float = 120.0,
+        recv_timeout: float = 1200.0,
     ):
         """Initialize base GRpcPartyCommunicator class. Set the module logging level."""
         self.logging_level = logging_level

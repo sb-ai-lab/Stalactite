@@ -6,7 +6,7 @@ import time
 import uuid
 from abc import ABC
 from collections import defaultdict
-from concurrent.futures import Future
+from concurrent.futures import Future, TimeoutError as FutureTimoutError
 from copy import copy
 from dataclasses import dataclass
 from queue import Queue
@@ -71,12 +71,12 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         logger.info("Party communicator %s: rendezvous has been successfully performed" % self.participant.id)
 
     def send(
-        self,
-        send_to_id: str,
-        method_name: Method,
-        method_kwargs: Optional[MethodKwargs] = None,
-        result: Optional[Any] = None,
-        **kwargs,
+            self,
+            send_to_id: str,
+            method_name: Method,
+            method_kwargs: Optional[MethodKwargs] = None,
+            result: Optional[Any] = None,
+            **kwargs,
     ) -> Task:
         self._check_if_ready()
         if send_to_id not in self._party_info:
@@ -113,19 +113,19 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         # TODO move to ParentClass
 
     def scatter(
-        self,
-        method_name: Method,
-        method_kwargs: Optional[List[MethodKwargs]] = None,
-        result: Optional[Any] = None,
-        participating_members: Optional[List[str]] = None,
-        **kwargs,
+            self,
+            method_name: Method,
+            method_kwargs: Optional[List[MethodKwargs]] = None,
+            result: Optional[Any] = None,
+            participating_members: Optional[List[str]] = None,
+            **kwargs,
     ) -> List[Task]:
 
         if participating_members is None:
             participating_members = self.members
 
         assert (
-            len(set(participating_members).difference(set(self.members))) == 0
+                len(set(participating_members).difference(set(self.members))) == 0
         ), "Some of the members are disconnected, cannot perform collective operation"
 
         if method_kwargs is not None:
@@ -150,13 +150,13 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return tasks
 
     def broadcast(
-        self,
-        method_name: Method,
-        method_kwargs: Optional[MethodKwargs] = None,
-        result: Optional[Any] = None,
-        participating_members: Optional[List[str]] = None,
-        include_current_participant: bool = False,
-        **kwargs,
+            self,
+            method_name: Method,
+            method_kwargs: Optional[MethodKwargs] = None,
+            result: Optional[Any] = None,
+            participating_members: Optional[List[str]] = None,
+            include_current_participant: bool = False,
+            **kwargs,
     ) -> List[Task]:
         if self.participant.id not in participating_members and include_current_participant:
             participating_members.append(self.participant.id)
@@ -181,7 +181,21 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return tasks
 
     def gather(self, tasks: List[Task], recv_results: bool = False) -> List[Task]:
-        return [self.recv(task, recv_results=recv_results) for task in tasks]
+        tasks_to_return = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+            recv_futures = [executor.submit(self.recv, task, recv_results) for task in tasks]
+            for task, future in zip(tasks, recv_futures):
+                future.method_name = task.method_name
+                future.receive_from_id = task.from_id if not recv_results else task.to_id
+            try:
+                for future in concurrent.futures.as_completed(recv_futures, timeout=self.recv_timeout):
+                    try:
+                        tasks_to_return.append(future.result())
+                    except Exception:
+                        raise
+            except FutureTimoutError:
+                raise TimeoutError(f"Could not gather task: {future.method_name}.")
+        return tasks_to_return
 
     def _check_if_ready(self):
         """Raise an exception if the communicator was not initialized properly."""
@@ -197,11 +211,11 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
     This class is used as the communicator for master in local (single-process) VFL setup."""
 
     def __init__(
-        self,
-        participant: PartyMaster,
-        world_size: int,
-        shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-        recv_timeout: float = 120.0,
+            self,
+            participant: PartyMaster,
+            world_size: int,
+            shared_party_info: Optional[Dict[str, _ParticipantInfo]],
+            recv_timeout: float = 120.0,
     ):
         """
         Initialize master communicator with parameters.
@@ -239,12 +253,12 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
     This class is used as the communicator for member in local (single-process) VFL setup."""
 
     def __init__(
-        self,
-        participant: PartyMember,
-        master_id: str,
-        world_size: int,
-        shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-        recv_timeout: float = 120.0,
+            self,
+            participant: PartyMember,
+            master_id: str,
+            world_size: int,
+            shared_party_info: Optional[Dict[str, _ParticipantInfo]],
+            recv_timeout: float = 120.0,
     ):
         """
         Initialize member communicator with parameters.

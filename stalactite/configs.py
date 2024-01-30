@@ -184,6 +184,7 @@ class PartyConfig(BaseModel):
     """VFL base parties` parameters config."""
 
     logging_level: Literal["debug", "info", "warning"] = Field(default="info", description="Logging level")
+    recv_timeout: float = Field(default=360., description='Timeout of the recv operation')
 
     @field_validator("logging_level")
     @classmethod

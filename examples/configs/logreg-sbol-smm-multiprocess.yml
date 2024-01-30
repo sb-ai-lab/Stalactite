@@ -22,6 +22,16 @@ prerequisites:
 data:
   random_seed: 0
   dataset_size: 1000
+  dataset: 'sbol'
+  use_smm: True
+  host_path_data_dir: /mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2 # /home/dmitriy/data #
+  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
+  train_split: "train_train" # name of the train split
+  test_split: "train_val" # name of the test split
+  features_data_preprocessors: [ FullDataTensor(features_key),  SkLearnStandardScaler ]
+  label_data_preprocessors: [ FullDataTensor(label_key) ]
+  features_key: "features_part_"
+  label_key: "labels"
 
 grpc_server:
   host: '0.0.0.0'

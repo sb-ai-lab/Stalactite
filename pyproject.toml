@@ -29,7 +29,7 @@ tenseal = "^0.3.14"
 
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.59.3"
-#tox = "*"
+tox = "^4.12.1"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^7.4.3"

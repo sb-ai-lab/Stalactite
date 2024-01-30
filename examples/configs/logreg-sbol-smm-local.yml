@@ -5,7 +5,7 @@ common:
   world_size: 2
   batch_size: 1000
   experiment_label: experiment-vm
-  reports_export_folder: "/home/dmitriy/data/reports" #"/Users/anastasiazaharova/Desktop/vfl-benchmark/reports"
+  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports" #"/home/dmitriy/data/reports" #
   vfl_model_name: logreg
   is_consequently: False
   learning_rate: 0.01

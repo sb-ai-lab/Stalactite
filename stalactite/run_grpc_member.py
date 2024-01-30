@@ -16,7 +16,7 @@ def main(config_path):
     grpc_host = os.environ.get("GRPC_SERVER_HOST", config.master.container_host)
 
     comm = GRpcMemberPartyCommunicator(
-        participant=get_party_member(config_path, config, member_rank),
+        participant=get_party_member(config_path, member_rank),
         master_host=grpc_host,
         master_port=config.grpc_server.port,
         max_message_size=config.grpc_server.max_message_size,
@@ -25,7 +25,7 @@ def main(config_path):
         task_requesting_pings_interval=config.member.task_requesting_pings_interval,
         sent_task_timout=config.member.sent_task_timout,
         rendezvous_timeout=config.common.rendezvous_timeout,
-        recv_timeout=20.0,
+        recv_timeout=config.member.recv_timeout,
     )
     comm.run()
 

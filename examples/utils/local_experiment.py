@@ -58,25 +58,37 @@ def load_parameters(config_path: str):
     # BASE_PATH = Path(__file__).parent.parent.parent
 
     config = VFLConfig.load_and_validate(config_path)
-    sample_size = int(os.environ.get("SAMPLE_SIZE", 10000))
+    # sample_size = int(os.environ.get("SAMPLE_SIZE", 10000))
 
     # models input dims for 1, 2, 3 and 5 members
-    if config.data.dataset.lower() == "mnist":
-        # todo: hide input_dim in preprocessor
-        input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
-        params = init(config_path=os.path.abspath(config_path))
-    elif config.data.dataset.lower() == "sbol":
-        smm = "smm_" if config.data.use_smm else ""
-        dim = 1356 if smm == "smm_" else 1345
-        input_dims_list = [[0], [1345, 11]]
+    # if config.data.dataset.lower() == "mnist":
+    #     # todo: hide input_dim in preprocessor
+    #     input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
+    #     params = init(config_path=os.path.abspath(config_path))
+    # elif config.data.dataset.lower() == "sbol":
+    #     smm = "smm_" if config.data.use_smm else ""
+    #     dim = 1356 if smm == "smm_" else 1345
+    #     input_dims_list = [[0], [1345, 11]]
 
     if config.data.dataset.lower() == "mnist":
-        dataset, _ = load(params)
+        # dataset, _ = load(params) #??
+        params = init(config_path=os.path.abspath(config_path))
+        dataset = {}
+
+        for m in range(config.common.world_size):
+            dataset[m] = datasets.load_from_disk(
+                os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
+            )
+
         processors = [
             ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()
         ]
+        input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
 
     elif config.data.dataset.lower() == "sbol":
+        smm = "smm_" if config.data.use_smm else ""
+        dim = 1356 if smm == "smm_" else 1345
+        # input_dims_list = [[0], [1345, 11]]
 
         dataset = {}
 
@@ -94,13 +106,6 @@ def load_parameters(config_path: str):
 
     return input_dims_list, config.data, processors
 
-# parametrized file __main__ run() с хардкод
-
-# TODO
-# запушить ветку заребейзив ветку Димы на себя -> pr в мейн
-# loop (dima)
-# local distributed
-# distributed
 def run(config_path: Optional[str] = None):
     if config_path is None:
         config_path = os.environ.get(
