@@ -51,35 +51,83 @@ class PartyData:
     classes_idx: Optional[list[int]] = None
 
 
-def load_and_prepare_datasets(config_path: str) -> PartyData:
+# def load_and_prepare_datasets(config_path: str) -> PartyData:
+#     config = VFLConfig.load_and_validate(config_path)
+#
+#     model_name = config.common.vfl_model_name
+#
+#     if 'logreg' in model_name:
+#         # todo: hide it somehow
+#         classes_idx = [x for x in range(19)]
+#     else:
+#         classes_idx = list()
+#     n_labels = len(classes_idx)
+#
+#     if config.data.dataset.lower() == "mnist":
+#         params = init(config_path=os.path.abspath(config_path))
+#         dataset = {}
+#
+#         for m in range(config.common.world_size):
+#             dataset[m] = datasets.load_from_disk(
+#                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
+#             )
+#         processors = [
+#             ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()
+#         ]
+#         input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
+#
+#     elif config.data.dataset.lower() == "sbol":
+#         smm = "smm_" if config.data.use_smm else ""
+#         dim = 1356 if smm == "smm_" else 1345
+#         # input_dims_list = [[0], [1345, 11]]
+#
+#         dataset = {}
+#
+#         for m in range(config.common.world_size):
+#             dataset[m] = datasets.load_from_disk(
+#                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
+#             )
+#         processors = [
+#             TabularPreprocessor(dataset=dataset[i], member_id=i, data_params=config.data) for i, v in dataset.items()
+#         ]
+#         input_dims_list = [[0], [1345, 11]]
+#
+#     else:
+#         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
+#
+#     num_dataset_records = [200 + random.randint(100, 1000) for _ in range(config.common.world_size)]
+#     shared_record_uids = [str(i) for i in range(config.data.dataset_size)]
+#     target_uids = shared_record_uids
+#     members_datasets_uids = [
+#         [*shared_record_uids, *(str(uuid.uuid4()) for _ in range(num_records - len(shared_record_uids)))]
+#         for num_records in num_dataset_records
+#     ]
+#
+#     return PartyData(
+#         processors=processors,
+#         config=config,
+#         target_uids=target_uids,
+#         input_dims_list=input_dims_list,
+#         members_datasets_uids=members_datasets_uids,
+#         classes_idx=classes_idx,
+#     )
+def load_parameters(config_path: str) -> tuple[VFLConfig, list[Any]]:
+    # BASE_PATH = Path(__file__).parent.parent.parent
+
     config = VFLConfig.load_and_validate(config_path)
 
-    model_name = config.common.vfl_model_name
-
-    if 'logreg' in model_name:
-        # todo: hide it somehow
-        classes_idx = [x for x in range(19)]
-    else:
-        classes_idx = list()
-    n_labels = len(classes_idx)
-
     if config.data.dataset.lower() == "mnist":
-        params = init(config_path=os.path.abspath(config_path))
         dataset = {}
-
         for m in range(config.common.world_size):
             dataset[m] = datasets.load_from_disk(
                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
             )
+
         processors = [
-            ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()
+            ImagePreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
-        input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
 
     elif config.data.dataset.lower() == "sbol":
-        smm = "smm_" if config.data.use_smm else ""
-        dim = 1356 if smm == "smm_" else 1345
-        # input_dims_list = [[0], [1345, 11]]
 
         dataset = {}
 
@@ -88,35 +136,19 @@ def load_and_prepare_datasets(config_path: str) -> PartyData:
                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
             )
         processors = [
-            TabularPreprocessor(dataset=dataset[i], member_id=i, data_params=config.data) for i, v in dataset.items()
+            TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
-        input_dims_list = [[0], [1345, 11]]
 
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    num_dataset_records = [200 + random.randint(100, 1000) for _ in range(config.common.world_size)]
-    shared_record_uids = [str(i) for i in range(config.data.dataset_size)]
-    target_uids = shared_record_uids
-    members_datasets_uids = [
-        [*shared_record_uids, *(str(uuid.uuid4()) for _ in range(num_records - len(shared_record_uids)))]
-        for num_records in num_dataset_records
-    ]
-
-    return PartyData(
-        processors=processors,
-        config=config,
-        target_uids=target_uids,
-        input_dims_list=input_dims_list,
-        members_datasets_uids=members_datasets_uids,
-        classes_idx=classes_idx,
-    )
+    return config, processors
 
 
 def get_party_master(config_path: str):
-    party_data = load_and_prepare_datasets(config_path)
-    config = party_data.config
-
+    config, processors = load_parameters(config_path)
+    # config = party_data.config
+    target_uids = [str(i) for i in range(config.data.dataset_size)]
     if 'logreg' in config.common.vfl_model_name:
         master_class = PartyMasterImplLogreg
     else:
@@ -129,8 +161,8 @@ def get_party_master(config_path: str):
         epochs=config.common.epochs,
         report_train_metrics_iteration=config.common.report_train_metrics_iteration,
         report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-        processor=party_data.processors[0],
-        target_uids=party_data.target_uids,
+        processor=processors[0],
+        target_uids=target_uids,
         batch_size=config.common.batch_size,
         model_update_dim_size=0,
         run_mlflow=config.master.run_mlflow,
@@ -138,30 +170,29 @@ def get_party_master(config_path: str):
 
 
 def get_party_member(config_path: str, member_rank: int):
-    party_data = load_and_prepare_datasets(config_path)
-    config = party_data.config
-
-    if 'logreg' in config.common.vfl_model_name:
-        model = LogisticRegressionBatch(
-            input_dim=party_data.input_dims_list[config.common.world_size - 1][member_rank],
-            output_dim=len(party_data.classes_idx),
-            learning_rate=config.common.learning_rate,
-            class_weights=None,
-            init_weights=0.005
-        )
-    else:
-        model = LinearRegressionBatch(
-            input_dim=party_data.input_dims_list[config.common.world_size - 1][member_rank],
-            output_dim=1,
-            reg_lambda=0.2
-        )
+    config, processors = load_parameters(config_path)
+    # config = party_data.config
+    target_uids = [str(i) for i in range(config.data.dataset_size)]
+    # if 'logreg' in config.common.vfl_model_name:
+    #     model = LogisticRegressionBatch(
+    #         input_dim=party_data.input_dims_list[config.common.world_size - 1][member_rank],
+    #         output_dim=len(party_data.classes_idx),
+    #         learning_rate=config.common.learning_rate,
+    #         class_weights=None,
+    #         init_weights=0.005
+    #     )
+    # else:
+    #     model = LinearRegressionBatch(
+    #         input_dim=party_data.input_dims_list[config.common.world_size - 1][member_rank],
+    #         output_dim=1,
+    #         reg_lambda=0.2
+    #     )
 
     return PartyMemberImpl(
         uid=f"member-{member_rank}",
-        model_update_dim_size=party_data.input_dims_list[config.common.world_size - 1][member_rank],
-        member_record_uids=party_data.members_datasets_uids[member_rank],
-        model=model,
-        processor=party_data.processors[member_rank],
+        member_record_uids=target_uids,
+        model_name=config.common.vfl_model_name,
+        processor=processors[member_rank],
         batch_size=config.common.batch_size,
         epochs=config.common.epochs,
         report_train_metrics_iteration=config.common.report_train_metrics_iteration,

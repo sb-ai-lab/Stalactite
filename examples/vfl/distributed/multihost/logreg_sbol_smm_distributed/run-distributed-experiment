@@ -9,9 +9,9 @@ vk_host="vk-vflsrv"
 sber_host="sber-vflsrv"
 
 
-members_yc=1
+members_yc=0
 members_vk=1
-members_sber=0
+members_sber=1
 
 master=$yc_host
 
@@ -113,7 +113,7 @@ function run() {
     do
         ssh -t $vk_host "cd /home/ubuntu/vfl-benchmark && python3 -m poetry run stalactite member start \
         --detached \
-        --config-path /home/ubuntu/vfl-benchmark/configs/config-vm-vk.yml \
+        --config-path examples/configs/logreg-sbol-smm-vm-vk.yml \
         --rank $count"
         ((count++))
     done
@@ -122,7 +122,7 @@ function run() {
     do
         ssh -t $sber_host "cd /root/vfl-exp/vfl-benchmark && poetry run stalactite member start \
         --detached \
-        --config-path /root/vfl-exp/vfl-benchmark/configs/config-vm-sber.yml \
+        --config-path examples/configs/logreg-sbol-smm-vm-sber.yml \
         --rank $count"
         ((count++))
     done
@@ -131,7 +131,7 @@ function run() {
     do
         ssh -t $yc_host "cd /home/gpusrvadmin/vfl-benchmark && python3 -m poetry run stalactite member start \
         --detached \
-        --config-path /home/gpusrvadmin/vfl-benchmark/configs/config-vm-yc.yml \
+        --config-path examples/configs/logreg-sbol-smm-vm-yc.yml \
         --rank $count"
         ((count++))
     done
