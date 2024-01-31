@@ -106,12 +106,12 @@ class PartyCommunicator(ABC):
 
     @abstractmethod
     def send(
-        self,
-        send_to_id: str,
-        method_name: Method,
-        method_kwargs: Optional[MethodKwargs] = None,
-        result: Optional[Any] = None,
-        **kwargs,
+            self,
+            send_to_id: str,
+            method_name: Method,
+            method_kwargs: Optional[MethodKwargs] = None,
+            result: Optional[Any] = None,
+            **kwargs,
     ) -> Task:
         ...
 
@@ -121,24 +121,24 @@ class PartyCommunicator(ABC):
 
     @abstractmethod
     def broadcast(
-        self,
-        method_name: Method,
-        method_kwargs: Optional[MethodKwargs] = None,
-        result: Optional[Any] = None,
-        participating_members: Optional[List[str]] = None,
-        include_current_participant: bool = False,
-        **kwargs,
+            self,
+            method_name: Method,
+            method_kwargs: Optional[MethodKwargs] = None,
+            result: Optional[Any] = None,
+            participating_members: Optional[List[str]] = None,
+            include_current_participant: bool = False,
+            **kwargs,
     ) -> List[Task]:
         ...
 
     @abstractmethod
     def scatter(
-        self,
-        method_name: Method,
-        method_kwargs: Optional[List[MethodKwargs]] = None,
-        result: Optional[Any] = None,
-        participating_members: Optional[List[str]] = None,
-        **kwargs,
+            self,
+            method_name: Method,
+            method_kwargs: Optional[List[MethodKwargs]] = None,
+            result: Optional[Any] = None,
+            participating_members: Optional[List[str]] = None,
+            **kwargs,
     ) -> List[Task]:  # TODO
         ...
 
@@ -211,6 +211,8 @@ class PartyMaster(ABC):
                 % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
             )
             iter_start_time = time.time()
+            if titer.seq_num == 0:
+                updates = updates[:len(titer.participating_members)]
             update_predict_tasks = communicator.scatter(
                 Method.update_predict,
                 method_kwargs=[
@@ -302,18 +304,18 @@ class PartyMaster(ABC):
 
     @abstractmethod
     def aggregate(
-        self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
+            self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
     ) -> DataTensor:
         ...
 
     @abstractmethod
     def compute_updates(
-        self,
-        participating_members: List[str],
-        predictions: DataTensor,
-        party_predictions: PartyDataTensor,
-        world_size: int,
-        subiter_seq_num: int,
+            self,
+            participating_members: List[str],
+            predictions: DataTensor,
+            party_predictions: PartyDataTensor,
+            world_size: int,
+            subiter_seq_num: int,
     ) -> List[DataTensor]:
         ...
 
@@ -360,10 +362,15 @@ class PartyMember(ABC):
         logger.info("Member %s: entering training loop" % self.id)
 
         for titer in batcher:
+            if titer.participating_members is not None:
+                if self.id not in titer.participating_members:
+                    logger.debug(f'Member {self.id} skipping {titer.seq_num}.')
+                    continue
             logger.debug(
                 f"Member %s: train loop - starting batch %s (sub iter %s) on epoch %s"
                 % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
             )
+
             iter_start_time = time.time()
             update_predict_task = communicator.recv(
                 Task(method_name=Method.update_predict, from_id=self.master_id, to_id=self.id)

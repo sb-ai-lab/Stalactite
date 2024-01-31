@@ -6,7 +6,7 @@ import torch
 from datasets.dataset_dict import DatasetDict
 
 from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
-from stalactite.batching import ListBatcher
+from stalactite.batching import ListBatcher, ConsecutiveListBatcher
 from stalactite.data_loader import AttrDict
 from stalactite.models import LinearRegressionBatch, LogisticRegressionBatch
 
@@ -27,7 +27,9 @@ class PartyMemberImpl(PartyMember):
         # data_params: AttrDict,
         report_train_metrics_iteration: int,
         report_test_metrics_iteration: int,
-        processor=None
+        processor=None,
+        is_consequently: bool = False,
+        members: Optional[list[str]] = None,
     ):
         self.id = uid
         self.epochs = epochs
@@ -48,11 +50,22 @@ class PartyMemberImpl(PartyMember):
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.processor = processor
         self._batcher = None
+        self.is_consequently = is_consequently
+        self.members = members
 
-    def _create_batcher(self, epochs: int, uids: List[str], batch_size: int) -> Batcher:
+        if self.is_consequently:
+            if self.members is None:
+                raise ValueError('If consequent algorithm is initialized, the members must be passed.')
+
+    def _create_batcher(self, epochs: int, uids: List[str], batch_size: int) -> None:
         logger.info("Member %s: making a batcher for uids" % (self.id))
         self._check_if_ready()
-        self._batcher = ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
+        if not self.is_consequently:
+            self._batcher = ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
+        else:
+            self._batcher = ConsecutiveListBatcher(
+                epochs=self.epochs, members=self.members, uids=uids, batch_size=self._batch_size
+            )
 
     @property
     def batcher(self) -> Batcher:

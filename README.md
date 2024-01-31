@@ -51,9 +51,13 @@ data into the config file field: ``
 
 Local (single process multiple threads) experiments examples:
 - `examples/vfl/local/linreg_mnist_local.py` launches the local linear regression example on MNIST dataset.
-The YAML file for this experiment `examples/configs/local/linreg_mnist_local.yml` configures main common and data 
+The YAML file for this experiment `examples/configs/local/linreg-mnist-local.yml` configures main common and data 
 parameters required for the launch. 
-- Same with the `examples/vfl/local/logreg_sbol_smm_local.py`, launching the multilabel classification with 
+- `examples/vfl/local/linreg_mnist_seq_local.py` launches the local linear regression example on MNIST dataset with 
+sequential updates on members. The configuration for this experiment is in 
+`examples/configs/local/linreg-mnist-seq-local.yml` is basically same to the previous example, except for the 
+`common.is_consequently=True`.
+- The `examples/vfl/local/logreg_sbol_smm_local.py`, launching the multilabel classification with 
 logistic regression on SBOL and SMM datasets.
 
 Distributed (single host multiple processes (containers)) example:
@@ -64,16 +68,11 @@ to start prerequisites (or use them) while checking out the example, just disabl
 changing configuration files fields to: `master.run_mlflow: False`, `master.run_prometheus: False`
 
 Distributed (multiple host) example:
-- `examples/vfl/dostributed/logreg_sbol_smm_distributed/` contains 3 shell scripts for launching VFL agents to run 
+- `examples/vfl/distributed/logreg_sbol_smm_distributed/` contains shell script for launching VFL agents to run 
 logistic regression on SBOL and SMM while all the agents are on different hosts. To launch it again uses the 
 stalactite CLI and configuration file, which must be copied to each host (and changed accordingly).
-  1. Adjust host addresses in the fields `master.container_host`, `prerequisites.mlflow_host`, 
-  `prerequisites.prometheus_host`, or just the `master.container_host` if the prerequisites are disabled 
-  (`master.run_mlflow: False`, `master.run_prometheus: False`).
-  2. Fix data paths and run script `run_master` on the master 
-  host (host, which address is passed into `master.container_host`). 
-  3. Fix data paths and run script `run_member_0` and `run_member_1` on other hosts (or the same host) to start members.
-
+The instructions for the distributed multi-host experiment are shown in `examples/vfl/distributed/multihost/README.md`
+  
 ## Prerequisites start and Stalactite CLI usage
 To run the experiment and check the metrics, first, you should launch the prerequisites (Prometheus and MlFlow).
 > **It is important to launch the prerequisites on the same host, where the distributed master will be running**

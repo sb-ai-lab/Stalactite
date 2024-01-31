@@ -96,17 +96,16 @@ function sync() {
         --exclude '.git/' \
         --exclude '.pytest_cache/' \
         --exclude '.tox' \
+#        --exclude 'data/' \
         "$from" $to
 }
-
-
 
 
 
 function run() {
     ssh -t $master "cd /home/gpusrvadmin/vfl-benchmark && python3 -m poetry run stalactite master start \
     --detached \
-    --config-path /home/gpusrvadmin/vfl-benchmark/configs/config-vm-yc.yml"
+    --config-path examples/configs/logreg-sbol-smm-vm-yc.yml"
 
     count=0
     for (( i=count; i <= members_vk - 1; ++i ))

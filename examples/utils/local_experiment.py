@@ -141,9 +141,11 @@ def run(config_path: Optional[str] = None):
         run_mlflow=config.master.run_mlflow,
     )
 
+    member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
+
     members = [
         PartyMemberImpl(
-            uid=f"member-{member_rank}",
+            uid=member_uid,
             member_record_uids=target_uids,
             model_name=config.common.vfl_model_name,
             processor=processors[member_rank],
@@ -151,8 +153,10 @@ def run(config_path: Optional[str] = None):
             epochs=config.common.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+            is_consequently=config.common.is_consequently,
+            members=member_ids if config.common.is_consequently else None,
         )
-        for member_rank in range(config.common.world_size)
+        for member_rank, member_uid in enumerate(member_ids)
     ]
 
     def local_master_main():
