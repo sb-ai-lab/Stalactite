@@ -113,7 +113,10 @@ def load_data(serialized_tensor: bytes) -> torch.Tensor:
 
     :param serialized_tensor: Tensor to serialize
     """
-    return safetensors.torch.load(serialized_tensor)["tensor"]
+    data = safetensors.torch.load(serialized_tensor)
+    tensor = data["tensor"]
+    tensor.requires_grad = bool(data['requires_grad'][0])
+    return tensor
 
 
 def save_data(tensor: torch.Tensor):
@@ -122,7 +125,13 @@ def save_data(tensor: torch.Tensor):
 
     :param tensor: Tensor serialized with load_data function
     """
-    return safetensors.torch.save(tensors={"tensor": tensor})
+
+    return safetensors.torch.save(
+        tensors={
+            "tensor": tensor,
+            'requires_grad': torch.tensor([int(tensor.requires_grad)])
+        }
+    )
 
 
 def prepare_kwargs(

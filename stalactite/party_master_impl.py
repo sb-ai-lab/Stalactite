@@ -189,15 +189,20 @@ class PartyMasterImplLogreg(PartyMasterImpl):
         acc = ComputeAccuracy_numpy(is_linreg=False).compute(y, predictions)
         logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
         logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
-
+        step = self.iteration_counter
         if self.run_mlflow:
-            step = self.iteration_counter
             mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
             mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
 
-            for avg in ["macro", "micro"]:
-                mlflow.log_metric(
-                    f"{name.lower()}_roc_auc_{avg}",
-                    roc_auc_score(y, predictions, average=avg),
-                    step=step,
-                )
+        for avg in ["macro", "micro"]:
+            try:
+                roc_auc = roc_auc_score(y, predictions, average=avg)
+            except ValueError:
+                roc_auc = 0
+            logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
+            if self.run_mlflow:
+                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+
+
+
+
