@@ -100,7 +100,6 @@ class PartyMemberImpl(PartyMember):
     def finalize(self):
         logger.info("Member %s: finalizing" % self.id)
         self._check_if_ready()
-        self._weights = None
         self.is_finalized = True
         logger.info("Member %s: has been finalized" % self.id)
 
