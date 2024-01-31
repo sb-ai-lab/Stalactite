@@ -4,11 +4,13 @@ from stalactite.data_preprocessors import FullDataTensor, RemoveZeroStdColumns, 
 
 
 class TabularPreprocessor:
-    def __init__(self, dataset: datasets.DatasetDict,  member_id, data_params=None):
+    def __init__(self, dataset: datasets.DatasetDict,  member_id, params=None):
         self.dataset = dataset
-        self.data_params = data_params.copy()
+        self.common_params = params.common
+        self.data_params = params.data.copy()
         self.data_params.features_key = self.data_params.features_key + str(member_id)
         self.member_id = member_id
+        self_ds = None
 
     def fit_transform(self):
 
@@ -37,5 +39,3 @@ class TabularPreprocessor:
         ds = ds.with_format("torch")
 
         return ds
-
-

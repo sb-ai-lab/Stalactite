@@ -34,14 +34,7 @@ logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 
 
-def compute_class_weights(classes_idx, y_train) -> torch.Tensor:
-    pos_weights_list = []
-    for i, c_idx in enumerate(classes_idx):
-        unique, counts = np.unique(y_train[:, i], return_counts=True)
-        if unique.shape[0] < 2:
-            raise ValueError(f"class {c_idx} has no label 1")
-        pos_weights_list.append(counts[0] / counts[1])
-    return torch.tensor(pos_weights_list)
+
 
 
 def compute_class_distribution(classes_idx: list, y: torch.Tensor, name: str) -> None:
@@ -58,37 +51,19 @@ def load_parameters(config_path: str):
     # BASE_PATH = Path(__file__).parent.parent.parent
 
     config = VFLConfig.load_and_validate(config_path)
-    # sample_size = int(os.environ.get("SAMPLE_SIZE", 10000))
-
-    # models input dims for 1, 2, 3 and 5 members
-    # if config.data.dataset.lower() == "mnist":
-    #     # todo: hide input_dim in preprocessor
-    #     input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
-    #     params = init(config_path=os.path.abspath(config_path))
-    # elif config.data.dataset.lower() == "sbol":
-    #     smm = "smm_" if config.data.use_smm else ""
-    #     dim = 1356 if smm == "smm_" else 1345
-    #     input_dims_list = [[0], [1345, 11]]
 
     if config.data.dataset.lower() == "mnist":
-        # dataset, _ = load(params) #??
-        params = init(config_path=os.path.abspath(config_path))
         dataset = {}
-
         for m in range(config.common.world_size):
             dataset[m] = datasets.load_from_disk(
                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
             )
 
         processors = [
-            ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()
+            ImagePreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
-        input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
 
     elif config.data.dataset.lower() == "sbol":
-        smm = "smm_" if config.data.use_smm else ""
-        dim = 1356 if smm == "smm_" else 1345
-        # input_dims_list = [[0], [1345, 11]]
 
         dataset = {}
 
@@ -97,14 +72,14 @@ def load_parameters(config_path: str):
                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
             )
         processors = [
-            TabularPreprocessor(dataset=dataset[i], member_id=i, data_params=config.data) for i, v in dataset.items()
+            TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
-        input_dims_list = [[0], [1345, 11]]
 
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return input_dims_list, config.data, processors
+    return config.data, processors
+
 
 def run(config_path: Optional[str] = None):
     if config_path is None:
@@ -121,14 +96,6 @@ def run(config_path: Optional[str] = None):
 
     model_name = config.common.vfl_model_name
 
-
-    if 'logreg' in model_name:
-        # todo: hide it somehow
-        classes_idx = [x for x in range(19)]
-    else:
-        classes_idx = list()
-    n_labels = len(classes_idx)
-
     log_params = {
         "ds_size": config.data.dataset_size,
         "batch_size": config.common.batch_size,
@@ -140,19 +107,15 @@ def run(config_path: Optional[str] = None):
         "model_name": model_name,
         "learning_rate": config.common.learning_rate,
         "dataset": config.data.dataset,
-        "n_labels": n_labels,
 
     }
 
     if config.master.run_mlflow:
         mlflow.log_params(log_params)
 
-    input_dims_list, params, processors = load_parameters(config_path)
+    params, processors = load_parameters(config_path)
 
-    # todo: hide this in preprocessor
-    num_dataset_records = [200 + random.randint(100, 1000) for _ in range(config.common.world_size)]
-    shared_record_uids = [str(i) for i in range(config.data.dataset_size)]
-    target_uids = shared_record_uids
+    target_uids = [str(i) for i in range(config.data.dataset_size)]
 
     # todo: add assigning class weights to preprocessor
 
@@ -161,10 +124,7 @@ def run(config_path: Optional[str] = None):
     #         mlflow.log_param("class_weights", class_weights)
     #     compute_class_distribution(classes_idx=classes_idx, y=test_targets, name="test")
 
-    members_datasets_uids = [
-        [*shared_record_uids, *(str(uuid.uuid4()) for _ in range(num_records - len(shared_record_uids)))]
-        for num_records in num_dataset_records
-    ]
+
     shared_party_info = dict()
     if 'logreg' in config.common.vfl_model_name:
         master_class = PartyMasterImplLogreg
@@ -185,34 +145,18 @@ def run(config_path: Optional[str] = None):
         run_mlflow=config.master.run_mlflow,
     )
 
-    if 'logreg' in model_name:
-        model = lambda member_rank: LogisticRegressionBatch(
-            input_dim=input_dims_list[config.common.world_size - 1][member_rank],
-            output_dim=n_labels,
-            learning_rate=config.common.learning_rate,
-            class_weights=None,
-            init_weights=0.005
-        )
-    else:
-        model = lambda member_rank: LinearRegressionBatch(
-            input_dim=input_dims_list[config.common.world_size - 1][member_rank],
-            output_dim=1,
-            reg_lambda=0.2
-        )
-
     members = [
         PartyMemberImpl(
             uid=f"member-{member_rank}",
-            model_update_dim_size=input_dims_list[config.common.world_size - 1][member_rank],
-            member_record_uids=member_uids,
-            model=model(member_rank),
+            member_record_uids=target_uids,
+            model_name=config.common.vfl_model_name,
             processor=processors[member_rank],
             batch_size=config.common.batch_size,
             epochs=config.common.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
         )
-        for member_rank, member_uids in enumerate(members_datasets_uids)
+        for member_rank in range(config.common.world_size)
     ]
 
     def local_master_main():
