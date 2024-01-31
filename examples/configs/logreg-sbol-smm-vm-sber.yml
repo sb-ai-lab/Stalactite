@@ -7,18 +7,31 @@ common:
   experiment_label: experiment-vms
   reports_export_folder: "/root/vfl-exp/vfl-benchmark/reports"
   rendezvous_timeout: 3600
+  vfl_model_name: logreg
+  is_consequently: False
+  learning_rate: 0.01
+  use_class_weights: False
 
 prerequisites:
-  mlflow_host: '158.160.118.171'
+  mlflow_host: '158.160.110.227'
   mlflow_port: '5555'
-  prometheus_host: '158.160.118.171'
+  prometheus_host: '158.160.110.227'
   prometheus_port: '9090'
   grafana_port: '3001'
 
 data:
   random_seed: 0
   dataset_size: 1000
-  host_path_data_dir: "/root/vfl-exp/vfl-benchmark/data"
+  dataset: 'sbol'
+  use_smm: True
+  host_path_data_dir: /root/vfl-exp/vfl-benchmark/data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2 # /home/dmitriy/data #
+  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
+  train_split: "train_train" # name of the train split
+  test_split: "train_val" # name of the test split
+  features_data_preprocessors: [ FullDataTensor(features_key),  SkLearnStandardScaler ]
+  label_data_preprocessors: [ FullDataTensor(label_key) ]
+  features_key: "features_part_"
+  label_key: "labels"
 
 grpc_server:
   host: '0.0.0.0'
@@ -27,7 +40,7 @@ grpc_server:
   server_thread_pool_size: 10
 
 master:
-  container_host: '158.160.118.171'
+  container_host: '158.160.110.227'
   run_mlflow: True
   run_prometheus: True
   logging_level: 'debug'

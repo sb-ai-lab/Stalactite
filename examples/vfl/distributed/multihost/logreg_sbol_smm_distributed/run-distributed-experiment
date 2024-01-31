@@ -28,6 +28,81 @@ function _exec_remotely () {
     done
 }
 
+function get_dir() {
+    if [[ -z "${SYNC_DIR+x}" ]]; then
+        sync_dir=${PWD##*/}
+    else
+        sync_dir=$SYNC_DIR
+    fi
+
+    echo $sync_dir
+}
+
+# Be aware about '-u' option of rsync.
+# it forces rsync not to copy files which are newer on the contrary side
+function sync() {
+    arg=$3
+    host=$2
+
+    if [[ "$arg" = "-f" ]] && [[ "$1" = true ]] ; then
+         rsyncargs="-arv --delete"
+    else
+         rsyncargs="-aurv"
+    fi
+
+    sync_dir=$(get_dir)
+
+    if [[ "$1" = true ]] ; then
+        from="."
+        if [[ "$host" = "sber-vflsrv" ]] ; then
+          sync_dir="vfl-exp/$sync_dir"
+        fi
+        to="${host}:${sync_dir}"
+
+
+    else
+        from="${host}:${sync_dir}/*"
+        to="."
+    fi
+
+    echo "Syncing from $from to $to"
+
+    rsync $rsyncargs \
+        --exclude 'docs' \
+        --exclude '*__pycache__*' \
+        --exclude '*target*' \
+	      --exclude '*ipynb_checkpoints' \
+        --exclude '*venv' \
+        --exclude 'download-cache' \
+        --exclude '*.iml' \
+        --exclude '.idea' \
+        --exclude 'spark/work' \
+        --exclude '*/.git/*' \
+        --exclude '*.git/*' \
+        --exclude '*.log' \
+        --exclude '*/.idea/*' \
+        --exclude 'work' \
+        --exclude '*.hdf5' \
+        --exclude '*.jpg' \
+        --exclude '*.png' \
+        --exclude 'examples/tmp' \
+        --exclude '*.rpm' \
+        --exclude '*/.vagrant' \
+        --exclude '*.vdi' \
+        --exclude 'storage' \
+        --exclude '.DS_Store' \
+        --exclude '.tox' \
+        --exclude '.github/' \
+        --exclude '.git/' \
+        --exclude '.pytest_cache/' \
+        --exclude '.tox' \
+        "$from" $to
+}
+
+
+
+
+
 function run() {
     ssh -t $master "cd /home/gpusrvadmin/vfl-benchmark && python3 -m poetry run stalactite master start \
     --detached \
@@ -106,6 +181,13 @@ function main () {
     echo "Executing command: ${cmd}"
 
     case "${cmd}" in
+
+    "upload")
+#        shift 1
+        sync true $yc_host "${@}"
+        sync true $vk_host "${@}"
+        sync true $sber_host "${@}"
+        ;;
 
     "help")
         help

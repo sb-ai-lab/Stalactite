@@ -1,0 +1,3 @@
+poetry run stalactite local \
+--multi-process start \
+--config-path /mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/examples/configs/logreg-sbol-smm-multiprocess.yml
