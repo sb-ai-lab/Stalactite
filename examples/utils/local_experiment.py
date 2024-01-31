@@ -81,14 +81,11 @@ def load_parameters(config_path: str):
             )
 
         processors = [
-            ImagePreprocessor(dataset=dataset[i], member_id=i, data_params=params[i].data) for i, v in dataset.items()
+            ImagePreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
-        input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
+        # input_dims_list = [[619], [392, 392], [204, 250, 165], [], [108, 146, 150, 147, 68]]
 
     elif config.data.dataset.lower() == "sbol":
-        smm = "smm_" if config.data.use_smm else ""
-        dim = 1356 if smm == "smm_" else 1345
-        # input_dims_list = [[0], [1345, 11]]
 
         dataset = {}
 
@@ -97,14 +94,14 @@ def load_parameters(config_path: str):
                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
             )
         processors = [
-            TabularPreprocessor(dataset=dataset[i], member_id=i, data_params=config.data) for i, v in dataset.items()
+            TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
-        input_dims_list = [[0], [1345, 11]]
+        # input_dims_list = [[0], [1345, 11]]
 
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return input_dims_list, config.data, processors
+    return config.data, processors
 
 def run(config_path: Optional[str] = None):
     if config_path is None:
@@ -147,7 +144,7 @@ def run(config_path: Optional[str] = None):
     if config.master.run_mlflow:
         mlflow.log_params(log_params)
 
-    input_dims_list, params, processors = load_parameters(config_path)
+    params, processors = load_parameters(config_path)
 
     # todo: hide this in preprocessor
     num_dataset_records = [200 + random.randint(100, 1000) for _ in range(config.common.world_size)]
@@ -185,27 +182,28 @@ def run(config_path: Optional[str] = None):
         run_mlflow=config.master.run_mlflow,
     )
 
-    if 'logreg' in model_name:
-        model = lambda member_rank: LogisticRegressionBatch(
-            input_dim=input_dims_list[config.common.world_size - 1][member_rank],
-            output_dim=n_labels,
-            learning_rate=config.common.learning_rate,
-            class_weights=None,
-            init_weights=0.005
-        )
-    else:
-        model = lambda member_rank: LinearRegressionBatch(
-            input_dim=input_dims_list[config.common.world_size - 1][member_rank],
-            output_dim=1,
-            reg_lambda=0.2
-        )
+    # if 'logreg' in model_name:
+    #     model = lambda member_rank: LogisticRegressionBatch(
+    #         input_dim=input_dims_list[config.common.world_size - 1][member_rank],
+    #         output_dim=n_labels,
+    #         learning_rate=config.common.learning_rate,
+    #         class_weights=None,
+    #         init_weights=0.005
+    #     )
+    # else:
+    #     model = lambda member_rank: LinearRegressionBatch(
+    #         input_dim=input_dims_list[config.common.world_size - 1][member_rank],
+    #         output_dim=1,
+    #         reg_lambda=0.2
+    #     )
 
     members = [
         PartyMemberImpl(
             uid=f"member-{member_rank}",
-            model_update_dim_size=input_dims_list[config.common.world_size - 1][member_rank],
+            # model_update_dim_size=input_dims_list[config.common.world_size - 1][member_rank],
             member_record_uids=member_uids,
-            model=model(member_rank),
+            # model=model(member_rank),
+            model_name=config.common.vfl_model_name,
             processor=processors[member_rank],
             batch_size=config.common.batch_size,
             epochs=config.common.epochs,

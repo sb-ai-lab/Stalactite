@@ -5,9 +5,11 @@ from stalactite.data_preprocessors import FullDataTensor, PILImageToTensor, Remo
 
 
 class ImagePreprocessor:
-    def __init__(self, dataset: datasets.DatasetDict,  member_id, data_params=None):
+    def __init__(self, dataset: datasets.DatasetDict,  member_id, params=None):
         self.dataset = dataset
-        self.data_params = data_params
+        self.common_params = params.common
+        self.data_params = params.data.copy()
+        self.data_params.features_key = self.data_params.features_key + str(member_id)
         self.member_id = member_id
 
     def fit_transform(self):

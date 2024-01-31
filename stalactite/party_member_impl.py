@@ -8,6 +8,7 @@ from datasets.dataset_dict import DatasetDict
 from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
 from stalactite.batching import ListBatcher
 from stalactite.data_loader import AttrDict
+from stalactite.models import LinearRegressionBatch, LogisticRegressionBatch
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,10 @@ class PartyMemberImpl(PartyMember):
         uid: str,
         epochs: int,
         batch_size: int,
-        model_update_dim_size: int,
+        # model_update_dim_size: int,
         member_record_uids: List[str],
-        model: torch.nn.Module,
+        model_name: str,
+        # model: torch.nn.Module,
         # dataset: DatasetDict,
         # data_params: AttrDict,
         report_train_metrics_iteration: int,
@@ -34,11 +36,12 @@ class PartyMemberImpl(PartyMember):
         self._uids_to_use: Optional[List[str]] = None
         self.is_initialized = False
         self.is_finalized = False
-        self._weights: Optional[DataTensor] = None
-        self._weights_dim = model_update_dim_size
-        self._data: Optional[DataTensor] = None
+        # self._weights: Optional[DataTensor] = None
+        # self._weights_dim = model_update_dim_size
+        # self._data: Optional[DataTensor] = None
         self.iterations_counter = 0
-        self._model = model
+        # self._model = model
+        self._model_name = model_name
         # self._dataset = dataset
         # self._data_params = data_params
         self.report_train_metrics_iteration = report_train_metrics_iteration
@@ -69,12 +72,28 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: registering %s uids to be used." % (self.id, len(uids)))
         self._uids_to_use = uids
 
+    def initialize_model(self):
+        if self._model_name == "linreg":
+            self._model = LinearRegressionBatch(
+                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+                output_dim=1,
+            )
+        elif self._model_name == "logreg":
+            self._model = LogisticRegressionBatch(
+                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
+                learning_rate=self._common_params.learning_rate,
+                class_weights=None,
+                init_weights=0.005)
+        else:
+            raise ValueError("unknown model %s" % self._model_name)
+
     def initialize(self):
         logger.info("Member %s: initializing" % self.id)
-        self._weights = torch.rand(self._weights_dim)
-        self._data = torch.rand(len(self._uids_to_use), self._weights_dim)
         self._dataset = self.processor.fit_transform()
         self._data_params = self.processor.data_params
+        self._common_params = self.processor.common_params
+        self.initialize_model()
         self.is_initialized = True
         logger.info("Member %s: has been initialized" % self.id)
 
