@@ -1,6 +1,8 @@
+import torch
+import numpy as np
 import datasets
 
-from stalactite.data_preprocessors import FullDataTensor, RemoveZeroStdColumns, SkLearnStandardScaler
+from stalactite.data_preprocessors import FullDataTensor, SkLearnStandardScaler
 
 
 class TabularPreprocessor:
@@ -10,7 +12,6 @@ class TabularPreprocessor:
         self.data_params = params.data.copy()
         self.data_params.features_key = self.data_params.features_key + str(member_id)
         self.member_id = member_id
-        self_ds = None
 
     def fit_transform(self):
 
@@ -37,5 +38,20 @@ class TabularPreprocessor:
         ds_test = datasets.Dataset.from_dict(test_split_data, split=test_split_key)
         ds = datasets.DatasetDict({train_split_key: ds_train, test_split_key: ds_test})
         ds = ds.with_format("torch")
-
+        self._ds = ds
         return ds
+
+    def get_class_weights(self):
+
+        classes_idx = [x for x in range(self._ds[self.data_params.train_split][self.data_params.label_key].shape[1])]
+        y_train = self._ds[self.data_params.train_split][self.data_params.label_key]
+        pos_weights_list = []
+        for i, c_idx in enumerate(classes_idx):
+            unique, counts = np.unique(y_train[:, i], return_counts=True)
+            if unique.shape[0] < 2:
+                pos_weights_list.append(max(pos_weights_list))
+                continue
+            pos_weights_list.append(counts[0] / counts[1])
+        return torch.tensor(pos_weights_list)
+
+

@@ -54,6 +54,8 @@ class PartyMasterImpl(PartyMaster):
         ds = self.processor.fit_transform()
         self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
         self.test_target = ds[self.processor.data_params.test_split][self.processor.data_params.label_key]
+        self.class_weights = self.processor.get_class_weights()\
+            if self.processor.common_params.use_class_weights else None
         self.is_initialized = True
 
     def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
@@ -166,9 +168,9 @@ class PartyMasterImplLogreg(PartyMasterImpl):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        y = self.target[self._batch_size * subiter_seq_num : self._batch_size * (subiter_seq_num + 1)]
+        y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
 
-        criterion = torch.nn.BCEWithLogitsLoss()
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
         loss = criterion(torch.squeeze(predictions), y.float())
         grads = torch.autograd.grad(outputs=loss, inputs=predictions)
 
