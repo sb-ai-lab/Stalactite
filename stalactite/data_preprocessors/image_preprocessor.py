@@ -1,7 +1,8 @@
 import datasets
 import torch
+import numpy as np
 
-from stalactite.data_preprocessors import FullDataTensor, PILImageToTensor, RemoveZeroStdColumns, SkLearnStandardScaler
+from stalactite.data_preprocessors import FullDataTensor, PILImageToTensor, SkLearnStandardScaler
 
 
 class ImagePreprocessor:
@@ -40,7 +41,13 @@ class ImagePreprocessor:
         ds_test = datasets.Dataset.from_dict(test_split_data, split=test_split_key)
         ds = datasets.DatasetDict({train_split_key: ds_train, test_split_key: ds_test})
         ds = ds.with_format("torch")
-
+        self._ds = ds
         return ds
 
+    def get_class_weights(self):
 
+        y_train = self._ds[self.data_params.train_split][self.data_params.label_key]
+        pos_weights_list = []
+        unique, counts = np.unique(y_train, return_counts=True)
+        pos_weights_list.append(counts[0] / counts[1])
+        return torch.tensor(pos_weights_list)
