@@ -10,6 +10,7 @@ class TabularPreprocessor:
         self.data_params = params.data.copy()
         self.data_params.features_key = self.data_params.features_key + str(member_id)
         self.member_id = member_id
+        self_ds = None
 
     def fit_transform(self):
 
@@ -38,5 +39,3 @@ class TabularPreprocessor:
         ds = ds.with_format("torch")
 
         return ds
-
-
