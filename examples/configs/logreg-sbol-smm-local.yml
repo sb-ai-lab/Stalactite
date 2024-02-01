@@ -1,24 +1,30 @@
 common:
-  epochs: 5
+  epochs: 1
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
-  batch_size: 1000
-  experiment_label: experiment-vm
-  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports" #"/home/dmitriy/data/reports" #
+  batch_size: 2500
+  experiment_label: experiment-sbol_smm
+  reports_export_folder: "/home/dmitriy/data/reports" #
   vfl_model_name: logreg
   is_consequently: False
-  learning_rate: 0.01
+  learning_rate: 0.05
   use_class_weights: False
 
+prerequisites:
+  mlflow_host: 'node3.bdcl'
+  mlflow_port: '5555'
 
+master:
+  container_host: 'node3.bdcl'
+  run_mlflow: True
 
 data:
   random_seed: 0
-  dataset_size: 1000
+  dataset_size: 8500
   dataset: 'sbol'
   use_smm: True
-  host_path_data_dir: /Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2 # /home/dmitriy/data #
+  host_path_data_dir: /home/dmitriy/data/vfl_multilabel_sber_sample10000_parts2
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
