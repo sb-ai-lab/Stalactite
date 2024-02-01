@@ -69,5 +69,13 @@ class ConsecutiveListBatcher(ListBatcher):
                     iter_num += 1
                     iter_in_batch += 1
                     previous_batch = batch
-
+            for member in self.members:
+                yield TrainingIteration(
+                    seq_num=iter_num-1,
+                    subiter_seq_num=iter_in_batch-1,
+                    epoch=epoch_num,
+                    batch=batch,
+                    previous_batch=None,
+                    participating_members=[member]
+                )
         return _iter_func()

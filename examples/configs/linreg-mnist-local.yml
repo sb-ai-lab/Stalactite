@@ -1,21 +1,18 @@
 common:
   epochs: 5
-  world_size: 2
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  batch_size: 1000
+  world_size: 2
+  batch_size: 500 #2500
   experiment_label: experiment-mnist-local
-  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports"
-  rendezvous_timeout: 300
+  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports" #
   vfl_model_name: linreg
   is_consequently: False
-  use_class_weights: False
-  learning_rate: 0.01
-
+  learning_rate: 0.2
 
 data:
   random_seed: 0
-  dataset_size: 1000
+  dataset_size: 1000 #000
   dataset: 'mnist'
   use_smm: False
   host_path_data_dir: "/Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl/mnist_binary38_parts2"
