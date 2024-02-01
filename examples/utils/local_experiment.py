@@ -34,16 +34,6 @@ logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 
 
-# def compute_class_distribution(classes_idx: list, y: torch.Tensor, name: str) -> None:
-#     logger.info(f"{name} distribution")
-#     for i, c_idx in enumerate(classes_idx):
-#         unique, counts = np.unique(y[:, i], return_counts=True)
-#         logger.info(f"for class: {c_idx}")
-#         logger.info(np.asarray((unique, counts)).T)
-#         if unique.shape[0] < 2:
-#             raise ValueError(f"class {c_idx} has no label 1")
-
-
 def load_parameters(config_path: str):
     # BASE_PATH = Path(__file__).parent.parent.parent
 
@@ -112,14 +102,10 @@ def run(config_path: Optional[str] = None):
 
     params, processors = load_parameters(config_path)
 
+
+
+
     target_uids = [str(i) for i in range(config.data.dataset_size)]
-
-    # todo: add assigning class weights to preprocessor
-
-    #     class_weights = compute_class_weights(classes_idx, targets) if config.common.use_class_weights else None
-    #     if config.master.run_mlflow:
-    #         mlflow.log_param("class_weights", class_weights)
-    #     compute_class_distribution(classes_idx=classes_idx, y=test_targets, name="test")
 
     shared_party_info = dict()
     if 'logreg' in config.common.vfl_model_name:
