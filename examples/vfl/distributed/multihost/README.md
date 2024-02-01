@@ -8,7 +8,7 @@ YC is the master of the VFL experiment
 
 0. Upload the data to the machines by running (from the root-dir)
 ```bash
-bash examples/vfl/distributed/multihost/logreg_sbol_smm_distributed/run-distributed-experiment upload
+bash examples/utils/upload-files upload
 ```
 
 ### Launch

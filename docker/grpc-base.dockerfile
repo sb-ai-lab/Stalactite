@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED 1
 WORKDIR /opt
 
 COPY ./pyproject.toml /opt/pyproject.toml
-COPY ./poetry.lock /opt/poetry.lock
+#COPY ./poetry.lock /opt/poetry.lock
 COPY ./README.md /opt/README.md
 
 RUN pip install poetry

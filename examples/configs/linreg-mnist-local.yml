@@ -1,16 +1,16 @@
 common:
   epochs: 5
+  world_size: 2
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 2
   batch_size: 1000
-  experiment_label: experiment-mnist
-  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports" # "/home/dmitriy/data/reports" #
+  experiment_label: experiment-mnist-local
+  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports"
+  rendezvous_timeout: 300
   vfl_model_name: linreg
   is_consequently: False
-  learning_rate: 0.01
   use_class_weights: False
-#  random_seed: 0 # TODO
+  learning_rate: 0.01
 
 
 data:
@@ -18,9 +18,44 @@ data:
   dataset_size: 1000
   dataset: 'mnist'
   use_smm: False
-  host_path_data_dir: "/Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl/mnist_binary38_parts2"  #/Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl #  #
+  host_path_data_dir: "/Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl/mnist_binary38_parts2"
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
   features_key: "image_part_"
   label_key: "label"
+
+prerequisites:
+  mlflow_host: 0.0.0.0
+  mlflow_port: 5000
+  prometheus_host: 0.0.0.0
+  prometheus_port: 9090
+  grafana_port: 3000
+
+#grpc_server:
+#  host: 0.0.0.0
+#  port: 50051
+#  max_message_size: -1
+#  server_threadpool_max_workers: 10
+
+#grpc_arbiter:
+#  use_arbiter: False
+
+#master:
+#  logging_level: debug
+#  container_host: 0.0.0.0
+#  run_mlflow: False
+#  run_prometheus: False
+#  disconnect_idle_client_time: 120
+#  time_between_idle_connections_checks: 3
+#  recv_timeout: 360
+
+#member:
+#  logging_level: debug
+#  recv_timeout: 360
+#  heartbeat_interval: 2
+#  sent_task_timout: 3600
+
+#docker:
+#  docker_compose_path: "../prerequisites"
+#  docker_compose_command: "docker compose"

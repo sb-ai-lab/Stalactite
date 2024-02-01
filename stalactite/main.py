@@ -549,8 +549,8 @@ def start(ctx, config_path):
             )
             raise
     elif ctx.obj["single_process"] and not ctx.obj["multi_process"]:
-        master = get_party_master(config)
-        members = [get_party_member(config, member_rank=rank) for rank in range(config.common.world_size)]
+        master = get_party_master(config_path)
+        members = [get_party_member(config_path, member_rank=rank) for rank in range(config.common.world_size)]
         shared_party_info = dict()
         if config.master.run_mlflow:
             _mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
