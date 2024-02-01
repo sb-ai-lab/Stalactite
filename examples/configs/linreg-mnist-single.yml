@@ -1,5 +1,5 @@
 common:
-  epochs: 20
+  epochs: 2
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
@@ -25,7 +25,7 @@ data:
   dataset_size: 5000 #000
   dataset: 'mnist'
   use_smm: False
-  host_path_data_dir:  /home/dmitriy/data/mnist_binary38_parts2
+  host_path_data_dir:  /home/dmitriy/data/mnist_single
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
