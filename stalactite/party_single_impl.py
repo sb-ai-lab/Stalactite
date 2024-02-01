@@ -1,19 +1,16 @@
 from abc import abstractmethod
-from typing import List, Optional
+from typing import List
 import logging
 
 import mlflow
 import torch
-import scipy as sp
-from datasets.dataset_dict import DatasetDict
-from sklearn.metrics import mean_absolute_error, roc_auc_score, precision_recall_curve, auc
-from sklearn.linear_model import LogisticRegression as LogRegSklearn
 
-from stalactite.base import PartyMaster, DataTensor, PartyDataTensor
+from sklearn.metrics import mean_absolute_error, roc_auc_score
+
+from stalactite.base import DataTensor
 from stalactite.batching import Batcher, ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy
-from stalactite.models.linreg_batch import LinearRegressionBatch
-from stalactite.models.logreg_batch import LogisticRegressionBatch
+from stalactite.models import LogisticRegressionBatch, LinearRegressionBatch
 
 logger = logging.getLogger(__name__)
 
@@ -113,19 +110,19 @@ class PartySingle:
     def initialize(self):
         logger.info("Centralized experiment initializing")
 
-        ds = self.processor.fit_transform()
-        self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
-        self.test_target = ds[self.processor.data_params.test_split][self.processor.data_params.label_key]
+        self._dataset = self.processor.fit_transform()
 
-        self.x_train = ds[self.processor.data_params.train_split][self.processor.data_params.features_key]
-        self.x_test = ds[self.processor.data_params.test_split][self.processor.data_params.features_key]
+        self.x_train = self._dataset[self.processor.data_params.train_split][self.processor.data_params.features_key]
+        self.x_test = self._dataset[self.processor.data_params.test_split][self.processor.data_params.features_key]
+        self.target = self._dataset[self.processor.data_params.train_split][self.processor.data_params.label_key]
+        self.test_target = self._dataset[self.processor.data_params.test_split][self.processor.data_params.label_key]
 
         self.class_weights = self.processor.get_class_weights() \
             if self.processor.common_params.use_class_weights else None
 
-        self._dataset = self.processor.fit_transform()
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
+        self.n_labels = 19
         self.initialize_model()
         self.is_initialized = True
         logger.info("Centralized experiment is initialized")
@@ -135,7 +132,7 @@ class PartySingle:
         logger.info("Experiment has finished")
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
-        acc = ComputeAccuracy_numpy(is_linreg=self.model_name == "linreg", is_multilabel=self.is_multilabel)
+        acc = ComputeAccuracy_numpy(is_linreg=self.model_name == "linreg", is_multilabel=True)
 
         mae = mean_absolute_error(y.numpy(), predictions)
         acc = acc.compute(true_label=y.numpy(), predictions=predictions)
@@ -149,55 +146,24 @@ class PartySingle:
 
         if self.n_labels > 1:
             for avg in ["macro", "micro"]:
-                roc_auc = roc_auc_score(y.numpy(), predictions, average=avg)
+                try:
+                    roc_auc = roc_auc_score(y.numpy(), predictions, average=avg)
+                except ValueError:
+                    roc_auc = 0
                 if self.use_mlflow:
                     mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
                 else:
                     logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
 
-                if self._compute_inner_users and name == 'Test':
-                    roc_auc_inner = roc_auc_score(
-                        y.numpy()[self.test_inner_users, :],
-                        predictions[self.test_inner_users, :],
-                        average=avg
-                    )
-                    if self.use_mlflow:
-                        mlflow.log_metric(f"test_roc_auc_{avg}_inner", roc_auc_inner, step=step)
-                    else:
-                        logger.info(f'Test roc_auc_{avg}_inner on step {step}: {roc_auc_inner}')
-
-            roc_auc_list = []
-            roc_auc_list_inner = []
-            for i in range(self.n_labels):
-                roc_auc_list.append(roc_auc_score(y.numpy()[:, i], predictions[:, i]))
-                if self._compute_inner_users and name == 'Test':
-                    roc_auc_list_inner.append(
-                        roc_auc_score(y.numpy()[self.test_inner_users, i], predictions[self.test_inner_users, i])
-                    )
-
-            for i, cls in enumerate(self.classes_idx):
-                if self.use_mlflow:
-                    mlflow.log_metric(f"{name.lower()}_roc_auc_cls_{cls}", roc_auc_list[i])
-                    if self._compute_inner_users and name == 'Test':
-                        mlflow.log_metric(f"test_roc_auc_cls_{cls}_inner", roc_auc_list_inner[i])
-                else:
-                    logger.info(f"{name.lower()}_roc_auc_cls_{cls}: {roc_auc_list[i]}")
-                    if self._compute_inner_users and name == 'Test':
-                        logger.info(f"test_roc_auc_cls_{cls}_inner: {roc_auc_list_inner[i]}")
-
         else:
-            roc_auc = roc_auc_score(y.numpy(), predictions)
+            try:
+                roc_auc = roc_auc_score(y.numpy(), predictions)
+            except ValueError:
+                roc_auc = 0
             if self.use_mlflow:
                 mlflow.log_metric(f"{name.lower()}_roc_auc", roc_auc, step=step)
             else:
                 logger.info(f"{name} ROC AUC on step {step}: {roc_auc}")
-
-            p_train, r_train, _ = precision_recall_curve(y.numpy(), predictions)
-            pr_auc_train = auc(r_train, p_train)
-            if self.use_mlflow:
-                mlflow.log_metric(f"{name.lower()}_pr_auc", pr_auc_train, step=step)
-            else:
-                logger.info(f'{name} Precision-Recall score on step: {step}: {pr_auc_train}')
 
 
 class PartySingleLinreg(PartySingle):
@@ -224,30 +190,29 @@ class PartySingleLinreg(PartySingle):
         return self._model.predict(features).detach().numpy()
 
 
-# class PartySingleLogreg(PartySingle):
-#     model_name = 'logreg'
-#
-#     def update_weights(
-#             self,
-#             x: DataTensor,
-#             y: DataTensor,
-#     ):
-#         self._model.update_weights(x, y, is_single=True)
-#
-#     def _init_model(self):
-#         self._model = LogisticRegressionBatch(
-#             input_dim=self.input_dims[self.member_id],
-#             output_dim=self.n_labels,
-#             learning_rate=self.learning_rate,
-#             class_weights=None,  # TODO add!
-#             init_weights=0.005
-#         )
-#
-#     def compute_predictions(
-#             self,
-#             is_test: bool = False,
-#     ) -> DataTensor:
-#         features = self._x_test if is_test else self._x_train
-#         return torch.sigmoid(self._model.predict(features)).detach().numpy()
+class PartySingleLogreg(PartySingle):
+    model_name = 'logreg'
+
+    def update_weights(
+            self,
+            x: DataTensor,
+            y: DataTensor,
+    ):
+        self._model.update_weights(x, y, is_single=True)
+
+    def initialize_model(self):
+        self._model = LogisticRegressionBatch(
+                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
+                learning_rate=self._common_params.learning_rate,
+                class_weights=self.class_weights,
+                init_weights=0.005)
+
+    def compute_predictions(
+            self,
+            is_test: bool = False,
+    ) -> DataTensor:
+        features = self.x_test if is_test else self.x_train
+        return torch.sigmoid(self._model.predict(features)).detach().numpy()
 
 

@@ -1,34 +1,14 @@
 import os
 import logging
-import pickle
 from pathlib import Path
-import uuid
-import random
-import threading
-from threading import Thread
-from typing import List, Optional
+from typing import Optional
 
-import torch
 import mlflow
-import numpy as np
 import datasets
-import scipy as sp
-from sklearn.metrics import mean_absolute_error,  roc_auc_score, precision_recall_curve, auc
-from datasets import DatasetDict
-from sklearn.linear_model import LogisticRegression as LogRegSklearn
 
-from stalactite.models.linreg_batch import LinearRegressionBatch
-from stalactite.models.logreg_batch import LogisticRegressionBatch
-from stalactite.party_member_impl import PartyMemberImpl
-from stalactite.data_loader import load, init, DataPreprocessor
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
-from stalactite.batching import ListBatcher
-from stalactite.metrics import ComputeAccuracy_numpy
-from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
-from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
-from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
-from stalactite.party_single_impl import PartySingleLinreg#, PartySingleLogreg
+from stalactite.party_single_impl import PartySingleLinreg, PartySingleLogreg
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -96,17 +76,6 @@ def run(config_path: Optional[str] = None):
 
     params, processors = load_parameters(config_path)
 
-    # uid = member_uid,
-    # member_record_uids = target_uids,
-    # model_name = config.common.vfl_model_name,
-    # processor = processors[member_rank],
-    # batch_size = config.common.batch_size,
-    # epochs = config.common.epochs,
-    # report_train_metrics_iteration = config.common.report_train_metrics_iteration,
-    # report_test_metrics_iteration = config.common.report_test_metrics_iteration,
-    # is_consequently = config.common.is_consequently,
-    # members = member_ids if config.common.is_consequently else None,
-
     if model_name == "linreg":
         party = PartySingleLinreg(
             processor=processors[0],
@@ -117,38 +86,14 @@ def run(config_path: Optional[str] = None):
             use_mlflow=config.master.run_mlflow
         )
 
-    # dataset = datasets_list,
-    # dataset_size = config.data.dataset_size,
-    # epochs = epochs,
-    # batch_size = batch_size,
-    # features_key = features_key,
-    # labels_key = labels_key,
-    # output_dim = output_dim,
-    # use_mlflow = config.master.run_mlflow,
-    # test_inner_users = None,
-    # report_train_metrics_iteration = config.common.report_train_metrics_iteration,
-    # report_test_metrics_iteration = config.common.report_test_metrics_iteration,
-    # is_multilabel = is_multilabel,
-    # input_dims = [619],
-    # learning_rate = learning_rate,
-
-
     elif model_name == "logreg":
         party = PartySingleLogreg(
-            dataset=datasets_list,
-            dataset_size=config.data.dataset_size,
-            epochs=epochs,
-            batch_size=batch_size,
-            features_key=features_key,
-            labels_key=labels_key,
-            output_dim=output_dim,
-            use_mlflow=config.master.run_mlflow,
-            test_inner_users=None,
+            processor=processors[0],
+            batch_size=config.common.batch_size,
+            epochs=config.common.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-            is_multilabel=is_multilabel,
-            input_dims=[619],
-            learning_rate=learning_rate,
+            use_mlflow=config.master.run_mlflow
         )
     else:
         raise ValueError(f"unknown model name: {model_name}")
