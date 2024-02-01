@@ -4,7 +4,7 @@ common:
   report_test_metrics_iteration: 1
   world_size: 2
   batch_size: 1000
-  experiment_label: experiment-mnist
+  experiment_label: experiment-mnist-sequential-local
   reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports" # "/home/dmitriy/data/reports" #
   vfl_model_name: linreg
   is_consequently: True
@@ -24,3 +24,11 @@ data:
   test_split: "train_val" # name of the test split
   features_key: "image_part_"
   label_key: "label"
+
+
+prerequisites:
+  mlflow_host: node3.bdcl
+  mlflow_port: "5555"
+
+master:
+  run_mlflow: True

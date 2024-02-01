@@ -22,9 +22,9 @@ data:
   features_key: "image_part_"
   label_key: "label"
 
-#prerequisites:
-#  mlflow_host: 0.0.0.0
-#  mlflow_port: "5000"
+prerequisites:
+  mlflow_host: node3.bdcl
+  mlflow_port: "5555"
 #  prometheus_host: 0.0.0.0
 #  prometheus_port: "9090"
 #  grafana_port: "3000"
@@ -38,10 +38,10 @@ data:
 #grpc_arbiter:
 #  use_arbiter: False
 
-#master:
+master:
+  run_mlflow: True
 #  logging_level: debug
 #  container_host: 0.0.0.0
-#  run_mlflow: False
 #  run_prometheus: False
 #  disconnect_idle_client_time: 120
 #  time_between_idle_connections_checks: 3
