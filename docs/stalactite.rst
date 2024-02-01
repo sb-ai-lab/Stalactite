@@ -9,29 +9,25 @@ Subpackages
 
    stalactite.communications
    stalactite.data_preprocessors
+   stalactite.models
 
 Submodules
 ----------
-
-stalactite.base module
-----------------------
-
-.. automodule:: stalactite.base
-   :members:
-   :show-inheritance:
 
 stalactite.batching module
 --------------------------
 
 .. automodule:: stalactite.batching
    :members:
+   :undoc-members:
    :show-inheritance:
 
 stalactite.configs module
 -------------------------
 
 .. automodule:: stalactite.configs
-   :members:
+   :members: VFLConfig
+   :no-undoc-members:
    :show-inheritance:
 
 stalactite.data\_loader module
@@ -39,41 +35,25 @@ stalactite.data\_loader module
 
 .. automodule:: stalactite.data_loader
    :members:
+   :no-undoc-members:
    :show-inheritance:
 
-stalactite.data\_utils module
------------------------------
-
-.. automodule:: stalactite.data_utils
-   :members:
-   :show-inheritance:
-
-stalactite.main module
-----------------------
-
-.. automodule:: stalactite.main
-   :members:
-   :show-inheritance:
 
 stalactite.metrics module
 -------------------------
 
 .. automodule:: stalactite.metrics
    :members:
+   :undoc-members:
    :show-inheritance:
 
-stalactite.mocks module
------------------------
-
-.. automodule:: stalactite.mocks
-   :members:
-   :show-inheritance:
 
 stalactite.party\_master\_impl module
 -------------------------------------
 
 .. automodule:: stalactite.party_master_impl
    :members:
+   :undoc-members:
    :show-inheritance:
 
 stalactite.party\_member\_impl module
@@ -81,14 +61,30 @@ stalactite.party\_member\_impl module
 
 .. automodule:: stalactite.party_member_impl
    :members:
+   :undoc-members:
    :show-inheritance:
+
 
 stalactite.run\_grpc\_master module
 -----------------------------------
+
+.. automodule:: stalactite.run_grpc_master
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+stalactite.run\_grpc\_member module
+-----------------------------------
+
+.. automodule:: stalactite.run_grpc_member
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Module contents
 ---------------
 
 .. automodule:: stalactite
    :members:
+   :undoc-members:
    :show-inheritance:
