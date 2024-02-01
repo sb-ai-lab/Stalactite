@@ -1,5 +1,5 @@
 common:
-  experiment_label: experiment-vm
+  experiment_label: experiment-logreg-sbol-smm-yc
   reports_export_folder: "/home/gpusrvadmin/vfl-benchmark/reports"
   epochs: 5
   report_train_metrics_iteration: 1
@@ -52,3 +52,4 @@ member:
 docker:
   docker_compose_command: "docker compose"
   docker_compose_path: '/home/gpusrvadmin/vfl-benchmark/prerequisites'
+  use_gpu: False

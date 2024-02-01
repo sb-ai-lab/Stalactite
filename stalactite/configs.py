@@ -231,6 +231,11 @@ class DockerConfig(BaseModel):
     docker_compose_command: str = Field(
         default="docker compose", description="Docker compose command to use (`docker compose` | `docker-compose`)"
     )
+    use_gpu: bool = Field(
+        default=False,
+        description='Set to True is your system uses GPU (required for torch dependencies'
+    )
+
 
     @field_validator("docker_compose_path")
     @classmethod

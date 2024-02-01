@@ -56,6 +56,7 @@ member:
 docker:
   docker_compose_command: "docker compose"
   docker_compose_path: '/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/prerequisites'
+  use_gpu: False
 
 
 #grpc_arbiter:

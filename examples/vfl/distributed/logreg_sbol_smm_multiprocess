@@ -14,7 +14,7 @@ function halt() {
 
 
 function master_logs() {
-  poetry run stalactite local --multi-process logs --agent-id
+  poetry run stalactite local --multi-process logs --agent-id master-agent-vfl
 }
 
 

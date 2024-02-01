@@ -13,7 +13,8 @@ RUN pip install poetry
 
 RUN poetry config virtualenvs.create false
 # RUN poetry lock --no-update # TODO do we need to lock?
-RUN poetry run pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu121
+RUN poetry run pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
+
 RUN poetry install --no-root
 
 COPY ./stalactite /opt/stalactite

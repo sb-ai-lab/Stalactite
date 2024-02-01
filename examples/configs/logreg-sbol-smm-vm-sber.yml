@@ -60,3 +60,4 @@ grpc_arbiter:
 docker:
   docker_compose_command: "docker compose"
   docker_compose_path: '/root/vfl-exp/vfl-benchmark/prerequisites'
+  use_gpu: False

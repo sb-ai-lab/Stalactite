@@ -25,12 +25,12 @@ data:
   features_key: "image_part_"
   label_key: "label"
 
-prerequisites:
-  mlflow_host: 0.0.0.0
-  mlflow_port: 5000
-  prometheus_host: 0.0.0.0
-  prometheus_port: 9090
-  grafana_port: 3000
+#prerequisites:
+#  mlflow_host: 0.0.0.0
+#  mlflow_port: "5000"
+#  prometheus_host: 0.0.0.0
+#  prometheus_port: "9090"
+#  grafana_port: "3000"
 
 #grpc_server:
 #  host: 0.0.0.0

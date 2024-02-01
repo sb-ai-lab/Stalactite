@@ -150,7 +150,7 @@ function halt() {
 
 function master_logs() {
     _exec_remotely "cd /home/gpusrvadmin/vfl-benchmark \
-    && python3 -m poetry run stalactite master logs" "${master[@]}"
+    && python3 -m poetry run stalactite master logs --follow" "${master[@]}"
 }
 
 function help() {
