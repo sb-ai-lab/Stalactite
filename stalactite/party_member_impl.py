@@ -89,7 +89,7 @@ class PartyMemberImpl(PartyMember):
         if self._model_name == "linreg":
             self._model = LinearRegressionBatch(
                 input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                output_dim=1,
+                output_dim=1, reg_lambda=0.5
             )
         elif self._model_name == "logreg":
             self._model = LogisticRegressionBatch(
