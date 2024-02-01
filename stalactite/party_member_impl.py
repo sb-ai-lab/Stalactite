@@ -61,7 +61,7 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: making a batcher for uids" % (self.id))
         self._check_if_ready()
         if not self.is_consequently:
-            self._batcher = ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size) #todo: why members=None
+            self._batcher = ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
         else:
             self._batcher = ConsecutiveListBatcher(
                 epochs=self.epochs, members=self.members, uids=uids, batch_size=self._batch_size
@@ -125,7 +125,7 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        self._model.update_weights(X_train, upd) #todo: retutrn: debug
+        self._model.update_weights(X_train, upd)
         logger.info("Member %s: successfully updated weights" % self.id)
 
     def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
