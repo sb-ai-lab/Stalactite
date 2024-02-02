@@ -13,6 +13,11 @@ for benchmarking various models and algorithms.
 .. note::
    This project is under active development.
 
+.. toctree::
+   :maxdepth: 4
+   :caption: Quickstart:
+
+   quickstart
 
 .. toctree::
    :maxdepth: 4

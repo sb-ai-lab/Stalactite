@@ -1,6 +1,8 @@
 stalactite.communications package
 =================================
 
+Stalactite.communications contains two available backends for running experiments
+
 Submodules
 ----------
 
