@@ -1,5 +1,11 @@
+"""Centralized (non-VFL) experiment runner.
+
+This module contains the implementation of a centralized experiment for federated learning.
+It includes classes for logistic regression and linear regression centralized models training.
+"""
+
 from abc import abstractmethod
-from typing import List
+from typing import List, Optional
 import logging
 
 import mlflow
@@ -11,6 +17,7 @@ from stalactite.base import DataTensor
 from stalactite.batching import Batcher, ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.models import LogisticRegressionBatch, LinearRegressionBatch
+from stalactite.data_preprocessors.base_preprocessor import DataPreprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +28,8 @@ logger.addHandler(sh)
 
 
 class PartySingle:
+    """ Single-agent (centralized) experiment runner class. """
+
     model_name: str
     member_id = 0
 
@@ -28,13 +37,25 @@ class PartySingle:
             self,
             epochs: int,
             batch_size: int,
-            processor=None,
+            processor: Optional[DataPreprocessor] = None,
             use_mlflow: bool = False,
             report_train_metrics_iteration: int = 1,
             report_test_metrics_iteration: int = 1,
             learning_rate: float = 0.01,
 
-    ):
+    ) -> None:
+        """Initialize PartySingle instance.
+
+        :param epochs: Number of epochs to train a model.
+        :param batch_size: Batch size used for training.
+        :param processor: Data preprocessor.
+        :param use_mlflow: Flag indicating whether to log metrics to MlFlow.
+        :param report_train_metrics_iteration: Number of iteration steps between reporting metrics on train dataset
+               split.
+        :param report_test_metrics_iteration: Number of iteration steps between reporting metrics on test dataset split.
+        :param learning_rate: Learning rate.
+        :return: None
+        """
         self.epochs = epochs
         self.batch_size = batch_size
         self.use_mlflow = use_mlflow
@@ -46,13 +67,22 @@ class PartySingle:
         self.is_initialized = False
         self.is_finalized = False
 
-    def run(self):
+    def run(self) -> None:
+        """ Run centralized experiment.
+
+        :return: None
+        """
         self.initialize()
         uids = self.synchronize_uids()
         self.loop(batcher=self.make_batcher(uids=uids))
         self.finalize()
 
-    def loop(self, batcher: Batcher):
+    def loop(self, batcher: Batcher) -> None:
+        """ Perform training iterations using the given batcher.
+
+        :param batcher: An iterable batch generator used for training.
+        :return: None
+        """
         for titer in batcher:
             step = titer.seq_num
             logger.debug(f"batch: {step}")
@@ -77,9 +107,18 @@ class PartySingle:
                 self.report_metrics(self.test_target, predictions_test, name="Test", step=step)
 
     def synchronize_uids(self) -> List[str]:
+        """ Get the uuids for current experiment.
+
+        :return: List of UUIDs as strings.
+        """
         return [str(x) for x in range(self.target.shape[0])]
 
     def make_batcher(self, uids: List[str]) -> Batcher:
+        """ Create a batcher based on the provided UUIDs.
+
+        :param uids: List of UUIDs.
+        :return: A Batcher object.
+        """
         return ListBatcher(
             epochs=self.epochs,
             members=[str(x) for x in range(10)],
@@ -89,25 +128,37 @@ class PartySingle:
         )
 
     @abstractmethod
-    def update_weights(
-            self,
-            x: DataTensor,
-            y: DataTensor,
-    ):
+    def update_weights(self, x: DataTensor, y: DataTensor):
+        """Update the model weights based on the input features and target values.
+
+        :param x: Input features.
+        :param y: Target values.
+        :return: None
+        """
         ...
 
     @abstractmethod
-    def compute_predictions(
-            self,
-            is_test: bool = False,
-    ) -> DataTensor:
+    def compute_predictions(self, is_test: bool = False) -> DataTensor:
+        """Compute predictions using the current model.
+
+        :param is_test: Flag indicating whether to compute predictions for the test set.
+        :return: Predicted values.
+        """
         ...
 
     @abstractmethod
-    def initialize_model(self):
+    def initialize_model(self) -> None:
+        """Initialize the model to train.
+
+        :return: None
+        """
         ...
 
-    def initialize(self):
+    def initialize(self) -> None:
+        """ Initialize the centralized experiment.
+
+        :return: None
+        """
         logger.info("Centralized experiment initializing")
 
         self._dataset = self.processor.fit_transform()
@@ -127,11 +178,26 @@ class PartySingle:
         self.is_initialized = True
         logger.info("Centralized experiment is initialized")
 
-    def finalize(self):
+    def finalize(self) -> None:
+        """Finalize the experiment.
+
+        :return: None
+        """
         self.is_finalized = True
         logger.info("Experiment has finished")
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
+        """Report metrics based on target values, predictions, and name.
+
+        Compute main metrics, if `use_mlflow` parameter was set to true, log them to MlFLow,
+        otherwise, log them to stdout.
+
+        :param y: Target values.
+        :param predictions: Predicted values.
+        :param name: Name for the metrics report (`Train`, `Test`).
+        :param step: Current step or iteration.
+        :return: None
+        """
         acc = ComputeAccuracy_numpy(is_linreg=self.model_name == "linreg", is_multilabel=True)
 
         mae = mean_absolute_error(y.numpy(), predictions)
@@ -167,6 +233,8 @@ class PartySingle:
 
 
 class PartySingleLinreg(PartySingle):
+    """ Single-agent (centralized) experiment runner class, implementing the regression algorithm using linear
+    regression model. """
     model_name = 'linreg'
 
     def update_weights(
@@ -191,6 +259,8 @@ class PartySingleLinreg(PartySingle):
 
 
 class PartySingleLogreg(PartySingle):
+    """ Single-agent (centralized) experiment runner class, implementing the classification algorithm using logistic
+    regression model. """
     model_name = 'logreg'
 
     def update_weights(
@@ -202,11 +272,11 @@ class PartySingleLogreg(PartySingle):
 
     def initialize_model(self):
         self._model = LogisticRegressionBatch(
-                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
-                learning_rate=self._common_params.learning_rate,
-                class_weights=self.class_weights,
-                init_weights=0.005)
+            input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+            output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
+            learning_rate=self._common_params.learning_rate,
+            class_weights=self.class_weights,
+            init_weights=0.005)
 
     def compute_predictions(
             self,
@@ -214,5 +284,3 @@ class PartySingleLogreg(PartySingle):
     ) -> DataTensor:
         features = self.x_test if is_test else self.x_train
         return torch.sigmoid(self._model.predict(features)).detach().numpy()
-
-

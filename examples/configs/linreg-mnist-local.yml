@@ -5,7 +5,7 @@ common:
   world_size: 2
   batch_size: 5000 #2500
   experiment_label: experiment-mnist-local
-  reports_export_folder: "/home/dmitriy/data/reports" #
+  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports" #
   vfl_model_name: linreg
   is_consequently: False
   learning_rate: 0.2

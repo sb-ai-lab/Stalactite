@@ -74,8 +74,14 @@ class CommonConfig(BaseModel):
 
     epochs: int = Field(default=3, description="Number of epochs to train a model")
     world_size: int = Field(default=2, description="Number of the VFL member agents (without the master)")
-    report_train_metrics_iteration: int = Field(default=1)
-    report_test_metrics_iteration: int = Field(default=1)
+    report_train_metrics_iteration: int = Field(
+        default=1,
+        description="Number of iteration steps between reporting metrics on train dataset split."
+    )
+    report_test_metrics_iteration: int = Field(
+        default=1,
+        description="Number of iteration steps between reporting metrics on test dataset split."
+    )
     batch_size: int = Field(default=100, description="Batch size used for training")
     experiment_label: str = Field(
         default="default-experiment",
