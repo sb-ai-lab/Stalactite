@@ -28,6 +28,7 @@ from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequ
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
+from examples.utils.prepare_mnist import load_data as load_mnist
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -35,11 +36,14 @@ logger = logging.getLogger(__name__)
 
 
 def load_parameters(config_path: str):
-    # BASE_PATH = Path(__file__).parent.parent.parent
 
     config = VFLConfig.load_and_validate(config_path)
 
     if config.data.dataset.lower() == "mnist":
+
+        if not os.path.exists(config.data.host_path_data_dir):
+            load_mnist(config.data.host_path_data_dir, config.common.world_size)
+
         dataset = {}
         for m in range(config.common.world_size):
             dataset[m] = datasets.load_from_disk(
@@ -101,9 +105,6 @@ def run(config_path: Optional[str] = None):
         mlflow.log_params(log_params)
 
     params, processors = load_parameters(config_path)
-
-
-
 
     target_uids = [str(i) for i in range(config.data.dataset_size)]
 
