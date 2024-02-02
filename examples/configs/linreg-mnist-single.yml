@@ -1,11 +1,11 @@
 common:
-  epochs: 2
+  epochs: 1
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
   batch_size: 5000
   experiment_label: experiment-mnist-centralized
-  reports_export_folder: "/Users/anastasiazaharova/Desktop/vfl-benchmark/reports"  #
+  reports_export_folder: "/home/dmitriy/data/reports"  #
   vfl_model_name: linreg
   is_consequently: False
   learning_rate: 0.2
@@ -13,11 +13,11 @@ common:
 #  random_seed: 0 # TODO
 
 prerequisites:
-  mlflow_host: 'node3.bdcl'
-  mlflow_port: '5555'
+  mlflow_host: 'node16.bdcl'
+  mlflow_port: '9876'
 
 master:
-  container_host: 'node3.bdcl'
+  container_host: 'node16.bdcl'
   run_mlflow: True
 
 data:
@@ -25,7 +25,7 @@ data:
   dataset_size: 5000 #000
   dataset: 'mnist'
   use_smm: False
-  host_path_data_dir:  /Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl/mnist_single
+  host_path_data_dir:  /home/dmitriy/data/mnist_single
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split

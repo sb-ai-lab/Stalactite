@@ -9,6 +9,8 @@ import datasets
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
 from stalactite.configs import VFLConfig
 from stalactite.party_single_impl import PartySingleLinreg, PartySingleLogreg
+from examples.utils.prepare_mnist import load_data as load_mnist
+from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -20,17 +22,32 @@ def load_parameters(config_path: str):
 
     config = VFLConfig.load_and_validate(config_path)
 
-    dataset = {0: datasets.load_from_disk(
-        os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
-    )}
+
+
+
+
 
     if config.data.dataset.lower() == "mnist":
+
+        if not os.path.exists(config.data.host_path_data_dir):
+            load_mnist(config.data.host_path_data_dir, parts_num=1)
+
+        dataset = {0: datasets.load_from_disk(
+            os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
+        )}
 
         processors = [
             ImagePreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
 
     elif config.data.dataset.lower() == "sbol":
+
+        if not os.path.exists(config.data.host_path_data_dir):
+            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1)
+
+        dataset = {0: datasets.load_from_disk(
+            os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
+        )}
 
         processors = [
             TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
