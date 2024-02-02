@@ -29,6 +29,7 @@ from stalactite.communications.local import LocalMasterPartyCommunicator, LocalM
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
 from examples.utils.prepare_mnist import load_data as load_mnist
+from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -57,6 +58,8 @@ def load_parameters(config_path: str):
     elif config.data.dataset.lower() == "sbol":
 
         dataset = {}
+        if not os.path.exists(config.data.host_path_data_dir):
+            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=2)
 
         for m in range(config.common.world_size):
             dataset[m] = datasets.load_from_disk(
