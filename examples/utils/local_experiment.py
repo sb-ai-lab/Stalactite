@@ -20,7 +20,7 @@ from sklearn.linear_model import LogisticRegression as LogRegSklearn
 from stalactite.models.linreg_batch import LinearRegressionBatch
 from stalactite.models.logreg_batch import LogisticRegressionBatch
 from stalactite.party_member_impl import PartyMemberImpl
-from stalactite.data_loader import load, init, DataPreprocessor
+# from stalactite.data_loader import load, init, DataPreprocessor
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
 from stalactite.batching import ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy

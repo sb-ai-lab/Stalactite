@@ -55,11 +55,11 @@ data into the config file field: ``
 
 Local (single process multiple threads) experiments examples:
 - `examples/vfl/local/linreg_mnist_local.py` launches the local linear regression example on MNIST dataset.
-The YAML file for this experiment `examples/configs/local/linreg-mnist-local.yml` configures main common and data 
+The YAML file for this experiment `examples/configs/linreg-mnist-local.yml` configures main common and data 
 parameters required for the launch. 
 - `examples/vfl/local/linreg_mnist_seq_local.py` launches the local linear regression example on MNIST dataset with 
 sequential updates on members. The configuration for this experiment is in 
-`examples/configs/local/linreg-mnist-seq-local.yml` is basically same to the previous example, except for the 
+`examples/configs/linreg-mnist-seq-local.yml` is basically same to the previous example, except for the 
 `common.is_consequently=True`.
 - The `examples/vfl/local/logreg_sbol_smm_local.py`, launching the multilabel classification with 
 logistic regression on SBOL and SMM datasets.

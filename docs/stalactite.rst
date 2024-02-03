@@ -14,6 +14,39 @@ Subpackages
 Submodules
 ----------
 
+stalactite.base module
+--------------------------
+
+.. automodule:: stalactite.base
+   :members: PartyCommunicator, PartyMaster, PartyMember
+   :undoc-members:
+
+
+stalactite.party\_master\_impl module
+-------------------------------------
+
+.. automodule:: stalactite.party_master_impl
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+stalactite.party\_member\_impl module
+-------------------------------------
+
+.. automodule:: stalactite.party_member_impl
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+stalactite.party\_single\_impl module
+-------------------------------------
+
+.. automodule:: stalactite.party_single_impl
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
 stalactite.batching module
 --------------------------
 
@@ -47,39 +80,6 @@ stalactite.metrics module
    :undoc-members:
    :show-inheritance:
 
-
-stalactite.party\_master\_impl module
--------------------------------------
-
-.. automodule:: stalactite.party_master_impl
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-stalactite.party\_member\_impl module
--------------------------------------
-
-.. automodule:: stalactite.party_member_impl
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-
-stalactite.run\_grpc\_master module
------------------------------------
-
-.. automodule:: stalactite.run_grpc_master
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-stalactite.run\_grpc\_member module
------------------------------------
-
-.. automodule:: stalactite.run_grpc_member
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 Module contents
 ---------------

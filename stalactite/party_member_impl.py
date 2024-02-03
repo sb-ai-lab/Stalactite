@@ -7,7 +7,7 @@ from datasets.dataset_dict import DatasetDict
 
 from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
 from stalactite.batching import ListBatcher, ConsecutiveListBatcher
-from stalactite.data_loader import AttrDict
+# from stalactite.data_loader import AttrDict
 from stalactite.models import LinearRegressionBatch, LogisticRegressionBatch
 
 logger = logging.getLogger(__name__)
@@ -113,8 +113,7 @@ class PartyMemberImpl(PartyMember):
         return self._uids
 
     def register_records_uids(self, uids: List[str]) -> None:
-        """
-        Register unique identifiers to be used.
+        """ Register unique identifiers to be used.
 
         :param uids: List of unique identifiers.
         :return: None

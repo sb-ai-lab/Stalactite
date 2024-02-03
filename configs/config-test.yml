@@ -9,6 +9,11 @@ common:
   batch_size: 1000
   experiment_label: test-experiment-0
   reports_export_folder: "." # todo: Path to export tests logs and reports
+  vfl_model_name: linreg
+  is_consequently: False
+  learning_rate: 0.2
+  use_class_weights: False
+  rendezvous_timeout: 360
 
 prerequisites:
   mlflow_host: 'node3.bdcl'
@@ -21,21 +26,35 @@ data:
   random_seed: 0
   dataset_size: 1000
   host_path_data_dir: "." # todo: Path to directory containing pickled datasets
+  dataset: 'mnist'
+  use_smm: False
+  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
+  train_split: "train_train" # name of the train split
+  test_split: "train_val" # name of the test split
+  features_key: "image_part_"
+  label_key: "label"
 
 grpc_server:
   host: '0.0.0.0'
   port: '50051'
   max_message_size: -1
+  server_threadpool_max_workers: 10
 
 master:
+  container_host: 0.0.0.0
   run_mlflow: True
   run_prometheus: True
   logging_level: 'debug'
   disconnect_idle_client_time: 120.
+  recv_timeout: 360
+  time_between_idle_connections_checks: 3
 
 member:
   logging_level: 'debug'
   heartbeat_interval: 2.
+  recv_timeout: 360
+  sent_task_timout: 3600
+
 
 grpc_arbiter:
   container_host: 'node3.bdcl'
@@ -59,4 +78,4 @@ grpc_arbiter:
 docker:
   docker_compose_command: "docker compose"
   docker_compose_path: "." # todo: Path to the docker-compose.yml file and prerequisites configs/
-
+  use_gpu: False

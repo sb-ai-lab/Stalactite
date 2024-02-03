@@ -15,7 +15,7 @@ data:
   dataset_size: 5000 #000
   dataset: 'mnist'
   use_smm: False
-  host_path_data_dir:  /home/dmitriy/data/test_mnist_parts2/ #mnist_binary38_parts2
+  host_path_data_dir:  /Users/anastasiazaharova/Desktop/vfl-benchmark/data/sber_ds_vfl/mnist_binary38_parts2
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split

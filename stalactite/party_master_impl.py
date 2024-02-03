@@ -175,7 +175,7 @@ class PartyMasterImpl(PartyMaster):
 
         return [self.updates[member_id] for member_id in participating_members]
 
-    def finalize(self):
+    def finalize(self) -> None:
         """ Finalize the party master. """
         logger.info("Master %s: finalizing" % self.id)
         self._check_if_ready()
@@ -251,14 +251,14 @@ class PartyMasterImplLogreg(PartyMasterImpl):
     ) -> List[DataTensor]:
         """ Compute updates for logistic regression.
 
-         :param participating_members: List of participating party members identifiers.
-         :param predictions: Model predictions.
-         :param party_predictions: List of party predictions.
-         :param world_size: Number of party members.
-         :param subiter_seq_num: Sub-iteration sequence number.
+        :param participating_members: List of participating party members identifiers.
+        :param predictions: Model predictions.
+        :param party_predictions: List of party predictions.
+        :param world_size: Number of party members.
+        :param subiter_seq_num: Sub-iteration sequence number.
 
-         :return: List of gradients as tensors.
-         """
+        :return: List of gradients as tensors.
+        """
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
@@ -282,6 +282,8 @@ class PartyMasterImplLogreg(PartyMasterImpl):
         :param y: Target values.
         :param predictions: Model predictions.
         :param name: Name of the dataset ("Train" or "Test").
+
+        :return: None.
         """
         logger.info(
             f"Master %s: reporting metrics. Y dim: {y.size()}. " f"Predictions size: {predictions.size()}" % self.id

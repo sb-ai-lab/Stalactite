@@ -17,7 +17,7 @@ from stalactite.batching import ListBatcher
 logger = logging.getLogger(__name__)
 
 
-class MockPartyMasterImpl(PartyMaster):
+class MockPartyMasterImpl(PartyMaster): # TODO
     def __init__(
         self,
         uid: str,

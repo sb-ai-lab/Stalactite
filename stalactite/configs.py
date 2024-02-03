@@ -19,38 +19,38 @@ def raise_path_not_exist(path: str):
         raise FileExistsError(f"Path {path} does not exist")
 
 
-class AttrDict(dict):
-    # TODO replace with pydantic
-    """Attribute Dictionary"""
+# class AttrDict(dict):
+#     # TODO replace with pydantic
+#     """Attribute Dictionary"""
 
-    def __setitem__(self, key, value):
-        if isinstance(value, dict):  # change dict to AttrDict
-            value = AttrDict(value)
-        super(AttrDict, self).__setitem__(key, value)
-
-    def __getitem__(self, key):
-        value = self.get(key)
-        # this part is needed when we initialized the AttrDict datastructure form recursive dict.
-        if not isinstance(value, AttrDict):
-            # dynamically change the type of value from dict to AttrDict
-            if isinstance(value, dict):
-                value = AttrDict(value)
-                self.__setitem__(key, value)
-        return self.get(key)
-
-    def __setattr__(self, key, value):
-        # import pdb; pdb.set_trace()
-        self.__setitem__(key, value)
-
-    def __getattr__(self, key):
-        # import pdb; pdb.set_trace()
-        return self.__getitem__(key)
-
-    __delattr__ = dict.__delitem__
-
-    def __add__(self, other):
-        res = AttrDict({**self, **other})
-        return res
+    # def __setitem__(self, key, value):
+    #     if isinstance(value, dict):  # change dict to AttrDict
+    #         value = AttrDict(value)
+    #     super(AttrDict, self).__setitem__(key, value)
+    #
+    # def __getitem__(self, key):
+    #     value = self.get(key)
+    #     # this part is needed when we initialized the AttrDict datastructure form recursive dict.
+    #     if not isinstance(value, AttrDict):
+    #         # dynamically change the type of value from dict to AttrDict
+    #         if isinstance(value, dict):
+    #             value = AttrDict(value)
+    #             self.__setitem__(key, value)
+    #     return self.get(key)
+    #
+    # def __setattr__(self, key, value):
+    #     # import pdb; pdb.set_trace()
+    #     self.__setitem__(key, value)
+    #
+    # def __getattr__(self, key):
+    #     # import pdb; pdb.set_trace()
+    #     return self.__getitem__(key)
+    #
+    # __delattr__ = dict.__delitem__
+    #
+    # def __add__(self, other):
+    #     res = AttrDict({**self, **other})
+    #     return res
 
 
 def load_yaml_config(yaml_path: Union[str, Path]) -> dict:
@@ -109,19 +109,19 @@ class CommonConfig(BaseModel):
 class DataConfig(BaseModel):
     """Experimental data parameters config."""
 
-    random_seed: int = Field(default=0, description="Experiment data random seed (including random, numpy, torch)")
+    random_seed: int = Field(default=0, description="Experiment data random seed (including random, numpy, torch)") # TODO use?
     dataset_size: int = Field(default=1000, description="Number of dataset rows to use")
     host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
     dataset: Literal['mnist', 'sbol', 'smm'] = Field(
         default='mnist',
-        description='Dataset type. One of `mnist`, `sbol`, `smm`'
-    ) # TODO
-    use_smm: bool = Field(default=False) # TODO
-    dataset_part_prefix: str = Field(default='part_')
+        description='Dataset type. One of `mnist`, `sbol`'
+    )
+    use_smm: bool = Field(default=False) # TODO use?
+    dataset_part_prefix: str = Field(default='part_') # TODO use?
     train_split: str = Field(default='train_train')
     test_split: str = Field(default='train_val')
-    features_data_preprocessors: List[str] = Field(default_factory=list)
-    label_data_preprocessors: List[str] = Field(default_factory=list)
+    features_data_preprocessors: List[str] = Field(default_factory=list) # TODO use?
+    label_data_preprocessors: List[str] = Field(default_factory=list) # TODO use?
     features_key: str = Field(default="image_part_")
     label_key: str = Field(default="label")
 
@@ -224,7 +224,7 @@ class MemberConfig(PartyConfig):
     heartbeat_interval: float = Field(default=2.0, description="Time in seconds to sent heartbeats to master.")
     task_requesting_pings_interval: float = Field(
         default=0.1, description="Interval between new tasks requests from master"
-    )
+    ) # TODO ?
     sent_task_timout: float = Field(default=3600, description="Timeout of the unary endpoints calls to the gRPC")
 
 
