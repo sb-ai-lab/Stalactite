@@ -1,116 +1,9 @@
-import copy
-import os
-import random
-from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
 import datasets
 import numpy as np
-import torch
-import yaml
 
 from stalactite import data_preprocessors
-
-
-# class AttrDict(dict):
-#     """Attribute Dictionary"""
-
-    # def __setitem__(self, key, value):
-    #     if isinstance(value, dict):  # change dict to AttrDict
-    #         value = AttrDict(value)
-    #     super(AttrDict, self).__setitem__(key, value)
-
-    # def __getitem__(self, key):
-    #     value = self.get(key)
-    #     if not isinstance(
-    #         value, AttrDict
-    #     ):  # this part is need when we initialized the AttrDict datastructure form recursice dict.
-    #         if isinstance(value, dict):  # dinamically change the type of value from dict to AttrDict
-    #             value = AttrDict(value)
-    #             self.__setitem__(key, value)
-    #     return self.get(key)
-
-    # def __setattr__(self, key, value):
-    #     # import pdb; pdb.set_trace()
-    #     self.__setitem__(key, value)
-    #
-    # def __getattr__(self, key):
-    #     # import pdb; pdb.set_trace()
-    #     return self.__getitem__(key)
-
-    # __delattr__ = dict.__delitem__
-
-    # def __add__(self, other):
-        # res = AttrDict({**self, **other})
-        # return res
-
-
-# class attr:
-#     pass
-
-#
-# def init_simulation_sp(args):
-#     return args
-
-
-# def load_yaml_config(yaml_path):
-#     with open(yaml_path, "r") as stream:
-#         try:
-#             return yaml.safe_load(stream)
-#         except yaml.YAMLError as exc:
-#             raise ValueError("Yaml error - check yaml file")
-#
-# #
-# def init(config_path="../examples/configs/linreg-mnist-local.yaml"):
-#
-#     config = AttrDict(load_yaml_config(config_path))
-#
-#     seed = config.data.random_seed
-#     random.seed(seed)
-#     np.random.seed(seed)
-#     torch.manual_seed(seed)
-#     torch.cuda.manual_seed_all(seed)
-#     torch.backends.cudnn.deterministic = True
-#
-#     tmp_args = init_simulation_sp(attr())
-#     joint_config = AttrDict({})
-#     for ii in range(config.common.world_size):
-#         joint_config[ii] = AttrDict(load_yaml_config(config_path))
-#
-#         joint_config[ii].common.update(vars(tmp_args))
-#         joint_config[ii].data.features_key = joint_config[ii].data.features_key + str(ii)
-#
-#     joint_config["joint_config"] = True
-#     joint_config["parties"] = list(range(config.common.world_size))
-#     config = joint_config
-#
-#     return config
-
-
-# def load(args):
-#     data = {}
-#     data_params_update = {}
-#     for ii in args["parties"]:
-#         params = args[ii].data
-#         part_path = os.path.join(str(Path(params.host_path_data_dir)), params.dataset, f"{params.dataset_part_prefix}{ii}")
-#         ds = load_splitted_part(part_path, split_feature_prefix="image", new_name_split_feature=None)
-#         data[ii] = ds
-#         stat_dict_update = compute_dataset_info_params(ds, params.features_prefix, params.label_prefix)
-#         data_params_update[ii] = stat_dict_update
-#     return data, data_params_update
-
-#
-# def load_splitted_part(part_path, split_feature_prefix="image", new_name_split_feature=None):
-#     part_path = Path(part_path)
-#
-#     part_ds = datasets.load_from_disk(part_path)
-#
-#     if new_name_split_feature is not None:
-#         for kk, ds in part_ds.items():
-#             rename_feature = [str(ff) for ff in list(ds.features) if split_feature_prefix in str(ff)][0]
-#             part_ds[kk] = ds.rename_column(rename_feature, new_name_split_feature)
-#
-#     return part_ds
 
 
 def compute_dataset_info_params(ds, features_prefix, label_prefix=None):
@@ -140,20 +33,6 @@ def compute_dataset_info_params(ds, features_prefix, label_prefix=None):
         return res
 
 
-# def update_params(params, updated_params, params_subsection="common"):
-#     if params.joint_config is not None:
-#         for kk in params["parties"]:
-#             config = params[kk]
-#             config_section = getattr(config, params_subsection)
-#             config_section.update(updated_params[kk])
-#
-#     else:
-#         config_section = getattr(params, params_subsection)
-#         config_section.update(updated_params)
-#
-#     return params
-
-
 class DataPreprocessor:
     config_features_preprocessor_key = "features_data_preprocessors"  # config key
     config_label_preprocessor_key = "label_data_preprocessors"  # config key
@@ -181,7 +60,7 @@ class DataPreprocessor:
         self._search_and_fill_preprocessor_params()
         if len(self.preprocessors_params) != 0:
             train_split_data, preprocessors_dict = self._preprocess_split(
-                self.dataset[self.member_id][train_split_key], self.preprocessors_params  #  #todo: refactor
+                self.dataset[self.member_id][train_split_key], self.preprocessors_params  # #todo: refactor
             )
             test_split_data, _ = self._preprocess_split(
                 self.dataset[self.member_id][test_split_key],
@@ -220,7 +99,7 @@ class DataPreprocessor:
                 ]
 
     def _preprocess_split(
-        self, dataset_split: datasets.Dataset, preprocessors_params: Dict, preprocessors_dict: Dict = None
+            self, dataset_split: datasets.Dataset, preprocessors_params: Dict, preprocessors_dict: Dict = None
     ):
 
         preprocessed_split_data = {}
@@ -241,11 +120,11 @@ class DataPreprocessor:
 
     @staticmethod
     def _preprocess_feature(
-        ds_split: datasets.Dataset,
-        feature_name: str,
-        preprocessors_params: Dict,
-        data_params: Dict,
-        trained_preprocessors: bool = None,
+            ds_split: datasets.Dataset,
+            feature_name: str,
+            preprocessors_params: Dict,
+            data_params: Dict,
+            trained_preprocessors: bool = None,
     ):
         # import pdb; pdb.set_trace()
         out_data = ds_split
@@ -256,7 +135,7 @@ class DataPreprocessor:
                 if preprocessor_input is not None:
                     preprocessor_input = getattr(data_params, preprocessor_input)
                     assert (
-                        preprocessor_input == feature_name
+                            preprocessor_input == feature_name
                     ), f"Inferred '{preprocessor_input}' and passed '{feature_name}' feature names must be equal!"
                 preprocessor_class = getattr(data_preprocessors, preprocessor_class)
 
@@ -281,7 +160,7 @@ class DataPreprocessor:
             close_bracket_position = preprocessor_string.find(")")
             if close_bracket_position != -1:
                 preprocessor_class = preprocessor_string[0:open_bracket_position]
-                input_parameter = preprocessor_string[open_bracket_position + 1 : close_bracket_position]
+                input_parameter = preprocessor_string[open_bracket_position + 1: close_bracket_position]
             else:
                 raise ValueError(f"Data Preprocessor {preprocessor_string} inconsistent. No closing bracket!")
         else:

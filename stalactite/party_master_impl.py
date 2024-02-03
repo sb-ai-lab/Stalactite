@@ -1,5 +1,4 @@
 import logging
-import time
 from typing import List
 
 import mlflow
@@ -7,7 +6,7 @@ import torch
 from sklearn import metrics
 from sklearn.metrics import roc_auc_score
 
-from stalactite.base import Batcher, DataTensor, PartyDataTensor, PartyMaster, PartyCommunicator, Method, MethodKwargs
+from stalactite.base import Batcher, DataTensor, PartyDataTensor, PartyMaster
 from stalactite.batching import ConsecutiveListBatcher, ListBatcher
 from stalactite.metrics import ComputeAccuracy, ComputeAccuracy_numpy
 
@@ -27,8 +26,6 @@ class PartyMasterImpl(PartyMaster):
             epochs: int,
             report_train_metrics_iteration: int,
             report_test_metrics_iteration: int,
-            # target: DataTensor,
-            # test_target: DataTensor,
             target_uids: List[str],
             batch_size: int,
             model_update_dim_size: int,
@@ -53,8 +50,6 @@ class PartyMasterImpl(PartyMaster):
         self.epochs = epochs
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
-        # self.target = target
-        # self.test_target = test_target
         self.target_uids = target_uids
         self.is_initialized = False
         self.is_finalized = False

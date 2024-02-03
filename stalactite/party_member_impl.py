@@ -2,12 +2,9 @@ import logging
 from typing import List, Optional, Tuple
 
 import scipy as sp
-import torch
-from datasets.dataset_dict import DatasetDict
 
 from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
 from stalactite.batching import ListBatcher, ConsecutiveListBatcher
-# from stalactite.data_loader import AttrDict
 from stalactite.models import LinearRegressionBatch, LogisticRegressionBatch
 
 logger = logging.getLogger(__name__)
@@ -21,12 +18,8 @@ class PartyMemberImpl(PartyMember):
         uid: str,
         epochs: int,
         batch_size: int,
-        # model_update_dim_size: int,
         member_record_uids: List[str],
         model_name: str,
-        # model: torch.nn.Module,
-        # dataset: DatasetDict,
-        # data_params: AttrDict,
         report_train_metrics_iteration: int,
         report_test_metrics_iteration: int,
         processor=None,
@@ -54,14 +47,8 @@ class PartyMemberImpl(PartyMember):
         self._uids_to_use: Optional[List[str]] = None
         self.is_initialized = False
         self.is_finalized = False
-        # self._weights: Optional[DataTensor] = None
-        # self._weights_dim = model_update_dim_size
-        # self._data: Optional[DataTensor] = None
         self.iterations_counter = 0
-        # self._model = model
         self._model_name = model_name
-        # self._dataset = dataset
-        # self._data_params = data_params
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.processor = processor

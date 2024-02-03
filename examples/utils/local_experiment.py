@@ -10,20 +10,10 @@ from typing import List, Optional
 
 import torch
 import mlflow
-import numpy as np
 import datasets
-import scipy as sp
-from sklearn.metrics import mean_absolute_error,  roc_auc_score, precision_recall_curve, auc
-from datasets import DatasetDict
-from sklearn.linear_model import LogisticRegression as LogRegSklearn
 
-from stalactite.models.linreg_batch import LinearRegressionBatch
-from stalactite.models.logreg_batch import LogisticRegressionBatch
 from stalactite.party_member_impl import PartyMemberImpl
-# from stalactite.data_loader import load, init, DataPreprocessor
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
-from stalactite.batching import ListBatcher
-from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
