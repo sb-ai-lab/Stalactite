@@ -24,8 +24,7 @@ for benchmarking various models and algorithms.
    tutorial
 
 .. toctree::
-   :maxdepth: 4
-   :caption: Contents:
+   :maxdepth: 3
 
    modules
 

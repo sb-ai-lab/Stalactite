@@ -2,7 +2,6 @@
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
 
 import os
-from dataclasses import dataclass
 from typing import Any, Optional
 import datasets
 
@@ -11,17 +10,7 @@ from stalactite.party_member_impl import PartyMemberImpl
 from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 
 
-@dataclass
-class PartyData:
-    config: VFLConfig
-    processors: Any
-    target_uids: list[str]
-    input_dims_list: list[list[int]]
-    members_datasets_uids: list[list[str]]
-    classes_idx: Optional[list[int]] = None
-
-
-def load_parameters(config_path: str) -> tuple[VFLConfig, list[Any]]:
+def load_processors(config_path: str) -> list[Any]:
     config = VFLConfig.load_and_validate(config_path)
 
     if config.data.dataset.lower() == "mnist":
@@ -50,11 +39,12 @@ def load_parameters(config_path: str) -> tuple[VFLConfig, list[Any]]:
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return config, processors
+    return processors
 
 
 def get_party_master(config_path: str):
-    config, processors = load_parameters(config_path)
+    processors = load_processors(config_path)
+    config = VFLConfig.load_and_validate(config_path)
     target_uids = [str(i) for i in range(config.data.dataset_size)]
     if 'logreg' in config.common.vfl_model_name:
         master_class = PartyMasterImplLogreg
@@ -77,7 +67,8 @@ def get_party_master(config_path: str):
 
 
 def get_party_member(config_path: str, member_rank: int):
-    config, processors = load_parameters(config_path)
+    config = VFLConfig.load_and_validate(config_path)
+    processors = load_processors(config_path)
     target_uids = [str(i) for i in range(config.data.dataset_size)]
     return PartyMemberImpl(
         uid=f"member-{member_rank}",

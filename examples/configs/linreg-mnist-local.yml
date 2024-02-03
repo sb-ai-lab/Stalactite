@@ -39,7 +39,7 @@ prerequisites:
 #  use_arbiter: False
 
 master:
-  run_mlflow: True
+  run_mlflow: False
 #  logging_level: debug
 #  container_host: 0.0.0.0
 #  run_prometheus: False

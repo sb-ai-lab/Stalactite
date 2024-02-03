@@ -1,9 +1,6 @@
 import os
 import logging
-import pickle
 from pathlib import Path
-import uuid
-import random
 import threading
 from threading import Thread
 from typing import List, Optional
@@ -26,8 +23,7 @@ logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 
 
-def load_parameters(config_path: str):
-
+def load_processors(config_path: str):
     config = VFLConfig.load_and_validate(config_path)
 
     if config.data.dataset.lower() == "mnist":
@@ -62,7 +58,7 @@ def load_parameters(config_path: str):
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return config.data, processors
+    return processors
 
 
 def run(config_path: Optional[str] = None):
@@ -71,7 +67,9 @@ def run(config_path: Optional[str] = None):
             'SINGLE_MEMBER_CONFIG_PATH',
             os.path.join(Path(__file__).parent.parent.parent, 'configs/linreg-mnist-local.yml')
         )
+
     config = VFLConfig.load_and_validate(config_path)
+    processors = load_processors(config_path)
 
     if config.master.run_mlflow:
         mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
@@ -96,8 +94,6 @@ def run(config_path: Optional[str] = None):
 
     if config.master.run_mlflow:
         mlflow.log_params(log_params)
-
-    params, processors = load_parameters(config_path)
 
     target_uids = [str(i) for i in range(config.data.dataset_size)]
 

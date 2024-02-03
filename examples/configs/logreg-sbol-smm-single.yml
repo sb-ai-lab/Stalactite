@@ -17,7 +17,7 @@ prerequisites:
 
 master:
   container_host: 'node3.bdcl'
-  run_mlflow: True
+  run_mlflow: False
 
 data:
   random_seed: 0

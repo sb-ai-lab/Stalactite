@@ -31,4 +31,4 @@ prerequisites:
   mlflow_port: "5555"
 
 master:
-  run_mlflow: True
+  run_mlflow: False

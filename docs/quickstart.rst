@@ -1,7 +1,7 @@
 Quickstart on Stalactite
 ======================================
 
-Stalactite framework already implements several training algorithm in a federated learning fashion.
+Stalactite framework already implements several training algorithms in a federated learning fashion.
 Here we provide examples of launching local and distributed experiments.
 
 Requirements
@@ -84,7 +84,7 @@ Configuration file contains settings for all the parts of the experiment:
 Example configuration files are shown in
 `examples configs folder <https://github.com/sb-ai-lab/vfl-benchmark/tree/main/examples/configs>`_, each example is
 linked to its config.
-
+Check the prerequisites launch tutorial at :ref:`prerequisites_tutorial`.
 
 Local experiments
 ----------------------------------------------------------------------------
@@ -193,16 +193,16 @@ experiments (``examples/vfl/distributed/multiprocess/logreg_sbol_smm_multiproces
 The configuration file can be found at: ``examples/configs/logreg-sbol-smm-multiprocess.yml``
 
 The main difference between distributed launch and `Logistic regression on SBOL and SMM`_ is the communicator. Instead
-of LocalCommunicator we use gRPC server for master and member communications. Moreover, now we need to configure some
-docker related parameters. Thus, in the configuration file we add new sections and fields (in comparison to the local
-example):
+of LocalCommunicator we use gRPC server for master and member communications running in the background in the
+GRpcPartyCommunicator. Moreover, now we need to configure some docker related parameters. Thus, in the configuration
+file we add new sections and fields (in comparison to the local example):
 
 .. code-block:: yaml
 
     prerequisites:
       # If we enanble logging to the Prometheus, we should introduce the host of the Prometheus container
       # Note, that VFL master and Prometheus must always be on the same host to see each other
-      prometheus_host: '158.160.110.227'
+      prometheus_host: <master_host_public_ip>
       prometheus_port: '9090'
       grafana_port: '3001'
 
@@ -289,9 +289,11 @@ Nevertheless, the paths on different machines differ, therefore, paths to data a
 .. code-block:: yaml
 
     common:
+      # Here you should pass the full path to the reports folder
       reports_export_folder: "../vfl-benchmark/reports"
 
     data:
+      # Here you should pass the full path to the folder containing the dataset
       host_path_data_dir: "../vfl_multilabel_sber_sample10000_parts2"
 
 After you configure the machines, you can use the helper script which launches master and members via ssh:

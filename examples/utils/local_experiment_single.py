@@ -17,15 +17,10 @@ logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 
 
-def load_parameters(config_path: str):
+def load_processors(config_path: str):
     # BASE_PATH = Path(__file__).parent.parent.parent
 
     config = VFLConfig.load_and_validate(config_path)
-
-
-
-
-
 
     if config.data.dataset.lower() == "mnist":
 
@@ -56,7 +51,7 @@ def load_parameters(config_path: str):
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return config.data, processors
+    return processors
 
 
 def run(config_path: Optional[str] = None):
@@ -91,7 +86,7 @@ def run(config_path: Optional[str] = None):
     if config.master.run_mlflow:
         mlflow.log_params(log_params)
 
-    params, processors = load_parameters(config_path)
+    processors = load_processors(config_path)
 
     if model_name == "linreg":
         party = PartySingleLinreg(
