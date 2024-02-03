@@ -6,6 +6,9 @@ from stalactite.data_preprocessors import FullDataTensor, PILImageToTensor, SkLe
 
 
 class ImagePreprocessor:
+    """
+    Make data preprocessing on data after downloading.
+    """
     def __init__(self, dataset: datasets.DatasetDict,  member_id, params=None):
         self.dataset = dataset
         self.common_params = params.common
@@ -14,7 +17,15 @@ class ImagePreprocessor:
         self.member_id = member_id
 
     def fit_transform(self):
+        """
 
+        The input is the training and test data in the form of a data set for each participant with pictures separated vertically.
+        Using PILImageToTensor, one PIL image from the dataset is converted into a tensor, and we get object Dataset.
+        Next, using FullDataTensor, the entire object Dataset is converted into one tensor.
+        Afterward, only those columns are saved in the tensor whose average deviation along the 0 axis is not equal to zero.
+        Then is the operation SkLearnStandardScaler (changing the size of the distribution of values occurs so that the average value of the observed values is equal to 0)
+
+        """
         train_split_key = self.data_params.train_split
         test_split_key = self.data_params.test_split
 

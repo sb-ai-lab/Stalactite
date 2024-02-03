@@ -1,6 +1,6 @@
 .. _local_comm_tutorial:
 
-how-to: Create and launch local experiment
+*how-to:* Create and launch local experiment
 ============================================
 
 First of all, you need to access your configuration parameters. For this purpose, the ``VFLConfig`` Pydantic model is

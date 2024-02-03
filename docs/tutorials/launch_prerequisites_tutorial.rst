@@ -1,6 +1,6 @@
 .. _prerequisites_tutorial:
 
-how-to: Manage prerequisites
+*how-to:* Manage prerequisites
 ====================================================
 
 After you defined the configuration file (including ``prerequisites`` and ``docker`` sections), you are able to launch

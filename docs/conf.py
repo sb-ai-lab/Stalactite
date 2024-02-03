@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 # sys.path.insert(0, str(Path(os.path.abspath(__file__)).parent.parent))
 sys.path.insert(0, os.path.abspath('..'))
+
+
 # -- Project information -----------------------------------------------------
 
 project = 'stalactite'

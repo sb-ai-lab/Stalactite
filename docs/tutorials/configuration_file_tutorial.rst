@@ -1,6 +1,6 @@
 .. _config_tutorial:
 
-how-to: Write configuration files
+*how-to:* Write configuration files
 ======================================
 
 The configuration files are used for tuning the experimental scripts to your needs.

@@ -13,6 +13,12 @@ def substitute(sample, new_labels, use_labels):
 
 
 def make_train_val_split(ds, test_size=0.15, stratify_by_column='label', shuffle=True, seed=47):
+    """
+
+    2. Dataset divided into val and train parts.
+
+    """
+
     d_dict = ds.train_test_split(test_size=test_size, stratify_by_column=stratify_by_column, shuffle=shuffle,
                                  seed=seed)
 
@@ -26,10 +32,6 @@ def make_train_val_split(ds, test_size=0.15, stratify_by_column='label', shuffle
 
 
 def split_image(image, parts=2):
-    """
-    Splits the image onto several parts. Has not been tested when the number of parts larger than 5.
-    So, there may be border effects.
-    """
 
     split_dim = 1
     split_dim_size = image.shape[split_dim]
@@ -48,6 +50,18 @@ def split_image(image, parts=2):
 
 
 def split_vertically(sample, parts=3, split_feature='image', part_prefix='image_part'):
+
+    """
+
+    3. Image divided into different parts.
+    First, the image data converted into a tensor.
+    Then this data divided into parts in such a way that the dimension of tensor divided by number of parties.
+    So each image divided among all parties.
+    Image divided vertically: one piece is a vertical strip from image.
+    After this, these parts of the tensor are again converted into PIL image.
+
+    """
+
     to_tensor = transforms.ToTensor()
     to_image = transforms.ToPILImage()
 
@@ -60,6 +74,11 @@ def split_vertically(sample, parts=3, split_feature='image', part_prefix='image_
 
 
 def split_dataset_dict(ds_dict, parts, split_feature='image', part_prefix='image_part'):
+    """
+
+    4. DatasetDict formed where keys are the names of parts of the image and the values are object Datasets with data.
+
+    """
 
     # we assume that datasets in the dict have the same features
     common_features = [ff for ff in list(ds_dict.values())[0].features.keys() if (ff != split_feature)]
@@ -109,6 +128,12 @@ def save_splitted_dataset(ds_list, path, part_dir_name='part_', clean_dir=False)
 
 
 def load_data(save_path, parts_num):
+    """
+
+    The input is the original MNIST dataset.
+    1. Labels filtered and replaced so that the task is binary.
+
+    """
 
     # Filter on labels and substitute labels (make the problem binary):
     use_labels = [3, 8]

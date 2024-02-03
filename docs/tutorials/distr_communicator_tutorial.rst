@@ -1,6 +1,6 @@
 .. _distr_comm_tutorial:
 
-how-to: Create and launch distributed experiment
+*how-to:* Create and launch distributed experiment
 ====================================================
 
 Launch the prerequisites if you want to log metrics and parameters by following :ref:`prerequisites_tutorial`.

@@ -5,7 +5,6 @@ import threading
 from threading import Thread
 from typing import List, Optional
 
-import torch
 import mlflow
 import datasets
 
@@ -24,6 +23,13 @@ logger = logging.getLogger(__name__)
 
 
 def load_processors(config_path: str):
+    """
+
+    Assigns parameters to preprocessor class, which is selected depending on the type of dataset: MNIST or SBOL.
+    If there is no data to run the experiment, downloads data after preprocessing.
+
+    """
+
     config = VFLConfig.load_and_validate(config_path)
 
     if config.data.dataset.lower() == "mnist":
@@ -65,7 +71,7 @@ def run(config_path: Optional[str] = None):
     if config_path is None:
         config_path = os.environ.get(
             'SINGLE_MEMBER_CONFIG_PATH',
-            os.path.join(Path(__file__).parent.parent.parent, 'configs/linreg-mnist-local.yml')
+            os.path.join(Path(__file__).parent.parent, 'configs/linreg-mnist-local.yml')
         )
 
     config = VFLConfig.load_and_validate(config_path)
