@@ -4,7 +4,7 @@
 function run() {
   poetry run stalactite local \
   --multi-process start \
-  --config-path examples/configs/logreg-sbol-smm-multiprocess-vm-yc.yml
+  --config-path examples/configs/logreg-sbol-smm-vm-yc.yml
 }
 
 
