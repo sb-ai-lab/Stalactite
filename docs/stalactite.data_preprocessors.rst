@@ -20,6 +20,14 @@ stalactite.data\_preprocessors.full\_data\_tensor module
    :undoc-members:
    :show-inheritance:
 
+stalactite.data\_preprocessors.image\_preprocessor module
+---------------------------------------------------------
+
+.. automodule:: stalactite.data_preprocessors.image_preprocessor
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 stalactite.data\_preprocessors.pil\_image\_to\_tensor module
 ------------------------------------------------------------
 
@@ -40,6 +48,14 @@ stalactite.data\_preprocessors.sklearn\_standard\_scaler module
 ---------------------------------------------------------------
 
 .. automodule:: stalactite.data_preprocessors.sklearn_standard_scaler
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+stalactite.data\_preprocessors.tabular\_preprocessor module
+-----------------------------------------------------------
+
+.. automodule:: stalactite.data_preprocessors.tabular_preprocessor
    :members:
    :undoc-members:
    :show-inheritance:

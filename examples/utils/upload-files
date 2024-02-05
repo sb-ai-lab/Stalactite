@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+
+set -ex
+
+set +e
+
+yc_host="gpusrv"
+vk_host="vk-vflsrv"
+sber_host="sber-vflsrv"
+
+function _exec_remotely () {
+    cmd=$1
+    shift 1
+
+    for host in "$@"
+    do
+        echo "Executing on "$host
+        ssh -t $host $cmd
+        echo "Executed"
+    done
+}
+
+function get_dir() {
+    if [[ -z "${SYNC_DIR+x}" ]]; then
+        sync_dir=${PWD##*/}
+    else
+        sync_dir=$SYNC_DIR
+    fi
+
+    echo $sync_dir
+}
+
+# Be aware about '-u' option of rsync.
+# it forces rsync not to copy files which are newer on the contrary side
+function sync() {
+    arg=$3
+    host=$2
+
+    if [[ "$arg" = "-f" ]] && [[ "$1" = true ]] ; then
+         rsyncargs="-arv --delete"
+    else
+         rsyncargs="-aurv"
+    fi
+
+    sync_dir=$(get_dir)
+
+    if [[ "$1" = true ]] ; then
+        from="."
+        if [[ "$host" = "sber-vflsrv" ]] ; then
+          sync_dir="vfl-exp/$sync_dir"
+        fi
+        to="${host}:${sync_dir}"
+
+
+    else
+        from="${host}:${sync_dir}/*"
+        to="."
+    fi
+
+    echo "Syncing from $from to $to"
+
+    rsync $rsyncargs \
+        --exclude 'docs' \
+        --exclude '*__pycache__*' \
+        --exclude '*target*' \
+	      --exclude '*ipynb_checkpoints' \
+        --exclude '*venv' \
+        --exclude 'download-cache' \
+        --exclude '*.iml' \
+        --exclude '.idea' \
+        --exclude 'spark/work' \
+        --exclude '*/.git/*' \
+        --exclude '*.git/*' \
+        --exclude '*.log' \
+        --exclude '*/.idea/*' \
+        --exclude 'work' \
+        --exclude '*.hdf5' \
+        --exclude '*.jpg' \
+        --exclude '*.png' \
+        --exclude 'examples/tmp' \
+        --exclude '*.rpm' \
+        --exclude '*/.vagrant' \
+        --exclude '*.vdi' \
+        --exclude 'storage' \
+        --exclude '.DS_Store' \
+        --exclude '.tox' \
+        --exclude '.github/' \
+        --exclude '.git/' \
+        --exclude '.pytest_cache/' \
+        --exclude '.tox' \
+        --exclude 'data/' \
+        "$from" $to
+}
+
+
+function help() {
+  echo "
+  List of commands.
+    run - starts VFL agents containers.
+    master-logs - returns logs of the VFL master container.
+    halt - stops and removes VFL agents containers.
+    help - prints this message.
+  "
+}
+
+function main () {
+    echo "============================"
+
+    cmd="$1"
+
+    if [ -z "${cmd}" ]
+    then
+      echo "No command is provided."
+      help
+      exit 1
+    fi
+
+    shift 1
+
+    echo "Executing command: ${cmd}"
+
+    case "${cmd}" in
+
+    "upload")
+#        shift 1
+        sync true $yc_host "${@}"
+        sync true $vk_host "${@}"
+        sync true $sber_host "${@}"
+        ;;
+
+    "help")
+        help
+        ;;
+
+    *)
+        echo "Unknown command: ${cmd}"
+        ;;
+
+    esac
+}
+
+main "${@}"

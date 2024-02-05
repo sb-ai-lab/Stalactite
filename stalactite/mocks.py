@@ -7,7 +7,6 @@ from sklearn import metrics
 from stalactite.base import (
     Batcher,
     DataTensor,
-    Party,
     PartyDataTensor,
     PartyMaster,
     PartyMember,
@@ -18,7 +17,7 @@ from stalactite.batching import ListBatcher
 logger = logging.getLogger(__name__)
 
 
-class MockPartyMasterImpl(PartyMaster):
+class MockPartyMasterImpl(PartyMaster): # TODO
     def __init__(
         self,
         uid: str,
@@ -43,15 +42,14 @@ class MockPartyMasterImpl(PartyMaster):
         self._weights_dim = model_update_dim_size
         self.iteration_counter = 0
 
-    def master_initialize(self, party: Party):
+    def initialize(self):
         logger.info("Master %s: initializing" % self.id)
-        party.initialize()
         self.is_initialized = True
 
-    def make_batcher(self, uids: List[str], party: Party) -> Batcher:
+    def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
         logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
-        return ListBatcher(epochs=self.epochs, members=party.members, uids=uids, batch_size=self._batch_size)
+        return ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
 
     def make_init_updates(self, world_size: int) -> PartyDataTensor:
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
@@ -85,10 +83,9 @@ class MockPartyMasterImpl(PartyMaster):
         self.iteration_counter += 1
         return [torch.rand(self._weights_dim) for _ in range(world_size)]
 
-    def master_finalize(self, party: Party):
+    def master_finalize(self):
         logger.info("Master %s: finalizing" % self.id)
         self._check_if_ready()
-        party.finalize()
         self.is_finalized = True
 
     def _check_if_ready(self):

@@ -1,13 +1,7 @@
 stalactite.communications package
 =================================
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   stalactite.communications.grpc_utils
+Stalactite.communications contains two available backends for running experiments
 
 Submodules
 ----------
@@ -24,14 +18,6 @@ stalactite.communications.distributed\_grpc module
 --------------------------------------------------
 
 .. automodule:: stalactite.communications.distributed_grpc
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-stalactite.communications.helpers module
-----------------------------------------
-
-.. automodule:: stalactite.communications.helpers
    :members:
    :undoc-members:
    :show-inheritance:

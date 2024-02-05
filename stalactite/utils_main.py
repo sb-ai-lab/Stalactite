@@ -14,6 +14,7 @@ KEY_CONTAINER_LABEL = "container-g"
 BASE_MASTER_CONTAINER_NAME = "master-agent-vfl"  # Do not change this value
 BASE_MEMBER_CONTAINER_NAME = "member-agent-vfl"
 BASE_IMAGE_FILE = "grpc-base.dockerfile"
+BASE_IMAGE_FILE_CPU = "grpc-base-cpu.dockerfile"
 BASE_IMAGE_TAG = "grpc-base:latest"
 PREREQUISITES_NETWORK = "prerequisites_vfl-network"  # Do not change this value
 
@@ -99,7 +100,12 @@ def get_logs(
         raise
 
 
-def build_base_image(docker_client: APIClient, logger: logging.Logger = logging.getLogger("__main__")):
+def build_base_image(
+        docker_client: APIClient,
+        logger: logging.Logger = logging.getLogger("__main__"),
+        use_gpu: bool = False
+):
+    image_file_name = BASE_IMAGE_FILE if use_gpu else BASE_IMAGE_FILE_CPU
     try:
         _logs = docker_client.build(
             path=str(Path(os.path.abspath(__file__)).parent.parent),
@@ -107,7 +113,7 @@ def build_base_image(docker_client: APIClient, logger: logging.Logger = logging.
             quiet=False,
             decode=True,
             nocache=False,
-            dockerfile=os.path.join(Path(os.path.abspath(__file__)).parent.parent, "docker", BASE_IMAGE_FILE),
+            dockerfile=os.path.join(Path(os.path.abspath(__file__)).parent.parent, "docker", image_file_name),
         )
         for log in _logs:
             logger.debug(log.get("stream", log.get("aux", {"aux": ""}).get("ID", "")).strip())

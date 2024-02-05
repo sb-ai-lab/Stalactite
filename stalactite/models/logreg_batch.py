@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import torch
 
@@ -6,8 +7,15 @@ logger = logging.getLogger(__name__)
 
 
 class LogisticRegressionBatch(torch.nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, learning_rate: float = 0.001, momentum: float = 0,
-                 class_weights: torch.Tensor = None, init_weights: float = None):
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        learning_rate: float = 0.001,
+        momentum: float = 0,
+        class_weights: Optional[torch.Tensor] = None,
+        init_weights: float = None,
+    ):
         """
         Args:
             input_dim (int): input dimension

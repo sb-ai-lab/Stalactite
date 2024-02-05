@@ -162,7 +162,7 @@ def start(ctx, config_path, rank, detached):
     client = APIClient()
     logger.info("Building an image for the member container. If build for the first time, it may take a while...")
     try:
-        build_base_image(client, logger=logger)
+        build_base_image(client, logger=logger, use_gpu=config.docker.use_gpu)
 
         logger.info(f"Starting gRPC member-{rank} container")
 
@@ -319,7 +319,7 @@ def start(ctx, config_path, detached):
     logger.info("Starting master for distributed experiment")
     client = APIClient()
     logger.info("Building an image for the master container. If build for the first time, it may take a while...")
-    build_base_image(client, logger=logger)
+    build_base_image(client, logger=logger, use_gpu=config.docker.use_gpu)
 
     raise_path_not_exist(config.data.host_path_data_dir)
 
@@ -478,7 +478,7 @@ def start(ctx, config_path):
         logger.info("Starting multi-process single-node experiment")
         client = ctx.obj.get("client", APIClient())
         logger.info("Building an image of the agent. If build for the first time, it may take a while...")
-        build_base_image(client, logger=logger)
+        build_base_image(client, logger=logger, use_gpu=config.docker.use_gpu)
 
         if networks := client.networks(names=[PREREQUISITES_NETWORK]):
             network = networks.pop()["Name"]
@@ -549,8 +549,8 @@ def start(ctx, config_path):
             )
             raise
     elif ctx.obj["single_process"] and not ctx.obj["multi_process"]:
-        master = get_party_master(config)
-        members = [get_party_member(config, member_rank=rank) for rank in range(config.common.world_size)]
+        master = get_party_master(config_path)
+        members = [get_party_member(config_path, member_rank=rank) for rank in range(config.common.world_size)]
         shared_party_info = dict()
         if config.master.run_mlflow:
             _mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")

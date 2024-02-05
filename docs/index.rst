@@ -7,16 +7,26 @@ Welcome to stalactite's documentation!
 ======================================
 
 **Stalactite** is a customizable Vertical Federated Learning (VFL) framework allowing distributed and local experiments
-with for benchmarking various models and algorithms.
+for benchmarking various models and algorithms.
 
 
 .. note::
    This project is under active development.
 
+.. toctree::
+   :maxdepth: 4
+
+   quickstart
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 4
+
+   tutorial
+
+.. toctree::
+   :maxdepth: 3
+
+   modules
 
 
 

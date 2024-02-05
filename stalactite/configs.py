@@ -2,7 +2,7 @@ import logging
 import os
 import warnings
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Union, List
 
 import tenseal as ts
 import yaml
@@ -17,40 +17,6 @@ def raise_path_not_exist(path: str):
     """
     if not os.path.exists(path):
         raise FileExistsError(f"Path {path} does not exist")
-
-
-class AttrDict(dict):
-    # TODO replace with pydantic
-    """Attribute Dictionary"""
-
-    def __setitem__(self, key, value):
-        if isinstance(value, dict):  # change dict to AttrDict
-            value = AttrDict(value)
-        super(AttrDict, self).__setitem__(key, value)
-
-    def __getitem__(self, key):
-        value = self.get(key)
-        # this part is needed when we initialized the AttrDict datastructure form recursive dict.
-        if not isinstance(value, AttrDict):
-            # dynamically change the type of value from dict to AttrDict
-            if isinstance(value, dict):
-                value = AttrDict(value)
-                self.__setitem__(key, value)
-        return self.get(key)
-
-    def __setattr__(self, key, value):
-        # import pdb; pdb.set_trace()
-        self.__setitem__(key, value)
-
-    def __getattr__(self, key):
-        # import pdb; pdb.set_trace()
-        return self.__getitem__(key)
-
-    __delattr__ = dict.__delitem__
-
-    def __add__(self, other):
-        res = AttrDict({**self, **other})
-        return res
 
 
 def load_yaml_config(yaml_path: Union[str, Path]) -> dict:
@@ -72,11 +38,17 @@ def load_yaml_config(yaml_path: Union[str, Path]) -> dict:
 class CommonConfig(BaseModel):
     """Common experimental parameters config."""
 
-    epochs: int = Field(description="Number of epochs to train a model")
-    world_size: int = Field(description="Number of the VFL member agents (without the master)")
-    report_train_metrics_iteration: int = Field(default=1)
-    report_test_metrics_iteration: int = Field(default=1)
-    batch_size: int = Field(default=10, description="Batch size used for training")
+    epochs: int = Field(default=3, description="Number of epochs to train a model")
+    world_size: int = Field(default=2, description="Number of the VFL member agents (without the master)")
+    report_train_metrics_iteration: int = Field(
+        default=1,
+        description="Number of iteration steps between reporting metrics on train dataset split."
+    )
+    report_test_metrics_iteration: int = Field(
+        default=1,
+        description="Number of iteration steps between reporting metrics on test dataset split."
+    )
+    batch_size: int = Field(default=100, description="Batch size used for training")
     experiment_label: str = Field(
         default="default-experiment",
         description="Experiment name used in prerequisites, if unset, defaults to `default-experiment`",
@@ -84,21 +56,36 @@ class CommonConfig(BaseModel):
     reports_export_folder: str = Field(
         default=Path(__file__).parent, description="Folder for exporting tests` and experiments` reports"
     )
-    rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec.")
+    rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec")
+    vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn'] = Field(
+        default='linreg',
+        description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`'
+    )
+    is_consequently: bool = Field(default=False, description='Run linear regression updates in sequential mode')
+    use_class_weights: bool = Field(default=False, description='Logistic regression')  # TODO
+    learning_rate: float = Field(default=0.01, description='Learning rate')
 
-    @field_validator("reports_export_folder")
-    @classmethod
-    def check_if_exists_or_create(cls, v: str):
-        os.makedirs(v, exist_ok=True)
-        return v
 
 
 class DataConfig(BaseModel):
     """Experimental data parameters config."""
 
-    random_seed: int = Field(default=0, description="Experiment data random seed (including random, numpy, torch)")
-    dataset_size: int = Field(description="Number of dataset rows to use")
-    host_path_data_dir: str = Field(description="Path to datasets` directory")
+    random_seed: int = Field(default=0,
+                             description="Experiment data random seed (including random, numpy, torch)")  # TODO use?
+    dataset_size: int = Field(default=1000, description="Number of dataset rows to use")
+    host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
+    dataset: Literal['mnist', 'sbol', 'smm'] = Field(
+        default='mnist',
+        description='Dataset type. One of `mnist`, `sbol`'
+    )
+    use_smm: bool = Field(default=False)  # TODO use?
+    dataset_part_prefix: str = Field(default='part_')  # TODO use?
+    train_split: str = Field(default='train_train')
+    test_split: str = Field(default='train_val')
+    features_data_preprocessors: List[str] = Field(default_factory=list)  # TODO use?
+    label_data_preprocessors: List[str] = Field(default_factory=list)  # TODO use?
+    features_key: str = Field(default="image_part_")
+    label_key: str = Field(default="label")
 
 
 class PrerequisitesConfig(BaseModel):
@@ -165,6 +152,7 @@ class PartyConfig(BaseModel):
     """VFL base parties` parameters config."""
 
     logging_level: Literal["debug", "info", "warning"] = Field(default="info", description="Logging level")
+    recv_timeout: float = Field(default=360., description='Timeout of the recv operation')
 
     @field_validator("logging_level")
     @classmethod
@@ -198,7 +186,7 @@ class MemberConfig(PartyConfig):
     heartbeat_interval: float = Field(default=2.0, description="Time in seconds to sent heartbeats to master.")
     task_requesting_pings_interval: float = Field(
         default=0.1, description="Interval between new tasks requests from master"
-    )
+    )  # TODO ?
     sent_task_timout: float = Field(default=3600, description="Timeout of the unary endpoints calls to the gRPC")
 
 
@@ -206,19 +194,16 @@ class DockerConfig(BaseModel):
     """Docker client parameters config."""
 
     docker_compose_path: str = Field(
-        default="../prerequisites", description="Path to the directory containing docker-compose.yml"
+        default=os.path.join(Path(os.path.abspath(__file__)).parent.parent, 'prerequisites'),
+        description="Path to the directory containing docker-compose.yml and prerequisites configs"
     )
     docker_compose_command: str = Field(
         default="docker compose", description="Docker compose command to use (`docker compose` | `docker-compose`)"
     )
-
-    @field_validator("docker_compose_path")
-    @classmethod
-    def validate_docker_folder(cls, v: str):
-        if os.path.exists(v):
-            return os.path.abspath(v)
-        else:
-            return v
+    use_gpu: bool = Field(
+        default=False,
+        description='Set to True is your system uses GPU (required for torch dependencies'
+    )
 
 
 class VFLConfig(BaseModel):
@@ -233,6 +218,8 @@ class VFLConfig(BaseModel):
     member: MemberConfig = Field(default_factory=MemberConfig)
     docker: DockerConfig = Field(default_factory=DockerConfig)
 
+    config_dir_path: Union[str, Path] = Field(default=Path(__file__).parent.parent)
+
     @model_validator(mode="after")
     def validate_disconnection_time(self) -> "VFLConfig":
         if self.master.disconnect_idle_client_time - self.member.heartbeat_interval < 2.0:
@@ -245,8 +232,8 @@ class VFLConfig(BaseModel):
 
         if self.grpc_arbiter.use_arbiter:
             if (
-                f"{self.grpc_arbiter.host}:{self.grpc_arbiter.port}"
-                == f"{self.grpc_server.host}:{self.grpc_server.port}"
+                    f"{self.grpc_arbiter.host}:{self.grpc_arbiter.port}"
+                    == f"{self.grpc_server.host}:{self.grpc_server.port}"
             ):
                 raise ValueError(
                     f"Arbiter port {self.grpc_arbiter.port} is the same to "
@@ -256,14 +243,35 @@ class VFLConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def info_set_reports(self) -> "VFLConfig":
+    def set_fields(self) -> "VFLConfig":
         if not self.master.run_prometheus:
             warnings.warn("Reporting to Prometheus is disabled.", UserWarning)
         if not self.master.run_mlflow:
             warnings.warn("Reporting to MlFlow is disabled.", UserWarning)
+
+        docker_path = self.docker.docker_compose_path
+        if os.path.exists(docker_path):
+            self.docker.docker_compose_path = os.path.abspath(docker_path)
+        else:
+            self.docker.docker_compose_path = os.path.normpath(os.path.join(self.config_dir_path, docker_path))
+
+        if os.path.isabs(self.data.host_path_data_dir):
+            data_dir = self.data.host_path_data_dir
+        else:
+            data_dir = os.path.normpath(os.path.join(self.config_dir_path, self.data.host_path_data_dir))
+            raise_path_not_exist(data_dir)
+        self.data.host_path_data_dir = data_dir
+
+        reports_dir = self.common.reports_export_folder
+        if not os.path.isabs(reports_dir):
+            reports_dir = os.path.normpath(os.path.join(self.config_dir_path, reports_dir))
+        os.makedirs(reports_dir, exist_ok=True)
         return self
+
 
     @classmethod
     def load_and_validate(cls, config_path: str):
         """Load YAML configuration and validate params with the VFLConfig model."""
-        return cls.model_validate(load_yaml_config(config_path))
+        model = load_yaml_config(config_path)
+        model['config_dir_path'] = Path(os.path.abspath(config_path)).parent
+        return cls.model_validate(model)

@@ -6,7 +6,7 @@ import time
 import uuid
 from abc import ABC
 from collections import defaultdict
-from concurrent.futures import Future
+from concurrent.futures import Future, TimeoutError as FutureTimoutError
 from copy import copy
 from dataclasses import dataclass
 from queue import Queue
@@ -14,14 +14,14 @@ from threading import Thread
 from typing import Any, Dict, List, Optional, Set, Union, cast
 
 from stalactite.base import (
+    Method,
+    MethodKwargs,
     ParticipantFuture,
     PartyCommunicator,
     PartyDataTensor,
     PartyMaster,
     PartyMember,
     RecordsBatch,
-    Method,
-    MethodKwargs,
     Task,
 )
 from stalactite.communications.helpers import ParticipantType, _Method
@@ -76,7 +76,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             method_name: Method,
             method_kwargs: Optional[MethodKwargs] = None,
             result: Optional[Any] = None,
-            **kwargs
+            **kwargs,
     ) -> Task:
         self._check_if_ready()
         if send_to_id not in self._party_info:
@@ -101,7 +101,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             with self._lock:
                 task = self._party_info[part_id].received_tasks.get(method_name, dict()).pop(receive_from_id, None)
             if time.time() - timer_start > self.recv_timeout:
-                raise TimeoutError(f'Could not receive task: {method_name} from {receive_from_id}.')
+                raise TimeoutError(f"Could not receive task: {method_name} from {receive_from_id}.")
         return task
 
     def recv(self, task: Task, recv_results: bool = False) -> Task:
@@ -124,13 +124,15 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         if participating_members is None:
             participating_members = self.members
 
-        assert len(set(participating_members).difference(set(self.members))) == 0, \
-            'Some of the members are disconnected, cannot perform collective operation'
+        assert (
+                len(set(participating_members).difference(set(self.members))) == 0
+        ), "Some of the members are disconnected, cannot perform collective operation"
 
         if method_kwargs is not None:
-            assert len(method_kwargs) == len(participating_members), \
-                f'Number of tasks in scatter operation ({len(method_kwargs)}) is not equal to the ' \
-                f'`participating_members` number ({len(participating_members)})'
+            assert len(method_kwargs) == len(participating_members), (
+                f"Number of tasks in scatter operation ({len(method_kwargs)}) is not equal to the "
+                f"`participating_members` number ({len(participating_members)})"
+            )
         else:
             method_kwargs = [None for _ in range(len(participating_members))]
 
@@ -161,8 +163,8 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
 
         if method_kwargs is not None and not isinstance(method_kwargs, MethodKwargs):
             raise TypeError(
-                'communicator.broadcast `method_kwargs` must be either None or MethodKwargs. '
-                f'Got {type(method_kwargs)}'
+                "communicator.broadcast `method_kwargs` must be either None or MethodKwargs. "
+                f"Got {type(method_kwargs)}"
             )
 
         tasks = []
@@ -179,26 +181,41 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return tasks
 
     def gather(self, tasks: List[Task], recv_results: bool = False) -> List[Task]:
-        return [self.recv(task, recv_results=recv_results) for task in tasks]
+        tasks_to_return = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+            recv_futures = [executor.submit(self.recv, task, recv_results) for task in tasks]
+            for task, future in zip(tasks, recv_futures):
+                future.method_name = task.method_name
+                future.receive_from_id = task.from_id if not recv_results else task.to_id
+            try:
+                for future in concurrent.futures.as_completed(recv_futures, timeout=self.recv_timeout):
+                    try:
+                        tasks_to_return.append(future.result())
+                    except Exception:
+                        raise
+            except FutureTimoutError:
+                raise TimeoutError(f"Could not gather task: {future.method_name}.")
+        return tasks_to_return
 
     def _check_if_ready(self):
         """Raise an exception if the communicator was not initialized properly."""
         if not self.is_ready:
             raise RuntimeError(
                 "Cannot proceed because communicator is not ready. "
-                "Perhaps, rendezvous has not been called or was unsuccessful")
+                "Perhaps, rendezvous has not been called or was unsuccessful"
+            )
 
 
 class LocalMasterPartyCommunicator(LocalPartyCommunicator):
     """Local Master communicator class.
-    This class is used as the communicator for master in local (single-process) VFL setup.    """
+    This class is used as the communicator for master in local (single-process) VFL setup."""
 
     def __init__(
             self,
             participant: PartyMaster,
             world_size: int,
             shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-            recv_timeout: float = 20.
+            recv_timeout: float = 120.0,
     ):
         """
         Initialize master communicator with parameters.
@@ -233,7 +250,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
 
 class LocalMemberPartyCommunicator(LocalPartyCommunicator):
     """gRPC Member communicator class.
-    This class is used as the communicator for member in local (single-process) VFL setup.    """
+    This class is used as the communicator for member in local (single-process) VFL setup."""
 
     def __init__(
             self,
@@ -241,7 +258,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
             master_id: str,
             world_size: int,
             shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-            recv_timeout: float = 20.,
+            recv_timeout: float = 120.0,
     ):
         """
         Initialize member communicator with parameters.
