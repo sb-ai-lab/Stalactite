@@ -215,7 +215,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
             participant: PartyMaster,
             world_size: int,
             shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-            recv_timeout: float = 120.0,
+            recv_timeout: float = 360.0,
     ):
         """
         Initialize master communicator with parameters.
@@ -258,7 +258,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
             master_id: str,
             world_size: int,
             shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-            recv_timeout: float = 120.0,
+            recv_timeout: float = 360.0,
     ):
         """
         Initialize member communicator with parameters.

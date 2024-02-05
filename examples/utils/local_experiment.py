@@ -19,6 +19,7 @@ from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+logging.getLogger('PIL').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 
@@ -34,7 +35,7 @@ def load_processors(config_path: str):
 
     if config.data.dataset.lower() == "mnist":
 
-        if not os.path.exists(config.data.host_path_data_dir):
+        if len(os.listdir(config.data.host_path_data_dir)) == 0:
             load_mnist(config.data.host_path_data_dir, config.common.world_size)
 
         dataset = {}
@@ -50,7 +51,7 @@ def load_processors(config_path: str):
     elif config.data.dataset.lower() == "sbol":
 
         dataset = {}
-        if not os.path.exists(config.data.host_path_data_dir):
+        if len(os.listdir(config.data.host_path_data_dir)) == 0:
             load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=2)
 
         for m in range(config.common.world_size):

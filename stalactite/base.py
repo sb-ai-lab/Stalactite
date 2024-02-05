@@ -256,6 +256,10 @@ class PartyMaster(ABC):
 
         collected_uids_results = [task.result for task in records_uids_results]
 
+        communicator.broadcast(
+            Method.initialize,
+            participating_members=communicator.members,
+        )
         self.initialize()
 
         uids = self.synchronize_uids(collected_uids_results, world_size=communicator.world_size)
@@ -265,10 +269,7 @@ class PartyMaster(ABC):
             participating_members=communicator.members,
         )
 
-        communicator.broadcast(
-            Method.initialize,
-            participating_members=communicator.members,
-        )
+
 
         self.loop(batcher=self.make_batcher(uids=uids, party_members=communicator.members), communicator=communicator)
 
@@ -490,13 +491,13 @@ class PartyMember(ABC):
         uids = self._execute_received_task(synchronize_uids_task)
         communicator.send(self.master_id, Method.records_uids, result=uids)
 
+        initialize_task = communicator.recv(Task(method_name=Method.initialize, from_id=self.master_id, to_id=self.id))
+        self._execute_received_task(initialize_task)
+
         register_records_uids_task = communicator.recv(
             Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
         )
         self._execute_received_task(register_records_uids_task)
-
-        initialize_task = communicator.recv(Task(method_name=Method.initialize, from_id=self.master_id, to_id=self.id))
-        self._execute_received_task(initialize_task)
 
         self.loop(batcher=self.batcher, communicator=communicator)
 
