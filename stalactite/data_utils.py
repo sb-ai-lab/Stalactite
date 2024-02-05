@@ -10,6 +10,7 @@ from stalactite.party_member_impl import PartyMemberImpl
 from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 
 
+# TODO : add prerocessing of the datasets
 def load_processors(config_path: str) -> list[Any]:
     config = VFLConfig.load_and_validate(config_path)
 

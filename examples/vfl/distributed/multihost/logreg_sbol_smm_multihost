@@ -38,7 +38,7 @@ function run() {
     do
         ssh -t $vk_host "cd /home/ubuntu/vfl-benchmark && python3 -m poetry run stalactite member start \
         --detached \
-        --config-path examples/configs/logreg-sbol-smm-vm-vk.yml \
+        --config-path examples/configs/logreg-sbol-smm-vm-yc.yml \
         --rank $count"
         ((count++))
     done
@@ -47,7 +47,7 @@ function run() {
     do
         ssh -t $sber_host "cd /root/vfl-exp/vfl-benchmark && poetry run stalactite member start \
         --detached \
-        --config-path examples/configs/logreg-sbol-smm-vm-sber.yml \
+        --config-path examples/configs/logreg-sbol-smm-vm-yc.yml \
         --rank $count"
         ((count++))
     done

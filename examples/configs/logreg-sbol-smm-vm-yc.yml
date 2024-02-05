@@ -5,7 +5,7 @@ common:
   world_size: 2
   batch_size: 1000
   experiment_label: experiment-vms
-  reports_export_folder: "/home/gpusrvadmin/vfl-benchmark/reports"
+  reports_export_folder: "../../reports"
   rendezvous_timeout: 3600
   vfl_model_name: logreg
   is_consequently: False
@@ -24,12 +24,12 @@ data:
   dataset_size: 1000
   dataset: 'sbol'
   use_smm: True
-  host_path_data_dir: /home/gpusrvadmin/vfl-benchmark/data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2 # /home/dmitriy/data #
+  host_path_data_dir: ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2 # /home/dmitriy/data #
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
-  features_data_preprocessors: [ FullDataTensor(features_key),  SkLearnStandardScaler ]
-  label_data_preprocessors: [ FullDataTensor(label_key) ]
+#  features_data_preprocessors: [ FullDataTensor(features_key),  SkLearnStandardScaler ]
+#  label_data_preprocessors: [ FullDataTensor(label_key) ]
   features_key: "features_part_"
   label_key: "labels"
 
@@ -59,5 +59,5 @@ grpc_arbiter:
 
 docker:
   docker_compose_command: "docker compose"
-  docker_compose_path: '/home/gpusrvadmin/vfl-benchmark/prerequisites'
+  docker_compose_path: '../../prerequisites'
   use_gpu: False

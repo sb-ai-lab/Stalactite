@@ -65,11 +65,6 @@ class CommonConfig(BaseModel):
     use_class_weights: bool = Field(default=False, description='Logistic regression')  # TODO
     learning_rate: float = Field(default=0.01, description='Learning rate')
 
-    @field_validator("reports_export_folder")
-    @classmethod
-    def check_if_exists_or_create(cls, v: str):
-        os.makedirs(v, exist_ok=True)
-        return v
 
 
 class DataConfig(BaseModel):
@@ -199,7 +194,8 @@ class DockerConfig(BaseModel):
     """Docker client parameters config."""
 
     docker_compose_path: str = Field(
-        default="../prerequisites", description="Path to the directory containing docker-compose.yml"
+        default=os.path.join(Path(os.path.abspath(__file__)).parent.parent, 'prerequisites'),
+        description="Path to the directory containing docker-compose.yml and prerequisites configs"
     )
     docker_compose_command: str = Field(
         default="docker compose", description="Docker compose command to use (`docker compose` | `docker-compose`)"
@@ -208,14 +204,6 @@ class DockerConfig(BaseModel):
         default=False,
         description='Set to True is your system uses GPU (required for torch dependencies'
     )
-
-    @field_validator("docker_compose_path")
-    @classmethod
-    def validate_docker_folder(cls, v: str):
-        if os.path.exists(v):
-            return os.path.abspath(v)
-        else:
-            return v
 
 
 class VFLConfig(BaseModel):
@@ -229,6 +217,8 @@ class VFLConfig(BaseModel):
     master: MasterConfig = Field(default_factory=MasterConfig)
     member: MemberConfig = Field(default_factory=MemberConfig)
     docker: DockerConfig = Field(default_factory=DockerConfig)
+
+    config_dir_path: Union[str, Path] = Field(default=Path(__file__).parent.parent)
 
     @model_validator(mode="after")
     def validate_disconnection_time(self) -> "VFLConfig":
@@ -253,14 +243,35 @@ class VFLConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def info_set_reports(self) -> "VFLConfig":
+    def set_fields(self) -> "VFLConfig":
         if not self.master.run_prometheus:
             warnings.warn("Reporting to Prometheus is disabled.", UserWarning)
         if not self.master.run_mlflow:
             warnings.warn("Reporting to MlFlow is disabled.", UserWarning)
+
+        docker_path = self.docker.docker_compose_path
+        if os.path.exists(docker_path):
+            self.docker.docker_compose_path = os.path.abspath(docker_path)
+        else:
+            self.docker.docker_compose_path = os.path.normpath(os.path.join(self.config_dir_path, docker_path))
+
+        if os.path.isabs(self.data.host_path_data_dir):
+            data_dir = self.data.host_path_data_dir
+        else:
+            data_dir = os.path.normpath(os.path.join(self.config_dir_path, self.data.host_path_data_dir))
+            raise_path_not_exist(data_dir)
+        self.data.host_path_data_dir = data_dir
+
+        reports_dir = self.common.reports_export_folder
+        if not os.path.isabs(reports_dir):
+            reports_dir = os.path.normpath(os.path.join(self.config_dir_path, reports_dir))
+        os.makedirs(reports_dir, exist_ok=True)
         return self
+
 
     @classmethod
     def load_and_validate(cls, config_path: str):
         """Load YAML configuration and validate params with the VFLConfig model."""
-        return cls.model_validate(load_yaml_config(config_path))
+        model = load_yaml_config(config_path)
+        model['config_dir_path'] = Path(os.path.abspath(config_path)).parent
+        return cls.model_validate(model)

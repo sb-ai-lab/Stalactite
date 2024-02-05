@@ -19,6 +19,11 @@ starts the experiment on each agent.
 Firstly, we implement several helper functions, to get the members and master. The ``load_parameters`` function was
 defined in the :ref:`local_comm_tutorial`.
 
+.. warning::
+    The ``load_parameters`` executes the custom preprocessing functions for ``mnist`` and ``sbol`` datasets in case when
+    processed data do not exist. We highly recommend to pass the path to the processed datasets when you run distributed
+    experiments. This section is undergoing active development, and we resolve it in the nearest future.
+
 .. code-block:: python
 
     def get_party_master(config_path: str):

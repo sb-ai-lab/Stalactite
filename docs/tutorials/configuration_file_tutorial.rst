@@ -6,6 +6,9 @@
 The configuration files are used for tuning the experimental scripts to your needs.
 An example of configuration file can be found at the ``configs/config-test.yml``.
 
+All the path parameters (``reports_export_folder``, ``host_path_data_dir``, ``docker_compose_path``) should be either
+absolute paths to the directories, or are resolved relatively to the path of the configuration file.
+
 Common parameters are required in any experiment and define general experimental specifics.
 
 .. code-block:: yaml
@@ -98,5 +101,6 @@ with the prerequisites
 
     docker:
       docker_compose_command: # Docker compose command
-      docker_compose_path: # Path to the docker-compose.yml file and prerequisites configs/
+      # Path to the docker-compose.yml file and prerequisites configs/
+      docker_compose_path: "../prerequisites" # The default path is relative to the repo root
 

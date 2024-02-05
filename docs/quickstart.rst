@@ -92,21 +92,26 @@ Local experiments
 The following section contains local (single process multiple threads) experiments examples description.
 These experiments are useful for the VFL algorithms development and debugging.
 
+.. note::
+    Create a folder ``data`` under root directory of the repository (``./vfl-benchmark/data``) and put all the datasets
+    there. Otherwise you will need to pass the correct data paths into the configuration files.
+
 Linear regression on MNIST
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``examples/vfl/local/linreg_mnist_local.py`` launches the local linear regression example on MNIST dataset.
 The YAML file for this experiment ``examples/configs/linreg-mnist-local.yml`` configures main common and data
-parameters required for the launch. In this file you should customize the following fields:
+parameters required for the launch. To customize the directories (if you do not want to use `vfl-benchmark/data`,
+`vfl-benchmark/reports` path and enable logging to MlFlow make the following changes in the config file:
 
 .. code-block:: yaml
 
     common:
-      # Here you must pass the path to folder where reports can be exported
-      reports_export_folder: "../reports"
+      # Here you can pass different to the `vfl-benchmark/reports` path to folder where reports can be exported
+      reports_export_folder: "/your-custom-path/reports"
 
     data:
-      # Here you must pass the path to folder containing the dataset
+      # If you saved your data in another folder, change:
       host_path_data_dir: "../data/mnist_binary38_parts2"
 
     prerequisites:
@@ -228,7 +233,7 @@ file we add new sections and fields (in comparison to the local example):
     docker:
       # Docker compose command on your machine ("docker compose" | "docker-compose")
       docker_compose_command: "docker compose"
-      # Path to the docker-compose.yml file for the prerequisites (required for the Stalactite CLI prerequisites group)
+      # Path to the docker-compose.yml file for the prerequisites (you do not need to change it)
       docker_compose_path: "../prerequisites"
       # Whether your machine uses GPU (required for correct torch dependencies in the containers)
       use_gpu: False
@@ -267,12 +272,12 @@ host machines.
 Logistic regression on SBOL and SMM (MH)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For each host the separate configuration file is required (due to possible differences in the host paths).
-As the experiment example in launched across three virtual machines three postfixes identify which machine is used:
-``yc`` for the YandexCloud, ``sber`` for the SberCloud, ``vk`` for the VK CLoud.
-Configuration files for the MH experiment can be found at ``examples/configs/logreg-sbol-smm-vm-<postfix>.yml``.
+For each host e use the same configuration file (in your experiment you might want to get different configs for hosts
+to customize paths). As the experiment example in launched across three virtual machines with the master running on the
+Yandex Cloud (``yc``), the configuration file for the MH experiment can be found at
+``examples/configs/logreg-sbol-smm-vm-yc.yml``.
 
-Due to the master and prerequisites (if started) are launched on the same host, all the configs contain the same fields,
+Due to the master and prerequisites (if started) are launched on the same host, the config contain the master host info,
 including:
 
 .. code-block:: yaml
@@ -284,16 +289,17 @@ including:
     master:
       container_host: <master_host_public_ip>
 
-Nevertheless, the paths on different machines differ, therefore, paths to data and reports folders must be changed:
+Nevertheless, the paths on different machines can differ, therefore, if you saved your data in different from
+``vfl-benchmark/data`` folder, than duplicate the configuration files and change the following fields accordingly:
 
 .. code-block:: yaml
 
     common:
-      # Here you should pass the full path to the reports folder
+      # Here you should pass new custom path to the reports folder
       reports_export_folder: "../vfl-benchmark/reports"
 
     data:
-      # Here you should pass the full path to the folder containing the dataset
+      # Here you should pass host-specific paths to the datasets
       host_path_data_dir: "../vfl_multilabel_sber_sample10000_parts2"
 
 After you configure the machines, you can use the helper script which launches master and members via ssh:
