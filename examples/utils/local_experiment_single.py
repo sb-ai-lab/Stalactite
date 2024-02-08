@@ -3,7 +3,6 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import mlflow
 import datasets
 
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
@@ -11,6 +10,7 @@ from stalactite.configs import VFLConfig
 from stalactite.party_single_impl import PartySingleLinreg, PartySingleLogreg
 from examples.utils.prepare_mnist import load_data as load_mnist
 from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
+from stalactite.helpers import reporting
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 def load_processors(config_path: str):
-    # BASE_PATH = Path(__file__).parent.parent.parent
-
     config = VFLConfig.load_and_validate(config_path)
 
     if config.data.dataset.lower() == "mnist":
@@ -61,59 +59,35 @@ def run(config_path: Optional[str] = None):
             os.path.join(Path(__file__).parent.parent.parent, 'configs/linreg-mnist-local.yml')
         )
     config = VFLConfig.load_and_validate(config_path)
+    model_name = config.vfl_model.vfl_model_name
 
-    if config.master.run_mlflow:
-        mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
-        mlflow.set_experiment(config.common.experiment_label)
-        mlflow.start_run()
+    with reporting(config):
 
-    model_name = config.common.vfl_model_name
+        processors = load_processors(config_path)
 
-    log_params = {
-        "ds_size": config.data.dataset_size,
-        "batch_size": config.common.batch_size,
-        "epochs": config.common.epochs,
-        "mode": "vfl",
-        "members_count": config.common.world_size,
-        "exp_uid": config.common.experiment_label,
-        "is_consequently": config.common.is_consequently,
-        "model_name": model_name,
-        "learning_rate": config.common.learning_rate,
-        "dataset": config.data.dataset,
+        if model_name == "linreg":
+            party = PartySingleLinreg(
+                processor=processors[0],
+                batch_size=config.vfl_model.batch_size,
+                epochs=config.vfl_model.epochs,
+                report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+                report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+                use_mlflow=config.master.run_mlflow
+            )
 
-    }
+        elif model_name == "logreg":
+            party = PartySingleLogreg(
+                processor=processors[0],
+                batch_size=config.vfl_model.batch_size,
+                epochs=config.vfl_model.epochs,
+                report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+                report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+                use_mlflow=config.master.run_mlflow
+            )
+        else:
+            raise ValueError(f"unknown model name: {model_name}")
 
-    if config.master.run_mlflow:
-        mlflow.log_params(log_params)
-
-    processors = load_processors(config_path)
-
-    if model_name == "linreg":
-        party = PartySingleLinreg(
-            processor=processors[0],
-            batch_size=config.common.batch_size,
-            epochs=config.common.epochs,
-            report_train_metrics_iteration=config.common.report_train_metrics_iteration,
-            report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-            use_mlflow=config.master.run_mlflow
-        )
-
-    elif model_name == "logreg":
-        party = PartySingleLogreg(
-            processor=processors[0],
-            batch_size=config.common.batch_size,
-            epochs=config.common.epochs,
-            report_train_metrics_iteration=config.common.report_train_metrics_iteration,
-            report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-            use_mlflow=config.master.run_mlflow
-        )
-    else:
-        raise ValueError(f"unknown model name: {model_name}")
-
-    party.run()
-
-    if config.master.run_mlflow:
-        mlflow.end_run()
+        party.run()
 
 
 if __name__ == "__main__":

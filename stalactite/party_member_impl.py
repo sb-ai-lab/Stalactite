@@ -8,23 +8,26 @@ from stalactite.batching import ListBatcher, ConsecutiveListBatcher
 from stalactite.models import LinearRegressionBatch, LogisticRegressionBatch
 
 logger = logging.getLogger(__name__)
+sh = logging.StreamHandler()
+sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logger.addHandler(sh)
 
 
 class PartyMemberImpl(PartyMember):
     """ Implementation class of the PartyMember used for local and distributed VFL training. """
 
     def __init__(
-        self,
-        uid: str,
-        epochs: int,
-        batch_size: int,
-        member_record_uids: List[str],
-        model_name: str,
-        report_train_metrics_iteration: int,
-        report_test_metrics_iteration: int,
-        processor=None,
-        is_consequently: bool = False,
-        members: Optional[list[str]] = None,
+            self,
+            uid: str,
+            epochs: int,
+            batch_size: int,
+            member_record_uids: List[str],
+            model_name: str,
+            report_train_metrics_iteration: int,
+            report_test_metrics_iteration: int,
+            processor=None,
+            is_consequently: bool = False,
+            members: Optional[list[str]] = None,
     ) -> None:
         """
         Initialize PartyMemberImpl.

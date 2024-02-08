@@ -269,8 +269,6 @@ class PartyMaster(ABC):
             participating_members=communicator.members,
         )
 
-
-
         self.loop(batcher=self.make_batcher(uids=uids, party_members=communicator.members), communicator=communicator)
 
         communicator.broadcast(

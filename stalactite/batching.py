@@ -35,7 +35,6 @@ class ListBatcher(Batcher):
                     iter_num += 1
                     iter_in_batch += 1
                     previous_batch = batch
-
             yield TrainingIteration(
                 seq_num=iter_num - 1,
                 subiter_seq_num=iter_in_batch - 1,

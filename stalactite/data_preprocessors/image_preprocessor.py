@@ -11,7 +11,7 @@ class ImagePreprocessor:
     """
     def __init__(self, dataset: datasets.DatasetDict,  member_id, params=None):
         self.dataset = dataset
-        self.common_params = params.common
+        self.common_params = params.vfl_model
         self.data_params = params.data.copy()
         self.data_params.features_key = self.data_params.features_key + str(member_id)
         self.member_id = member_id

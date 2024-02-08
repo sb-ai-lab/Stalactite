@@ -38,7 +38,7 @@ def load_yaml_config(yaml_path: Union[str, Path]) -> dict:
 class CommonConfig(BaseModel):
     """Common experimental parameters config."""
 
-    epochs: int = Field(default=3, description="Number of epochs to train a model")
+    # epochs: int = Field(default=3, description="Number of epochs to train a model")
     world_size: int = Field(default=2, description="Number of the VFL member agents (without the master)")
     report_train_metrics_iteration: int = Field(
         default=1,
@@ -48,7 +48,7 @@ class CommonConfig(BaseModel):
         default=1,
         description="Number of iteration steps between reporting metrics on test dataset split."
     )
-    batch_size: int = Field(default=100, description="Batch size used for training")
+    # batch_size: int = Field(default=100, description="Batch size used for training")
     experiment_label: str = Field(
         default="default-experiment",
         description="Experiment name used in prerequisites, if unset, defaults to `default-experiment`",
@@ -57,6 +57,11 @@ class CommonConfig(BaseModel):
         default=Path(__file__).parent, description="Folder for exporting tests` and experiments` reports"
     )
     rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec")
+
+
+class VFLModelConfig(BaseModel):
+    epochs: int = Field(default=3, description="Number of epochs to train a model")
+    batch_size: int = Field(default=100, description="Batch size used for training")
     vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn'] = Field(
         default='linreg',
         description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`'
@@ -210,6 +215,7 @@ class VFLConfig(BaseModel):
     """Experimental parameters general config."""
 
     common: CommonConfig = Field(default_factory=CommonConfig)
+    vfl_model: VFLModelConfig = Field(default_factory=VFLModelConfig)
     data: DataConfig = Field(default_factory=DataConfig)
     prerequisites: PrerequisitesConfig = Field(default_factory=PrerequisitesConfig)
     grpc_server: GRpcServerConfig = Field(default_factory=GRpcServerConfig)

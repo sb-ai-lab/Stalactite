@@ -74,6 +74,7 @@ For the full description on the configuration file fields checkout: :ref:`config
 Configuration file contains settings for all the parts of the experiment:
 
 * ``common`` group contains general experimental settings;
+* ``vfl_model`` group training and model specific settings;
 * ``data`` part adjusts custom dataset into the experiment;
 * ``prerequisites`` section manages the MlFlow anf Prometheus usage for logging and monitoring;
 * ``grpc_server`` section used only in distributed experiments and configures the gRPC server used in communication between VFL agents;
@@ -140,7 +141,7 @@ is basically same to the `Linear regression on MNIST`_ example, except for the f
 
 .. code-block:: yaml
 
-    common:
+    vfl_model:
       is_consequently: True
 
 Do not forget to pass all the paths and check the MlFlow server configuration.
@@ -163,7 +164,7 @@ altered:
 
 .. code-block:: yaml
 
-    common:
+    vfl_model:
       vfl_model_name: logreg
       is_consequently: False
       use_class_weights: False
