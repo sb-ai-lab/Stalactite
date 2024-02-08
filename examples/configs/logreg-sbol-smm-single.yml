@@ -24,8 +24,7 @@ master:
 data:
   random_seed: 0
   dataset_size: 8500
-  dataset: 'sbol'
-  use_smm: True
+  dataset: 'sbol_smm'
   host_path_data_dir: ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts1
   dataset_part_prefix: 'part_'
   train_split: "train_train"

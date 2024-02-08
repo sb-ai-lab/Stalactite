@@ -33,7 +33,7 @@ def load_processors(config_path: str):
             ImagePreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
 
-    elif config.data.dataset.lower() == "sbol":
+    elif config.data.dataset.lower() == "sbol_smm":
 
         if not os.path.exists(config.data.host_path_data_dir):
             load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1)

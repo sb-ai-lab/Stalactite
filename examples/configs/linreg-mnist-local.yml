@@ -17,7 +17,6 @@ data:
   random_seed: 0
   dataset_size: 5000
   dataset: 'mnist'
-  use_smm: False
   host_path_data_dir:  ../../data/sber_ds_vfl/mnist_binary38_parts2
   dataset_part_prefix: 'part_'
   train_split: "train_train"

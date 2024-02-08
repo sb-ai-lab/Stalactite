@@ -44,7 +44,7 @@ def load_processors(config: VFLConfig):
             ImagePreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
 
-    elif config.data.dataset.lower() == "sbol":
+    elif config.data.dataset.lower() == "sbol_smm":
 
         dataset = {}
         if len(os.listdir(config.data.host_path_data_dir)) == 0:

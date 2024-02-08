@@ -23,8 +23,7 @@ prerequisites:
 data:
   random_seed: 0
   dataset_size: 1000
-  dataset: 'sbol'
-  use_smm: True
+  dataset: 'sbol_smm'
   host_path_data_dir: /mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2 # /home/dmitriy/data #
   dataset_part_prefix: 'part_'
   train_split: "train_train"
