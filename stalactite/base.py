@@ -10,6 +10,8 @@ from typing import Any, Iterator, List, Optional, Union
 
 import torch
 
+from stalactite.communications.grpc_utils.utils import UnsupportedError
+
 logger = logging.getLogger(__name__)
 
 logger.setLevel(logging.DEBUG)
@@ -99,6 +101,8 @@ class PartyCommunicator(ABC):
     world_size: int
     # todo: add docs about order guaranteeing
     members: List[str]
+    arbiter: Optional[str] = None
+    master: Optional[str] = None
 
     @abstractmethod
     def rendezvous(self) -> None:
@@ -218,7 +222,54 @@ class PartyCommunicator(ABC):
         ...
 
 
-class PartyMaster(ABC):
+class PartyAgent(ABC):
+    """ Abstract base class for the party in the VFL experiment. """
+
+    def execute_received_task(self, task: Task) -> Optional[Union[DataTensor, List[str]]]:
+        """ Execute received method on the master.
+
+        :param task: Received task to execute.
+        :return: Execution result.
+        """
+        try:
+            result = getattr(self, task.method_name)(**task.kwargs_dict)
+        except AttributeError as exc:
+            raise UnsupportedError(f'Method {task.method_name} is not supported on {self.id}') from exc
+        return result
+
+    def run(self, party: PartyCommunicator) -> None:
+        """ Run the VFL experiment with the party agent.
+
+        Current method should implement initialization of the party agent, launching of the main training loop,
+        and finalization of the experiment.
+
+        :param party: Communicator instance used for communication between VFL agents.
+        :return: None
+        """
+        ...
+
+    def loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        """ Run main training loop on the VFL agent.
+
+        :param batcher: Batcher for creating training batches.
+        :param party: Communicator instance used for communication between VFL agents.
+
+        :return: None
+        """
+        ...
+
+    @abstractmethod
+    def initialize(self):
+        """ Initialize the party agent. """
+        ...
+
+    @abstractmethod
+    def finalize(self):
+        """ Finalize the party agent. """
+        ...
+
+
+class PartyMaster(PartyAgent, ABC):
     """ Abstract base class for the master party in the VFL experiment. """
 
     id: str
@@ -235,126 +286,6 @@ class PartyMaster(ABC):
     def train_timings(self) -> list:
         """ Return list of tuples representing iteration timings from the main loop. """
         return self._iter_time
-
-    def run(self, communicator: PartyCommunicator) -> None:  # TODO rename to party
-        """ Run the VFL experiment with the master party.
-
-        Current method implements initialization of the master and members, launches the main training loop,
-        and finalizes the experiment.
-
-        :param communicator: Communicator instance used for communication between VFL agents.
-        :return: None
-        """
-        logger.info("Running master %s" % self.id)
-
-        records_uids_tasks = communicator.broadcast(
-            Method.records_uids,
-            participating_members=communicator.members,
-        )
-
-        records_uids_results = communicator.gather(records_uids_tasks, recv_results=True)
-
-        collected_uids_results = [task.result for task in records_uids_results]
-
-        self.initialize()
-
-        uids = self.synchronize_uids(collected_uids_results, world_size=communicator.world_size)
-        communicator.broadcast(
-            Method.register_records_uids,
-            method_kwargs=MethodKwargs(other_kwargs={"uids": uids}),
-            participating_members=communicator.members,
-        )
-
-        communicator.broadcast(
-            Method.initialize,
-            participating_members=communicator.members,
-        )
-
-        self.loop(batcher=self.make_batcher(uids=uids, party_members=communicator.members), communicator=communicator)
-
-        communicator.broadcast(
-            Method.finalize,
-            participating_members=communicator.members,
-        )
-        self.finalize()
-        logger.info("Finished master %s" % self.id)
-
-    def loop(self, batcher: Batcher, communicator: PartyCommunicator) -> None:
-        """ Run main training loop on the VFL master.
-
-        :param batcher: Batcher for creating training batches.
-        :param communicator: Communicator instance used for communication between VFL agents.
-
-        :return: None
-        """
-        logger.info("Master %s: entering training loop" % self.id)
-        updates = self.make_init_updates(communicator.world_size)
-        for titer in batcher:
-            logger.debug(
-                f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
-            )
-            iter_start_time = time.time()
-            if titer.seq_num == 0:
-                updates = updates[:len(titer.participating_members)]
-            update_predict_tasks = communicator.scatter(
-                Method.update_predict,
-                method_kwargs=[
-                    MethodKwargs(
-                        tensor_kwargs={"upd": participant_updates},
-                        other_kwargs={"previous_batch": titer.previous_batch, "batch": titer.batch},
-                    )
-                    for participant_updates in updates
-                ],
-                participating_members=titer.participating_members,
-            )
-
-            party_predictions = [task.result for task in communicator.gather(update_predict_tasks, recv_results=True)]
-
-            predictions = self.aggregate(titer.participating_members, party_predictions)
-
-            updates = self.compute_updates(
-                titer.participating_members,
-                predictions,
-                party_predictions,
-                communicator.world_size,
-                titer.subiter_seq_num,
-            )
-
-            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
-                logger.debug(
-                    f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_tasks = communicator.broadcast(
-                    Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids}),
-                    participating_members=titer.participating_members,
-                )
-                party_predictions = [task.result for task in communicator.gather(predict_tasks, recv_results=True)]
-
-                predictions = self.aggregate(communicator.members, party_predictions, infer=True)
-                self.report_metrics(self.target, predictions, name="Train")
-
-            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
-                logger.debug(
-                    f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_test_tasks = communicator.broadcast(
-                    Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids, "use_test": True}),
-                    participating_members=titer.participating_members,
-                )
-
-                party_predictions_test = [
-                    task.result for task in communicator.gather(predict_test_tasks, recv_results=True)
-                ]
-
-                predictions = self.aggregate(communicator.members, party_predictions_test, infer=True)
-                self.report_metrics(self.test_target, predictions, name="Test")
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
     def synchronize_uids(self, collected_uids: list[list[str]], world_size: int) -> List[str]:
         """ Synchronize unique records identifiers across party members.
@@ -386,16 +317,6 @@ class PartyMaster(ABC):
 
         :return: Batcher instance.
         """
-        ...
-
-    @abstractmethod
-    def initialize(self):
-        """ Initialize the party master. """
-        ...
-
-    @abstractmethod
-    def finalize(self):
-        """ Finalize the party master. """
         ...
 
     @abstractmethod
@@ -456,7 +377,7 @@ class PartyMaster(ABC):
         ...
 
 
-class PartyMember(ABC):
+class PartyMember(PartyAgent, ABC):
     """ Abstract base class for the member party in the VFL experiment. """
 
     id: str
@@ -464,100 +385,6 @@ class PartyMember(ABC):
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
     _iter_time: list[tuple[int, float]] = list()
-
-    def _execute_received_task(self, task: Task) -> Optional[Union[DataTensor, List[str]]]:
-        """ Execute received method on a member.
-
-        :param task: Received task to execute.
-        :return: Execution result.
-        """
-        return getattr(self, task.method_name)(**task.kwargs_dict)
-
-    def run(self, communicator: PartyCommunicator):
-        """ Run the VFL experiment with the member party.
-
-        Current method implements initialization of the member, launches the main training loop,
-        and finalizes the member.
-
-        :param communicator: Communicator instance used for communication between VFL agents.
-        :return: None
-        """
-        logger.info("Running member %s" % self.id)
-
-        synchronize_uids_task = communicator.recv(
-            Task(method_name=Method.records_uids, from_id=self.master_id, to_id=self.id)
-        )
-        uids = self._execute_received_task(synchronize_uids_task)
-        communicator.send(self.master_id, Method.records_uids, result=uids)
-
-        register_records_uids_task = communicator.recv(
-            Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
-        )
-        self._execute_received_task(register_records_uids_task)
-
-        initialize_task = communicator.recv(Task(method_name=Method.initialize, from_id=self.master_id, to_id=self.id))
-        self._execute_received_task(initialize_task)
-
-        self.loop(batcher=self.batcher, communicator=communicator)
-
-        finalize_task = communicator.recv(Task(method_name=Method.finalize, from_id=self.master_id, to_id=self.id))
-        self._execute_received_task(finalize_task)
-        logger.info("Finished member %s" % self.id)
-
-    def loop(self, batcher: Batcher, communicator: PartyCommunicator):
-        """ Run main training loop on the VFL member.
-
-        :param batcher: Batcher for creating training batches.
-        :param communicator: Communicator instance used for communication between VFL agents.
-
-        :return: None
-        """
-        logger.info("Member %s: entering training loop" % self.id)
-
-        for titer in batcher:
-            if titer.participating_members is not None:
-                if self.id not in titer.participating_members:
-                    logger.debug(f'Member {self.id} skipping {titer.seq_num}.')
-                    continue
-            logger.debug(
-                f"Member %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
-            )
-
-            iter_start_time = time.time()
-            update_predict_task = communicator.recv(
-                Task(method_name=Method.update_predict, from_id=self.master_id, to_id=self.id)
-            )
-            predictions = self._execute_received_task(update_predict_task)
-            communicator.send(
-                self.master_id,
-                Method.update_predict,
-                result=predictions,
-            )
-
-            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
-                logger.debug(
-                    f"Member %s: train loop - calculating train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_task = communicator.recv(
-                    Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id)
-                )
-                predictions = self._execute_received_task(predict_task)
-                communicator.send(self.master_id, Method.predict, result=predictions)
-
-            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
-                logger.debug(
-                    f"Member %s: train loop - calculating train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_task = communicator.recv(
-                    Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id)
-                )
-                predictions = self._execute_received_task(predict_task)
-                communicator.send(self.master_id, Method.predict, result=predictions)
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
     @property
     @abstractmethod
@@ -583,16 +410,6 @@ class PartyMember(ABC):
         :param uids: List of unique identifiers.
         :return: None
         """
-        ...
-
-    @abstractmethod
-    def initialize(self):
-        """ Initialize the party member. """
-        ...
-
-    @abstractmethod
-    def finalize(self):
-        """ Finalize the party member. """
         ...
 
     @abstractmethod

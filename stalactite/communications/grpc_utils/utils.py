@@ -40,7 +40,7 @@ class PrometheusMetric(enum.Enum):
     )
 
 
-class UnsupportedError(Exception):
+class UnsupportedError(Exception): # TODO move from communications utils
     """Custom exception class for indicating that an unsupported method is called on a class."""
 
     def __init__(self, message: str = "Unsupported method for class."):

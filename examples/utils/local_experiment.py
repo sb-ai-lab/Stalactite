@@ -8,9 +8,16 @@ from typing import List, Optional
 import mlflow
 import datasets
 
-from stalactite.party_member_impl import PartyMemberImpl
+# from stalactite.party_member_impl import PartyMemberImpl
+from stalactite.ml import (
+    HonestPartyMasterLinRegConsequently,
+    HonestPartyMasterLinReg,
+    HonestPartyMemberLogReg,
+    HonestPartyMemberLinReg,
+    HonestPartyMasterLogReg
+)
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
-from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
+# from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
@@ -105,12 +112,14 @@ def run(config_path: Optional[str] = None):
 
     shared_party_info = dict()
     if 'logreg' in config.common.vfl_model_name:
-        master_class = PartyMasterImplLogreg
+        master_class = HonestPartyMasterLogReg
+        member_class = HonestPartyMemberLogReg
     else:
+        member_class = HonestPartyMemberLinReg
         if config.common.is_consequently:
-            master_class = PartyMasterImplConsequently
+            master_class = HonestPartyMasterLinRegConsequently
         else:
-            master_class = PartyMasterImpl
+            master_class = HonestPartyMasterLinReg
     master = master_class(
         uid="master",
         epochs=config.common.epochs,
@@ -126,7 +135,7 @@ def run(config_path: Optional[str] = None):
     member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
 
     members = [
-        PartyMemberImpl(
+        member_class(
             uid=member_uid,
             member_record_uids=target_uids,
             model_name=config.common.vfl_model_name,

@@ -2,13 +2,17 @@
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
 
 import os
-from typing import Any, Optional
+from typing import Any
 import datasets
 
 from stalactite.configs import VFLConfig
-from stalactite.party_member_impl import PartyMemberImpl
-from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
-
+from stalactite.ml import (
+    HonestPartyMasterLinRegConsequently,
+    HonestPartyMasterLinReg,
+    HonestPartyMemberLogReg,
+    HonestPartyMemberLinReg,
+    HonestPartyMasterLogReg
+)
 
 # TODO : add prerocessing of the datasets
 def load_processors(config_path: str) -> list[Any]:
@@ -48,12 +52,12 @@ def get_party_master(config_path: str):
     config = VFLConfig.load_and_validate(config_path)
     target_uids = [str(i) for i in range(config.data.dataset_size)]
     if 'logreg' in config.common.vfl_model_name:
-        master_class = PartyMasterImplLogreg
+        master_class = HonestPartyMasterLogReg
     else:
         if config.common.is_consequently:
-            master_class = PartyMasterImplConsequently
+            master_class = HonestPartyMasterLinRegConsequently
         else:
-            master_class = PartyMasterImpl
+            master_class = HonestPartyMasterLinReg
     return master_class(
         uid="master",
         epochs=config.common.epochs,
@@ -71,7 +75,11 @@ def get_party_member(config_path: str, member_rank: int):
     config = VFLConfig.load_and_validate(config_path)
     processors = load_processors(config_path)
     target_uids = [str(i) for i in range(config.data.dataset_size)]
-    return PartyMemberImpl(
+    if 'logreg' in config.common.vfl_model_name:
+        member_class = HonestPartyMemberLogReg
+    else:
+        member_class = HonestPartyMemberLinReg
+    return member_class(
         uid=f"member-{member_rank}",
         member_record_uids=target_uids,
         model_name=config.common.vfl_model_name,

@@ -240,7 +240,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
             logger.info("Party communicator %s: running" % self.participant.id)
             self.rendezvous()
 
-            self.participant.run(communicator=self)
+            self.participant.run(self)
 
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:
@@ -282,7 +282,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
             logger.info("Party communicator %s: running" % self.participant.id)
             self.rendezvous()
             self.participant.master_id = self.master_id
-            self.participant.run(communicator=self)
+            self.participant.run(self)
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:
             logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
