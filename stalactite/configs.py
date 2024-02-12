@@ -57,13 +57,14 @@ class CommonConfig(BaseModel):
         default=Path(__file__).parent, description="Folder for exporting tests` and experiments` reports"
     )
     rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec")
-    vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn'] = Field(
+    vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn', 'efficientnet'] = Field(
         default='linreg',
-        description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`'
+        description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`, `efficientnet`'
     )
     is_consequently: bool = Field(default=False, description='Run linear regression updates in sequential mode')
     use_class_weights: bool = Field(default=False, description='Logistic regression')  # TODO
     learning_rate: float = Field(default=0.01, description='Learning rate')
+    momentum: float = Field(default=0, description='Momentum')
 
 
 

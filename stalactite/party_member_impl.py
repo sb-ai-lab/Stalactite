@@ -1,11 +1,13 @@
 import logging
 from typing import List, Optional, Tuple
 
+import torch
 import scipy as sp
 
 from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
 from stalactite.batching import ListBatcher, ConsecutiveListBatcher
 from stalactite.models import LinearRegressionBatch, LogisticRegressionBatch
+from stalactite.models.split_learning.efficientnet_bottom import EfficientNetBottom
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +124,21 @@ class PartyMemberImpl(PartyMember):
                 learning_rate=self._common_params.learning_rate,
                 class_weights=None,
                 init_weights=0.005)
+        elif self._model_name == "efficientnet":
+            self._model = EfficientNetBottom(
+                width_mult=1.0,
+                depth_mult=1.0,
+                stochastic_depth_prob=0.2)
         else:
             raise ValueError("unknown model %s" % self._model_name)
+
+    def initialize_optimizer(self) -> None:
+        self._optimizer = torch.optim.SGD([
+            {"params": self._model.parameters()},
+        ],
+            lr=self._common_params.learning_rate,
+            momentum=self._common_params.momentum
+        )
 
     def initialize(self) -> None:
         """ Initialize the party member. """
@@ -133,6 +148,7 @@ class PartyMemberImpl(PartyMember):
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
         self.initialize_model()
+        self.initialize_optimizer()
         self.is_initialized = True
         logger.info("Member %s: has been initialized" % self.id)
 
@@ -162,7 +178,7 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        self._model.update_weights(X_train, upd)
+        self._model.update_weights(X_train, upd, optimizer=self._optimizer)
         logger.info("Member %s: successfully updated weights" % self.id)
 
     def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:

@@ -15,6 +15,7 @@ class LogisticRegressionBatch(torch.nn.Module):
         momentum: float = 0,
         class_weights: Optional[torch.Tensor] = None,
         init_weights: float = None,
+        multilabel: bool = True
     ):
         """
         Args:
@@ -25,7 +26,10 @@ class LogisticRegressionBatch(torch.nn.Module):
         self.linear = torch.nn.Linear(input_dim, output_dim, bias=False, device=None, dtype=None)
         if init_weights is not None:
             self.linear.weight.data = torch.full((output_dim, input_dim), init_weights)
-        self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
+        if multilabel:
+            self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
+        else:
+            self.criterion = torch.nn.CrossEntropyLoss(weight=None)
         self.optimizer = torch.optim.SGD(self.linear.parameters(), lr=learning_rate, momentum=momentum)
 
     def forward(self, x: torch.Tensor):
@@ -35,7 +39,7 @@ class LogisticRegressionBatch(torch.nn.Module):
         self.optimizer.zero_grad()
         logit = self.forward(x)
         if is_single:
-            loss = self.criterion(torch.squeeze(logit), gradients.float())
+            loss = self.criterion(torch.squeeze(logit), gradients.type(torch.LongTensor))
             loss.backward()
         else:
             logit.backward(gradient=gradients)
