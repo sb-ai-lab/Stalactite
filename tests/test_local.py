@@ -61,7 +61,11 @@ def test_local_run():
         MockPartyMemberImpl(
             uid=f"member-{i}",
             model_update_dim_size=model_update_dim_size,
-            member_record_uids=member_uids
+            member_record_uids=member_uids,
+            epochs=epochs,
+            batch_size=batch_size,
+            report_train_metrics_iteration=5,
+            report_test_metrics_iteration=5,
         )
         for i, member_uids in enumerate(members_datasets_uids)
     ]
@@ -106,7 +110,9 @@ def test_local_run():
     for thread in threads:
         thread.join()
 
-    assert master.iteration_counter == epochs * math.ceil(shared_uids_count / batch_size)
-    assert all([member.iterations_counter == epochs * math.ceil(shared_uids_count / batch_size) for member in members])
+    assert master.iteration_counter == epochs * math.ceil(shared_uids_count / batch_size) + 1
+    assert all(
+        [member.iterations_counter == epochs * math.ceil(shared_uids_count / batch_size) + 1 for member in members]
+    )
     assert master.is_initialized and master.is_finalized
     assert all([member.is_initialized and member.is_finalized for member in members])

@@ -17,25 +17,17 @@ used. Import it and load the parameters by running
     def run(config_path: str):
         config = VFLConfig.load_and_validate(config_path)
 
-Then, define the structure of the MlFlow run:
+Then, define the structure of the MlFlow run by calling the context manager:
 
 .. code-block:: python
 
-    import mlflow
+    from stalactite.helpers import reporting
 
     def run(config_path: str):
         ...
-        if config.master.run_mlflow:
-            mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
-            mlflow.set_experiment(config.common.experiment_label)
-            mlflow.start_run()
-
-        # Experiment goes here
-        ...
-
-        if config.master.run_mlflow:
-                mlflow.end_run()
-
+        with reporting(config):
+            # Experiment goes here
+            ...
 
 For the experiment you will need the preprocessors to pass into the agents. For this purpose, we
 define the ``load_processors`` function
@@ -48,9 +40,7 @@ define the ``load_processors`` function
     from examples.utils.prepare_mnist import load_data as load_mnist
     from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
 
-    def load_processors(config_path: str):
-        config = VFLConfig.load_and_validate(config_path)
-
+    def load_processors(config):
         if config.data.dataset.lower() == "mnist":
 
             if not os.path.exists(config.data.host_path_data_dir):
@@ -88,7 +78,7 @@ define the ``load_processors`` function
     def run(config_path: str):
         ...
         model_name = config.common.vfl_model_name
-        processors = load_processors(config_path)
+        processors = load_processors(config)
         # Processors prepare and contain data for each agent
 
         # We initialize the target uids here because we want to simulate only partially available data
@@ -194,33 +184,21 @@ facilitate operations between master and members.
             logger.info("Finishing thread %s" % threading.current_thread().name)
         ...
 
-Now we can finalize the `run` by starting and joining the threads.
+Now we can finalize the `run` by starting and joining the threads using the utility function ``run_local_agents``.
 
 .. code-block:: python
 
-    from threading import Thread
+    from stalactite.helpers import run_local_agents
 
     def run(config_path: str):
         ...
 
-        threads = [
-            Thread(name=f"main_{master.id}", daemon=True, target=local_master_main),
-            *(
-                Thread(
-                    name=f"main_{member.id}",
-                    daemon=True,
-                    target=local_member_main,
-                    args=(member,)
-                )
-                for member in members
-            )
-        ]
-
-        for thread in threads:
-            thread.start()
-
-        for thread in threads:
-            thread.join()
+        run_local_agents(
+            master=master,
+            members=members,
+            target_master_func=local_master_main,
+            target_member_func=local_member_main
+        )
 
 The full example is available in our `github <https://github.com/sb-ai-lab/vfl-benchmark/tree/main>`_ at
 ``examples/utils/local_experiment.py``.

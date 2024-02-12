@@ -65,17 +65,17 @@ sequential updates on members. The configuration for this experiment is in
 logistic regression on SBOL and SMM datasets.
 
 Distributed (single host multiple processes (containers)) example:
-- `examples/vfl/distributed/logreg_sbol_smm_multiprocess` example demonstrates the launch of the local multi-process 
+- `examples/vfl/distributed/multiprocess/logreg_sbol_smm_multiprocess` example demonstrates the launch of the local multiprocess 
 stalactite CLI usage for running all the agents (master and members) containers on a single-host. 
-In runs the same logistic regression example of SBOL and SMM. If you do not want 
+It runs the same logistic regression example of SBOL and SMM. If you do not want 
 to start prerequisites (or use them) while checking out the example, just disable the usage of the Prometheus or MlFLow by
 changing configuration files fields to: `master.run_mlflow: False`, `master.run_prometheus: False`
 
 Distributed (multiple host) example:
-- `examples/vfl/distributed/logreg_sbol_smm_distributed/` contains shell script for launching VFL agents to run 
+- `examples/vfl/distributed/multihost/logreg_sbol_smm_multihost/` contains shell script for launching VFL agents to run 
 logistic regression on SBOL and SMM while all the agents are on different hosts. To launch it again uses the 
 stalactite CLI and configuration file, which must be copied to each host (and changed accordingly).
-The instructions for the distributed multi-host experiment are shown in `examples/vfl/distributed/multihost/README.md`
+The instructions for the distributed multi-host experiment are shown in `examples/vfl/distributed/README.md`
   
 ## Prerequisites start and Stalactite CLI usage
 To run the experiment and check the metrics, first, you should launch the prerequisites (Prometheus and MlFlow).

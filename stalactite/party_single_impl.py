@@ -21,11 +21,6 @@ from stalactite.data_preprocessors.base_preprocessor import DataPreprocessor
 
 logger = logging.getLogger(__name__)
 
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
-
 
 class PartySingle:
     """ Single-agent (centralized) experiment runner class. """

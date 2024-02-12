@@ -1,38 +1,37 @@
 import concurrent.futures
-import enum
 import logging
 import threading
 import time
 import uuid
 from abc import ABC
 from collections import defaultdict
-from concurrent.futures import Future, TimeoutError as FutureTimoutError
-from copy import copy
+from concurrent.futures import Future
 from dataclasses import dataclass
-from queue import Queue
-from threading import Thread
-from typing import Any, Dict, List, Optional, Set, Union, cast
+from typing import Any, Dict, List, Optional, Union
 
 from stalactite.base import (
     Method,
     MethodKwargs,
-    ParticipantFuture,
     PartyCommunicator,
-    PartyDataTensor,
     PartyMaster,
     PartyMember,
-    RecordsBatch,
     Task,
 )
-from stalactite.communications.helpers import ParticipantType, _Method
+from stalactite.communications.helpers import ParticipantType
 
 logger = logging.getLogger(__name__)
+
+
+class RecvFuture(Future):
+    def __init__(self, method_name: str, receive_from_id: str):
+        super().__init__()
+        self.method_name = method_name
+        self.receive_from_id = receive_from_id
 
 
 @dataclass(frozen=True)
 class _ParticipantInfo:
     type: ParticipantType
-    # queue: Queue
     received_tasks: dict
 
 
@@ -93,24 +92,32 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             self._party_info[send_to_id].received_tasks[task.method_name][self.participant.id] = task
         return task
 
-    def _get_from_received_tasks(self, method_name: str, receive_from_id: str):
-        part_id = self.participant.id
+    def _check_recv_tasks(self, method_name: str, receive_from_id: str) -> Task:
         timer_start = time.time()
         task = None
         while task is None:
             with self._lock:
-                task = self._party_info[part_id].received_tasks.get(method_name, dict()).pop(receive_from_id, None)
+                task = self._party_info[self.participant.id] \
+                    .received_tasks \
+                    .get(method_name, dict()) \
+                    .pop(receive_from_id, None)
             if time.time() - timer_start > self.recv_timeout:
                 raise TimeoutError(f"Could not receive task: {method_name} from {receive_from_id}.")
         return task
 
     def recv(self, task: Task, recv_results: bool = False) -> Task:
-        receive_from_id = task.to_id if recv_results else task.from_id
-        method_name = task.method_name
-        task = self._get_from_received_tasks(method_name, receive_from_id)
-        return task
+        return self._check_recv_tasks(
+            method_name=task.method_name,
+            receive_from_id=task.to_id if recv_results else task.from_id,
+        )
 
-        # TODO move to ParentClass
+    def _get_from_recv(self, recv_future: RecvFuture) -> None:
+        result = self._check_recv_tasks(
+            method_name=recv_future.method_name,
+            receive_from_id=recv_future.receive_from_id,
+        )
+        recv_future.set_result(result)
+        recv_future.done()
 
     def scatter(
             self,
@@ -181,21 +188,16 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return tasks
 
     def gather(self, tasks: List[Task], recv_results: bool = False) -> List[Task]:
-        tasks_to_return = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
-            recv_futures = [executor.submit(self.recv, task, recv_results) for task in tasks]
-            for task, future in zip(tasks, recv_futures):
-                future.method_name = task.method_name
-                future.receive_from_id = task.from_id if not recv_results else task.to_id
-            try:
-                for future in concurrent.futures.as_completed(recv_futures, timeout=self.recv_timeout):
-                    try:
-                        tasks_to_return.append(future.result())
-                    except Exception:
-                        raise
-            except FutureTimoutError:
-                raise TimeoutError(f"Could not gather task: {future.method_name}.")
-        return tasks_to_return
+        _recv_futures = [
+            RecvFuture(method_name=task.method_name, receive_from_id=task.from_id if not recv_results else task.to_id)
+            for task in tasks
+        ]
+        for recv_f in _recv_futures:
+            threading.Thread(target=self._get_from_recv, args=(recv_f,), daemon=True).start()
+        done_tasks, pending_tasks = concurrent.futures.wait(_recv_futures, timeout=self.recv_timeout)
+        if number_to := len(pending_tasks):
+            raise TimeoutError(f"{self.participant.id} could not gather tasks from {number_to} members.")
+        return [task.result() for task in done_tasks]
 
     def _check_if_ready(self):
         """Raise an exception if the communicator was not initialized properly."""
@@ -215,7 +217,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
             participant: PartyMaster,
             world_size: int,
             shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-            recv_timeout: float = 120.0,
+            recv_timeout: float = 360.0,
     ):
         """
         Initialize master communicator with parameters.
@@ -258,7 +260,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
             master_id: str,
             world_size: int,
             shared_party_info: Optional[Dict[str, _ParticipantInfo]],
-            recv_timeout: float = 120.0,
+            recv_timeout: float = 360.0,
     ):
         """
         Initialize member communicator with parameters.

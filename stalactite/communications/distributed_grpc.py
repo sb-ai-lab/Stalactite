@@ -41,6 +41,7 @@ logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(sh)
+logger.propagate = False
 
 PROMETHEUS_METRICS_PREFIX = "__prometheus_"
 
