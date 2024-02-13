@@ -43,6 +43,7 @@ class EfficientNet(nn.Module):
         stochastic_depth_prob: float = 0.2,
         num_classes: int = 1000,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
+        init_weights: float = None
     ) -> None:
         """
         EfficientNet V1 and V2 main class
@@ -118,15 +119,21 @@ class EfficientNet(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out")
+                if init_weights:
+                    nn.init.constant_(m.weight, init_weights)
+                else:
+                    nn.init.kaiming_normal_(m.weight, mode="fan_out")
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.ones_(m.weight)
                 nn.init.zeros_(m.bias)
             elif isinstance(m, nn.Linear):
-                init_range = 1.0 / math.sqrt(m.out_features)
-                nn.init.uniform_(m.weight, -init_range, init_range)
+                if init_weights:
+                    nn.init.constant_(m.weight, init_weights)
+                else:
+                    init_range = 1.0 / math.sqrt(m.out_features)
+                    nn.init.uniform_(m.weight, -init_range, init_range)
                 nn.init.zeros_(m.bias)
 
     def _forward_impl(self, x: Tensor) -> Tensor:

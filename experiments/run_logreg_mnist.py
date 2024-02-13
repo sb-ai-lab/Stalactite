@@ -5,6 +5,7 @@ from typing import Optional
 
 import mlflow
 import datasets
+import torch
 
 from stalactite.data_preprocessors import ImagePreprocessor
 from stalactite.configs import VFLConfig
@@ -36,6 +37,7 @@ def load_processors(config_path: str):
 
 def run(config_path: Optional[str] = None):
 
+    torch.manual_seed(22)
     config = VFLConfig.load_and_validate(config_path)
 
     if config.master.run_mlflow:

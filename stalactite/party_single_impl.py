@@ -336,7 +336,8 @@ class PartySingleEfficientNet(PartySingleLogregMulticlass):
             width_mult=1,
             depth_mult=1.0,
             dropout=0.2,
-            num_classes=10)
+            num_classes=10,
+            init_weights=0.005)
 
         self._optimizer = torch.optim.SGD(
             self._model.parameters(),

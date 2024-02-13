@@ -5,6 +5,7 @@ from typing import Optional
 
 import mlflow
 import datasets
+import torch
 from torchvision.datasets import MNIST
 import torchvision.transforms as transforms
 
@@ -46,7 +47,7 @@ def load_processors(config_path: str):
 
 
 def run(config_path: Optional[str] = None):
-
+    torch.manual_seed(22)
     config = VFLConfig.load_and_validate(config_path)
 
     if config.master.run_mlflow:
@@ -75,7 +76,7 @@ def run(config_path: Optional[str] = None):
 
     processors = load_processors(config_path)
     target_uids = [str(i) for i in range(config.data.dataset_size)]
-    divided = True
+    divided = False
 
     if divided:
         party = PartySingleEfficientNetSplitNN(
