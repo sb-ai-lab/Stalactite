@@ -95,7 +95,6 @@ class EfficientNetTop(nn.Module):
             optimizer.step()
             return grads[0]
         else:
-            # logit = self.forward(x)  # here x is agg_members_outputs
             x.backward(gradient=gradients)
             optimizer.step()
             

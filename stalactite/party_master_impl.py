@@ -374,7 +374,8 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
         y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
         criterion = torch.nn.CrossEntropyLoss()
         loss = criterion(torch.squeeze(predictions), y.type(torch.LongTensor))
-        grads = torch.autograd.grad(outputs=loss, inputs=predictions)
+        grads = torch.autograd.grad(outputs=loss, inputs=self.aggregated_output)
+
         for i, member_id in enumerate(participating_members):
             self.updates[member_id] = grads[0]
 
