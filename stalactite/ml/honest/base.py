@@ -19,7 +19,7 @@ from stalactite.base import (
     Task,
     DataTensor,
     RecordsBatch,
-    Batcher,
+    Batcher, PartyDataTensor,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,51 @@ logger.addHandler(sh)
 
 class HonestPartyMaster(PartyMaster, ABC):
     """ Abstract base class for the honest master party in the VFL experiment. """
+
+    @abstractmethod
+    def make_init_updates(self, world_size: int) -> PartyDataTensor:
+        """ Make initial updates for party members.
+
+        :param world_size: Number of party members.
+
+        :return: Initial updates as a list of tensors.
+        """
+        ...
+
+    @abstractmethod
+    def aggregate(
+            self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
+    ) -> DataTensor:
+        """ Aggregate members` predictions.
+
+        :param participating_members: List of participating party member identifiers.
+        :param party_predictions: List of party predictions.
+        :param infer: Flag indicating whether to perform inference.
+
+        :return: Aggregated predictions.
+        """
+        ...
+
+    @abstractmethod
+    def compute_updates(
+            self,
+            participating_members: List[str],
+            predictions: DataTensor,
+            party_predictions: PartyDataTensor,
+            world_size: int,
+            subiter_seq_num: int,
+    ) -> List[DataTensor]:
+        """ Compute updates based on members` predictions.
+
+        :param participating_members: List of participating party member identifiers.
+        :param predictions: Model predictions.
+        :param party_predictions: List of party predictions.
+        :param world_size: Number of party members.
+        :param subiter_seq_num: Sub-iteration sequence number.
+
+        :return: List of updates as tensors.
+        """
+        ...
 
     def run(self, party: PartyCommunicator) -> None:
         """ Run the VFL experiment with the master party.
@@ -48,7 +93,6 @@ class HonestPartyMaster(PartyMaster, ABC):
             Method.records_uids,
             participating_members=party.members,
         )
-
         records_uids_results = party.gather(records_uids_tasks, recv_results=True)
 
         collected_uids_results = [task.result for task in records_uids_results]
@@ -211,7 +255,7 @@ class HonestPartyMember(PartyMember, ABC):
         :param batch_size: Size of the training batch.
         """
         logger.info("Member %s: making a batcher for uids" % (self.id))
-        self._check_if_ready()
+        self.check_if_ready()
         if not self.is_consequently:
             self._batcher = ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
         else:
@@ -251,31 +295,23 @@ class HonestPartyMember(PartyMember, ABC):
         logger.info("Member %s: registering %s uids to be used." % (self.id, len(uids)))
         self._uids_to_use = uids
 
+    @abstractmethod
     def initialize_model(self) -> None:
         """ Initialize the model based on the specified model name. """
-        if self._model_name == "linreg":
-            self._model = LinearRegressionBatch(
-                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                output_dim=1, reg_lambda=0.5
-            )
-        elif self._model_name == "logreg":
-            self._model = LogisticRegressionBatch(
-                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
-                learning_rate=self._common_params.learning_rate,
-                class_weights=None,
-                init_weights=0.005)
-        else:
-            raise ValueError("unknown model %s" % self._model_name)
+        ...
 
-    def _check_if_ready(self):
-        """ Check if the party member is ready for operations.
+    @abstractmethod
+    def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
+        """ Make predictions using the initialized model.
 
-        Raise a RuntimeError if experiment has not been initialized or has already finished.
+        :param uids: Batch of record unique identifiers.
+        :param use_test: Flag indicating whether to use the test data.
+
+        :return: Model predictions.
         """
-        if not self.is_initialized and not self.is_finalized:
-            raise RuntimeError("The member has not been initialized")
+        ...
 
+    @abstractmethod
     def update_predict(self, upd: DataTensor, previous_batch: RecordsBatch, batch: RecordsBatch) -> DataTensor:
         """ Update model weights and make predictions.
 
@@ -285,14 +321,7 @@ class HonestPartyMember(PartyMember, ABC):
 
         :return: Model predictions.
         """
-        logger.info("Member %s: updating and predicting." % self.id)
-        self._check_if_ready()
-        uids = previous_batch if previous_batch is not None else batch
-        self.update_weights(uids=uids, upd=upd)
-        predictions = self.predict(batch)
-        self.iterations_counter += 1
-        logger.info("Member %s: updated and predicted." % self.id)
-        return predictions
+        ...
 
     def initialize(self) -> None:
         """ Initialize the party member. """
@@ -308,7 +337,7 @@ class HonestPartyMember(PartyMember, ABC):
     def finalize(self) -> None:
         """ Finalize the party member. """
         logger.info("Member %s: finalizing" % self.id)
-        self._check_if_ready()
+        self.check_if_ready()
         self.is_finalized = True
         logger.info("Member %s: has been finalized" % self.id)
 
@@ -321,37 +350,6 @@ class HonestPartyMember(PartyMember, ABC):
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
         U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
         return U, S, Vh
-
-    def update_weights(self, uids: RecordsBatch, upd: DataTensor) -> None:
-        """ Update model weights based on input features and target values.
-
-        :param uids: Batch of record unique identifiers.
-        :param upd: Updated model weights.
-        """
-        logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
-        self._check_if_ready()
-        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        self._model.update_weights(X_train, upd)
-        logger.info("Member %s: successfully updated weights" % self.id)
-
-    def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
-        """ Make predictions using the current model.
-
-        :param uids: Batch of record unique identifiers.
-        :param use_test: Flag indicating whether to use the test data.
-
-        :return: Model predictions.
-        """
-        logger.info("Member %s: predicting. Batch size: %s" % (self.id, len(uids)))
-        self._check_if_ready()
-        if use_test:
-            logger.info("Member %s: using test data" % self.id)
-            X = self._dataset[self._data_params.test_split][self._data_params.features_key]
-        else:
-            X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        predictions = self._model.predict(X)
-        logger.info("Member %s: made predictions." % self.id)
-        return predictions
 
     # def _execute_received_task(self, task: Task) -> Optional[Union[DataTensor, List[str]]]:
     #     """ Execute received method on a member.

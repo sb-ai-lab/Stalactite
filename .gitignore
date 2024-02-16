@@ -165,3 +165,4 @@ data
 rsync_repo
 reports/
 configs/config-local.yml
+.DS_Store

@@ -32,7 +32,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             processor=None,
             run_mlflow: bool = False,
     ) -> None:
-        """ Initialize PartyMasterImpl.
+        """ Initialize PartyMaster.
 
         :param uid: Unique identifier for the party master.
         :param epochs: Number of training epochs.

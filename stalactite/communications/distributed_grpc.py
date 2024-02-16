@@ -18,7 +18,7 @@ from stalactite.base import (
     PartyCommunicator,
     PartyMaster,
     PartyMember,
-    Task,
+    Task, UnsupportedError,
 )
 from stalactite.communications.grpc_utils.generated_code import (
     communicator_pb2,
@@ -29,7 +29,6 @@ from stalactite.communications.grpc_utils.utils import (
     ClientStatus,
     SerializedMethodMessage,
     Status,
-    UnsupportedError,
     collect_kwargs,
     prepare_kwargs,
     start_thread,
@@ -41,6 +40,7 @@ logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(sh)
+logger.propagate = False
 
 PROMETHEUS_METRICS_PREFIX = "__prometheus_"
 

@@ -7,6 +7,7 @@ from typing import Any, Optional
 from docker.errors import APIError, NotFound
 
 from docker import APIClient
+
 from stalactite.configs import VFLConfig
 
 BASE_CONTAINER_LABEL = "grpc-experiment"
@@ -17,6 +18,8 @@ BASE_IMAGE_FILE = "grpc-base.dockerfile"
 BASE_IMAGE_FILE_CPU = "grpc-base-cpu.dockerfile"
 BASE_IMAGE_TAG = "grpc-base:latest"
 PREREQUISITES_NETWORK = "prerequisites_vfl-network"  # Do not change this value
+
+logging.getLogger('docker').setLevel(logging.ERROR)
 
 
 def get_env_vars(config: VFLConfig) -> dict:
@@ -44,10 +47,10 @@ def validate_int(value: Any, logger: logging.Logger = logging.getLogger("__main_
 
 
 def run_subprocess_command(
-    command: str,
-    logger_err_info: str,
-    logger: logging.Logger = logging.getLogger("__main__"),
-    **cmd_kwargs,
+        command: str,
+        logger_err_info: str,
+        logger: logging.Logger = logging.getLogger("__main__"),
+        **cmd_kwargs,
 ):
     process = subprocess.run(
         command,
@@ -61,10 +64,10 @@ def run_subprocess_command(
 
 
 def get_status(
-    agent_id: Optional[str],
-    containers_label: str,
-    logger: logging.Logger,
-    docker_client: APIClient = APIClient(),
+        agent_id: Optional[str],
+        containers_label: str,
+        logger: logging.Logger,
+        docker_client: APIClient = APIClient(),
 ):
     try:
         if agent_id is None:
@@ -81,11 +84,11 @@ def get_status(
 
 
 def get_logs(
-    agent_id: str,
-    tail: str = "all",
-    follow: bool = False,
-    docker_client: APIClient = APIClient(),
-    logger: logging.Logger = logging.getLogger("__main__"),
+        agent_id: str,
+        tail: str = "all",
+        follow: bool = False,
+        docker_client: APIClient = APIClient(),
+        logger: logging.Logger = logging.getLogger("__main__"),
 ):
     if tail != "all":
         tail = validate_int(tail)
@@ -123,10 +126,10 @@ def build_base_image(
 
 
 def stop_containers(
-    docker_client: APIClient,
-    containers: list,
-    leave_containers: bool = False,
-    logger: logging.Logger = logging.getLogger("__main__"),
+        docker_client: APIClient,
+        containers: list,
+        leave_containers: bool = False,
+        logger: logging.Logger = logging.getLogger("__main__"),
 ):
     if not len(containers):
         logger.info("No containers to stop.")

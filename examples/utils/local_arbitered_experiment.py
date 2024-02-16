@@ -5,17 +5,15 @@ import threading
 from typing import Optional
 import datasets
 
-# from stalactite.party_member_impl import PartyMemberImpl
 from stalactite.ml import (
-    HonestPartyMasterLinRegConsequently,
-    HonestPartyMasterLinReg,
-    HonestPartyMemberLogReg,
-    HonestPartyMemberLinReg,
-    HonestPartyMasterLogReg
+    ArbiteredPartyMasterLogReg,
+    ArbiteredPartyMemberLogReg,
+    PartyArbiterLogReg
 )
+from stalactite.ml.arbitered.security_protocols.paillier_sp import SecurityProtocolPaillier, SecurityProtocolArbiterPaillier
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
 # from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
-from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
+from stalactite.communications.local import ArbiteredLocalPartyCommunicator
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
 from examples.utils.prepare_mnist import load_data as load_mnist
@@ -54,9 +52,9 @@ def load_processors(config: VFLConfig):
 
         dataset = {}
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=2)
+            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=config.common.world_size + 1)
 
-        for m in range(config.common.world_size):
+        for m in range(config.common.world_size + 1):
             dataset[m] = datasets.load_from_disk(
                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
             )
@@ -84,15 +82,19 @@ def run(config_path: Optional[str] = None):
         target_uids = [str(i) for i in range(config.data.dataset_size)]
 
         shared_party_info = dict()
-        if 'logreg' in config.vfl_model.vfl_model_name:
-            master_class = HonestPartyMasterLogReg
-            member_class = HonestPartyMemberLogReg
-        else:
-            member_class = HonestPartyMemberLinReg
-            if config.vfl_model.is_consequently:
-                master_class = HonestPartyMasterLinRegConsequently
-            else:
-                master_class = HonestPartyMasterLinReg
+        master_class = ArbiteredPartyMasterLogReg
+        member_class = ArbiteredPartyMemberLogReg
+        arbiter_class = PartyArbiterLogReg
+
+        arbiter = arbiter_class(
+            uid="arbiter",
+            epochs=config.vfl_model.epochs,
+            batch_size=config.vfl_model.batch_size,
+            security_protocol=SecurityProtocolArbiterPaillier(),
+            learning_rate=config.vfl_model.learning_rate,
+            momentum=0.0,
+        )
+
         master = master_class(
             uid="master",
             epochs=config.vfl_model.epochs,
@@ -103,6 +105,7 @@ def run(config_path: Optional[str] = None):
             batch_size=config.vfl_model.batch_size,
             model_update_dim_size=0,
             run_mlflow=config.master.run_mlflow,
+            security_protocol=SecurityProtocolPaillier(),
         )
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
@@ -111,21 +114,17 @@ def run(config_path: Optional[str] = None):
             member_class(
                 uid=member_uid,
                 member_record_uids=target_uids,
-                model_name=config.vfl_model.vfl_model_name,
-                processor=processors[member_rank],
+                processor=processors[member_rank + 1],
                 batch_size=config.vfl_model.batch_size,
                 epochs=config.vfl_model.epochs,
-                report_train_metrics_iteration=config.common.report_train_metrics_iteration,
-                report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-                is_consequently=config.vfl_model.is_consequently,
-                members=member_ids if config.vfl_model.is_consequently else None,
+                security_protocol=SecurityProtocolPaillier(),
             )
             for member_rank, member_uid in enumerate(member_ids)
         ]
 
         def local_master_main():
             logger.info("Starting thread %s" % threading.current_thread().name)
-            comm = LocalMasterPartyCommunicator(
+            comm = ArbiteredLocalPartyCommunicator(
                 participant=master,
                 world_size=config.common.world_size,
                 shared_party_info=shared_party_info,
@@ -136,7 +135,7 @@ def run(config_path: Optional[str] = None):
 
         def local_member_main(member: PartyMember):
             logger.info("Starting thread %s" % threading.current_thread().name)
-            comm = LocalMemberPartyCommunicator(
+            comm = ArbiteredLocalPartyCommunicator(
                 participant=member,
                 world_size=config.common.world_size,
                 shared_party_info=shared_party_info,
@@ -145,8 +144,26 @@ def run(config_path: Optional[str] = None):
             comm.run()
             logger.info("Finishing thread %s" % threading.current_thread().name)
 
+        def local_arbiter_main():
+            logger.info("Starting thread %s" % threading.current_thread().name)
+            comm = ArbiteredLocalPartyCommunicator(
+                participant=arbiter,
+                world_size=config.common.world_size,
+                shared_party_info=shared_party_info,
+                recv_timeout=360.,
+            )
+            comm.run()
+            logger.info("Finishing thread %s" % threading.current_thread().name)
+
+
         run_local_agents(
-            master=master, members=members, target_master_func=local_master_main, target_member_func=local_member_main
+            master=master,
+            members=members,
+            target_master_func=local_master_main,
+            target_member_func=local_member_main,
+            arbiter=arbiter,
+            target_arbiter_func=local_arbiter_main,
+
         )
 
 

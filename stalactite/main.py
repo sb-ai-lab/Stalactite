@@ -9,7 +9,6 @@ import logging
 import os
 import threading
 from pathlib import Path
-from threading import Thread
 
 import click
 import mlflow as _mlflow
@@ -38,12 +37,15 @@ from stalactite.utils_main import (
     run_subprocess_command,
     stop_containers,
 )
+from stalactite.helpers import reporting, run_local_agents
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.handlers.clear()
 sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(sh)
+logger.propagate = False
+logging.getLogger('docker').setLevel(logging.ERROR)
 
 
 @click.group()
@@ -552,10 +554,6 @@ def start(ctx, config_path):
         master = get_party_master(config_path)
         members = [get_party_member(config_path, member_rank=rank) for rank in range(config.common.world_size)]
         shared_party_info = dict()
-        if config.master.run_mlflow:
-            _mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
-            _mlflow.set_experiment(config.common.experiment_label)
-            _mlflow.start_run()
 
         def local_master_main():
             logger.info("Starting thread %s" % threading.current_thread().name)
@@ -571,26 +569,17 @@ def start(ctx, config_path):
                 participant=member,
                 world_size=config.common.world_size,
                 shared_party_info=shared_party_info,
-                master_id=master.id,
             )
             comm.run()
             logger.info("Finishing thread %s" % threading.current_thread().name)
+        with reporting(config):
+            run_local_agents(
+                master=master,
+                members=members,
+                target_master_func=local_master_main,
+                target_member_func=local_member_main
+            )
 
-        threads = [
-            Thread(name=f"main_{master.id}", daemon=True, target=local_master_main),
-            *(
-                Thread(name=f"main_{member.id}", daemon=True, target=local_member_main, args=(member,))
-                for member in members
-            ),
-        ]
-
-        for thread in threads:
-            thread.start()
-
-        for thread in threads:
-            thread.join()
-        if config.master.run_mlflow:
-            _mlflow.end_run()
 
 
 @local.command()

@@ -11,12 +11,12 @@ class ImagePreprocessor:
     """
     def __init__(self, dataset: datasets.DatasetDict,  member_id, params=None):
         self.dataset = dataset
-        self.common_params = params.common
+        self.common_params = params.vfl_model
         self.data_params = params.data.copy()
         self.data_params.features_key = self.data_params.features_key + str(member_id)
         self.member_id = member_id
 
-    def fit_transform(self):
+    def fit_transform(self) -> datasets.DatasetDict:
         """
 
         The input is the training and test data in the form of a data set for each participant with pictures separated vertically.

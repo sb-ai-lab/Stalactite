@@ -31,15 +31,31 @@ class LogisticRegressionBatch(torch.nn.Module):
     def forward(self, x: torch.Tensor):
         return self.linear(x)
 
-    def update_weights(self, x: torch.Tensor, gradients: torch.Tensor, is_single: bool = False) -> None:
-        self.optimizer.zero_grad()
-        logit = self.forward(x)
-        if is_single:
-            loss = self.criterion(torch.squeeze(logit), gradients.float())
-            loss.backward()
+    def update_weights(
+            self,
+            x: torch.Tensor,
+            gradients: torch.Tensor,
+            is_single: bool = False,
+            collected_from_arbiter: bool = False
+    ) -> None:
+        if collected_from_arbiter:
+            print('collected_from_arbiter', self.linear.weight.data.shape, gradients.T.shape)
+            updated_weight = self.linear.weight.data.clone() - gradients.T
+            self.linear.weight.data = updated_weight
+            #
+            # self.optimizer.zero_grad()
+            # self.linear.weight.grad = gradients.T
+            # self.optimizer.step()
+
         else:
-            logit.backward(gradient=gradients)
-        self.optimizer.step()
+            self.optimizer.zero_grad()
+            logit = self.forward(x)
+            if is_single:
+                loss = self.criterion(torch.squeeze(logit), gradients.float())
+                loss.backward()
+            else:
+                logit.backward(gradient=gradients)
+            self.optimizer.step()
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)

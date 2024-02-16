@@ -10,7 +10,6 @@ from typing import Any, Iterator, List, Optional, Union
 
 import torch
 
-from stalactite.communications.grpc_utils.utils import UnsupportedError
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +38,9 @@ class Method(str, enum.Enum):  # TODO _Method the same - unify
     update_weights = "update_weights"
     predict = "predict"
     update_predict = "update_predict"
+
+
+
 
 
 @dataclass(frozen=True)
@@ -180,7 +182,7 @@ class PartyCommunicator(ABC):
             self,
             method_name: Method,
             method_kwargs: Optional[List[MethodKwargs]] = None,
-            result: Optional[Any] = None,
+            result: Optional[Union[Any, List[Any]]] = None,
             participating_members: Optional[List[str]] = None,
             **kwargs,
     ) -> List[Task]:
@@ -224,6 +226,13 @@ class PartyCommunicator(ABC):
 
 class PartyAgent(ABC):
     """ Abstract base class for the party in the VFL experiment. """
+    is_initialized: bool
+    is_finalized: bool
+    id: str
+
+    def check_if_ready(self):
+        if not self.is_initialized and not self.is_finalized:
+            raise RuntimeError(f"The agent {self.id} has not been initialized")
 
     def execute_received_task(self, task: Task) -> Optional[Union[DataTensor, List[str]]]:
         """ Execute received method on the master.
@@ -272,7 +281,6 @@ class PartyAgent(ABC):
 class PartyMaster(PartyAgent, ABC):
     """ Abstract base class for the master party in the VFL experiment. """
 
-    id: str
     epochs: int
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
@@ -320,51 +328,6 @@ class PartyMaster(PartyAgent, ABC):
         ...
 
     @abstractmethod
-    def make_init_updates(self, world_size: int) -> PartyDataTensor:
-        """ Make initial updates for party members.
-
-        :param world_size: Number of party members.
-
-        :return: Initial updates as a list of tensors.
-        """
-        ...
-
-    @abstractmethod
-    def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
-    ) -> DataTensor:
-        """ Aggregate members` predictions.
-
-        :param participating_members: List of participating party member identifiers.
-        :param party_predictions: List of party predictions.
-        :param infer: Flag indicating whether to perform inference.
-
-        :return: Aggregated predictions.
-        """
-        ...
-
-    @abstractmethod
-    def compute_updates(
-            self,
-            participating_members: List[str],
-            predictions: DataTensor,
-            party_predictions: PartyDataTensor,
-            world_size: int,
-            subiter_seq_num: int,
-    ) -> List[DataTensor]:
-        """ Compute updates based on members` predictions.
-
-        :param participating_members: List of participating party member identifiers.
-        :param predictions: Model predictions.
-        :param party_predictions: List of party predictions.
-        :param world_size: Number of party members.
-        :param subiter_seq_num: Sub-iteration sequence number.
-
-        :return: List of updates as tensors.
-        """
-        ...
-
-    @abstractmethod
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
         """ Report metrics based on target values and predictions.
 
@@ -377,11 +340,11 @@ class PartyMaster(PartyAgent, ABC):
         ...
 
 
+
+
 class PartyMember(PartyAgent, ABC):
     """ Abstract base class for the member party in the VFL experiment. """
 
-    id: str
-    master_id: str
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
     _iter_time: list[tuple[int, float]] = list()
@@ -421,25 +384,9 @@ class PartyMember(PartyAgent, ABC):
         """
         ...
 
-    @abstractmethod
-    def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
-        """ Make predictions using the initialized model.
 
-        :param uids: Batch of record unique identifiers.
-        :param use_test: Flag indicating whether to use the test data.
+class UnsupportedError(Exception):  # TODO move from communications utils
+    """Custom exception class for indicating that an unsupported method is called on a class."""
 
-        :return: Model predictions.
-        """
-        ...
-
-    @abstractmethod
-    def update_predict(self, upd: DataTensor, previous_batch: RecordsBatch, batch: RecordsBatch) -> DataTensor:
-        """ Update model weights and make predictions.
-
-        :param upd: Updated model weights.
-        :param previous_batch: Previous batch of record unique identifiers.
-        :param batch: Current batch of record unique identifiers.
-
-        :return: Model predictions.
-        """
-        ...
+    def __init__(self, message: str = "Unsupported method for class."):
+        super().__init__(message)

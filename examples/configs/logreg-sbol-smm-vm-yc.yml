@@ -1,16 +1,18 @@
 common:
-  epochs: 5
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
-  batch_size: 1000
   experiment_label: experiment-vms
   reports_export_folder: "../../reports"
   rendezvous_timeout: 3600
+
+vfl_model:
+  epochs: 5
+  batch_size: 1000
   vfl_model_name: logreg
   is_consequently: False
-  learning_rate: 0.01
   use_class_weights: False
+  learning_rate: 0.01
 
 prerequisites:
   mlflow_host: '158.160.110.227'
@@ -22,14 +24,11 @@ prerequisites:
 data:
   random_seed: 0
   dataset_size: 1000
-  dataset: 'sbol'
-  use_smm: True
-  host_path_data_dir: ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2 # /home/dmitriy/data #
-  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
-  train_split: "train_train" # name of the train split
-  test_split: "train_val" # name of the test split
-#  features_data_preprocessors: [ FullDataTensor(features_key),  SkLearnStandardScaler ]
-#  label_data_preprocessors: [ FullDataTensor(label_key) ]
+  dataset: 'sbol_smm'
+  host_path_data_dir: ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
   features_key: "features_part_"
   label_key: "labels"
 
@@ -43,13 +42,13 @@ master:
   container_host: '158.160.110.227'
   run_mlflow: True
   run_prometheus: True
-  logging_level: 'debug'
+  logging_level: 'info'
   disconnect_idle_client_time: 120.
   time_between_idle_connections_checks: 3.
 
 
 member:
-  logging_level: 'debug'
+  logging_level: 'info'
   heartbeat_interval: 2.
   task_requesting_pings_interval: 0.1
   sent_task_timout: 3600

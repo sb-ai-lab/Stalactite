@@ -17,7 +17,7 @@ Main function in those creates the master and member participants, defines the g
 starts the experiment on each agent.
 
 Firstly, we implement several helper functions, to get the members and master. The ``load_parameters`` function was
-defined in the :ref:`local_comm_tutorial`.
+defined in the :ref:`local_comm_tutorial`, we import it from the examples folder.
 
 .. warning::
     The ``load_parameters`` executes the custom preprocessing functions for ``mnist`` and ``sbol`` datasets in case when
@@ -26,9 +26,11 @@ defined in the :ref:`local_comm_tutorial`.
 
 .. code-block:: python
 
+    from examples.utils.local_experiment import load_processors
+
     def get_party_master(config_path: str):
-        processors = load_processors(config_path) # Load processors
         config = VFLConfig.load_and_validate(config_path) # Load configuration file
+        processors = load_processors(config) # Load processors
         # Define target uids (simulating only partially available data)
         target_uids = [str(i) for i in range(config.data.dataset_size)]
         # The rest of party master definition is similar to the local example
@@ -80,11 +82,11 @@ For the master communicator the following script is used (``run_grpc_master.py``
 .. code-block:: python
 
     import click
-    import mlflow
 
     from stalactite.communications import GRpcMasterPartyCommunicator
     from stalactite.configs import VFLConfig
     from stalactite.data_utils import get_party_master
+    from stalactite.helpers import reporting
 
     # We pass the config_path as the CLI argument into the main function
 
@@ -94,35 +96,27 @@ For the master communicator the following script is used (``run_grpc_master.py``
         # Same to the local experiment load the configuration into the VFLConfig Pydantic model
         config = VFLConfig.load_and_validate(config_path)
 
-        # Define the mlflow run for metrics logging (if enabled)
-        if config.master.run_mlflow:
-            mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
-            mlflow.set_experiment(config.common.experiment_label)
-            mlflow.start_run()
-
-        # In the GRpcMasterPartyCommunicator several keyword arguments appear, mostly required for the gRPC server start
-        comm = GRpcMasterPartyCommunicator(
-            participant=get_party_master(config_path),
-            world_size=config.common.world_size,
-            port=config.grpc_server.port,
-            host=config.grpc_server.host,
-            server_thread_pool_size=config.grpc_server.server_threadpool_max_workers,
-            max_message_size=config.grpc_server.max_message_size,
-            logging_level=config.master.logging_level,
-            prometheus_server_port=config.prerequisites.prometheus_server_port,
-            run_prometheus=config.master.run_prometheus,
-            experiment_label=config.common.experiment_label,
-            rendezvous_timeout=config.common.rendezvous_timeout,
-            disconnect_idle_client_time=config.master.disconnect_idle_client_time,
-            time_between_idle_connections_checks=config.master.time_between_idle_connections_checks,
-            recv_timeout=config.master.recv_timeout,
-        )
-        # Start the communicator, which will launch the gRPC server and run the participant
-        comm.run()
-
-        # Finish the mlflow run for metrics logging (if enabled)
-        if config.master.run_mlflow:
-            mlflow.end_run()
+        # Use context manager to log metrics to mlflow (if enabled)
+        with reporting(config):
+            # In the GRpcMasterPartyCommunicator several keyword arguments appear, mostly required for the gRPC server start
+            comm = GRpcMasterPartyCommunicator(
+                participant=get_party_master(config_path),
+                world_size=config.common.world_size,
+                port=config.grpc_server.port,
+                host=config.grpc_server.host,
+                server_thread_pool_size=config.grpc_server.server_threadpool_max_workers,
+                max_message_size=config.grpc_server.max_message_size,
+                logging_level=config.master.logging_level,
+                prometheus_server_port=config.prerequisites.prometheus_server_port,
+                run_prometheus=config.master.run_prometheus,
+                experiment_label=config.common.experiment_label,
+                rendezvous_timeout=config.common.rendezvous_timeout,
+                disconnect_idle_client_time=config.master.disconnect_idle_client_time,
+                time_between_idle_connections_checks=config.master.time_between_idle_connections_checks,
+                recv_timeout=config.master.recv_timeout,
+            )
+            # Start the communicator, which will launch the gRPC server and run the participant
+            comm.run()
 
     if __name__ == "__main__":
         main()
