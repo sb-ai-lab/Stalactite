@@ -328,12 +328,14 @@ class PartyMaster(PartyAgent, ABC):
         ...
 
     @abstractmethod
-    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
+    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
         """ Report metrics based on target values and predictions.
 
         :param y: Target values.
         :param predictions: Model predictions.
         :param name: Name of the dataset ("Train" or "Test").
+        :param step: Iteration number.
+
 
         :return: None
         """

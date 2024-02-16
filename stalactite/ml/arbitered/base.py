@@ -420,7 +420,7 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                 members_predictions=[task.result for task in participant_partial_predictions_tasks],
             )
 
-            self.report_metrics(targets, aggr_predictions, 'Train')
+            self.report_metrics(targets, aggr_predictions, 'Train', step=titer.seq_num)
 
             predict_tasks = party.broadcast(
                 ArbiteredMethod.predict,
@@ -437,7 +437,7 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                 members_predictions=[task.result for task in participant_partial_predictions_tasks]
             )
 
-            self.report_metrics(targets, aggr_predictions, 'Test')
+            self.report_metrics(targets, aggr_predictions, 'Test', step=titer.seq_num)
 
             self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 

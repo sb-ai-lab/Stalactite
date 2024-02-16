@@ -2,6 +2,7 @@ import logging
 from typing import Any, List, Optional
 
 import datasets
+import mlflow
 import numpy as np
 import torch
 from pydantic import BaseModel
@@ -163,7 +164,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
         predictions = torch.sigmoid(torch.sum(torch.hstack([master_predictions] + members_predictions), dim=1))
         return predictions
 
-    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
+    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
         y = y.numpy()
         predictions = predictions.detach().numpy()
 
@@ -177,6 +178,8 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
             except ValueError:
                 roc_auc = 0
             print(f'{name} ROC AUC {avg}: {roc_auc}')
+            if self.run_mlflow:
+                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
 
 
     @property
