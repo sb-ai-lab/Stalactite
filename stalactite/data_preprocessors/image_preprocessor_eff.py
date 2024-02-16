@@ -29,27 +29,22 @@ class ImagePreprocessorEff:
         train_split_key = self.data_params.train_split
         test_split_key = self.data_params.test_split
 
-        data_train = self.dataset[train_split_key].select([x for x in range(1000)])  # todo: remove it
-        data_test = self.dataset[test_split_key].select([x for x in range(1000)])  # todo: remove it
+        data_train = self.dataset[train_split_key]#.select([x for x in range(1000)])  # todo: remove it
+        data_test = self.dataset[test_split_key]#.select([x for x in range(1000)])  # todo: remove it
 
         feature_name = self.data_params.features_key
         label_name = self.data_params.label_key
 
         image2tensor = PILImageToTensor(feature_name, flatten=False)
-        # full_data_tensor = FullDataTensor(feature_name)
-        # standard_scaler = SkLearnStandardScaler()
+
 
         train_split_data, test_split_data = {}, {}
 
         for split_dict, split_data in zip([train_split_data, test_split_data], [data_train, data_test]):
             split_dict[feature_name] = image2tensor.fit_transform(split_data)[feature_name]
-            a = split_dict[feature_name]#[feature_name] #784 tensor
-            a = torch.reshape(a, (a.shape[0], 1, a.shape[1], a.shape[2]))
-            # a = a.repeat(1, 3, 1, 1)
-            split_dict[feature_name] = a #todo: refactor
-            # for preprocessors in [standard_scaler]:
-            #     split_dict[feature_name] = preprocessors.fit_transform(split_dict[feature_name])
-
+            features = split_dict[feature_name]
+            features = torch.reshape(features, (features.shape[0], 1, features.shape[1], features.shape[2]))
+            split_dict[feature_name] = features #todo: refactor
             split_dict[label_name] = split_data[label_name]
 
         ds_train = datasets.Dataset.from_dict(train_split_data, split=train_split_key)

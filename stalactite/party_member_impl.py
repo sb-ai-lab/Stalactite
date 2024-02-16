@@ -2,7 +2,9 @@ import logging
 from typing import List, Optional, Tuple
 
 import torch
+from torchsummary import summary
 import scipy as sp
+
 
 from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
 from stalactite.batching import ListBatcher, ConsecutiveListBatcher
@@ -126,10 +128,11 @@ class PartyMemberImpl(PartyMember):
                 init_weights=0.005)
         elif self._model_name == "efficientnet":
             self._model = EfficientNetBottom(
-                width_mult=1.0,
-                depth_mult=1.0,
-                stochastic_depth_prob=0.2,
-                init_weights=0.005)
+                width_mult=0.1,
+                depth_mult=0.1,
+                init_weights=None)
+            logger.info(summary(self._model, (1, 28, 28), device="cpu"))
+
         else:
             raise ValueError("unknown model %s" % self._model_name)
 
@@ -179,7 +182,10 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        self._model.update_weights(X_train, upd)  # todo: add for split-learning, optimizer=self._optimizer)
+        if self._model_name == "efficientnet":
+            self._model.update_weights(X_train, upd, optimizer=self._optimizer) #todo: refactor
+        else:
+            self._model.update_weights(X_train, upd)
         logger.info("Member %s: successfully updated weights" % self.id)
 
     def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:

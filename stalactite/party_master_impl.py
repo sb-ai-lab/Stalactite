@@ -6,6 +6,7 @@ import mlflow
 import torch
 from sklearn import metrics
 from sklearn.metrics import roc_auc_score
+from torchsummary import summary
 
 from stalactite.base import (Batcher, DataTensor, PartyDataTensor, PartyMaster, PartyCommunicator, Method, MethodKwargs,
                              RecordsBatch)
@@ -71,10 +72,11 @@ class PartyMasterImpl(PartyMaster):
         """ Initialize the model based on the specified model name. """
         if self._model_name == "efficientnet":
             self._model = EfficientNetTop(
-                input_dim=1280,  # todo: determine in somehow
+                input_dim=128,  # todo: determine in somehow
                 dropout=0.2,
                 num_classes=10,
                 init_weights=None)  # todo: determine in somehow
+            logger.info(summary(self._model, (128, 1, 1), device="cpu"))
         elif self._model_name == "other_one":
             pass
         else:
@@ -317,7 +319,7 @@ class PartyMasterImplLogreg(PartyMasterImpl):
             f"Master %s: reporting metrics. Y dim: {y.size()}. " f"Predictions size: {predictions.size()}" % self.id
         )
 
-        y = y.numpy() #todo: remove
+        y = y.numpy()
         predictions = predictions.detach().numpy()
 
         mae = metrics.mean_absolute_error(y, predictions)
@@ -349,7 +351,7 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
         """
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        return [torch.zeros(self._batch_size, 1280, 1, 1) for _ in range(world_size)]
+        return [torch.zeros(self._batch_size, 128, 1, 1) for _ in range(world_size)] #todo: refactor
 
     def compute_updates(
             self,
@@ -382,7 +384,7 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
         for i, member_id in enumerate(participating_members):
             self.updates[member_id] = grads[0]
 
-        return [self.updates[member_id] for member_id in participating_members] # todo: remove parentness if all ok
+        return [self.updates[member_id] for member_id in participating_members]
 
     def aggregate(
             self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
@@ -416,7 +418,7 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
         return predictions
 
     def update_weights(self, agg_members_output: DataTensor, upd: DataTensor) -> None:
-        # logger.info("Master: updating weights. Incoming tensor: %s" % (tuple(upd.size())))
+        logger.info(f"Master: updating weights. Incoming tensor: {upd.size()}")
         self._check_if_ready()
         self._model.update_weights(x=agg_members_output, gradients=upd, is_single=False, optimizer=self._optimizer)
         logger.info("Member %s: successfully updated weights" % self.id)
@@ -439,7 +441,7 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
         :return: None
         """
         logger.info("Master %s: entering training loop" % self.id)
-        updates = self.make_init_updates(communicator.world_size) #todo:
+        updates = self.make_init_updates(communicator.world_size)
         for titer in batcher:
             logger.debug(
                 f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
@@ -473,7 +475,7 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
             updates = self.compute_updates(
                 titer.participating_members,
                 master_predictions,
-                agg_members_predictions,
+                party_members_predictions,
                 communicator.world_size,
                 titer.subiter_seq_num,
             )
@@ -519,20 +521,15 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
             self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str) -> None:
-
-        # logger.info(
-        #     f"Master %s: reporting metrics. Y dim: {y.size()}. " f"Predictions size: {predictions.size()}" % self.id
-        # )
-        # roc_auc = roc_auc_score(y.numpy(), predictions, average=avg, multi_class="ovr")
         y = y.numpy()
-        # predictions = predictions.detach().numpy()
+
+        logger.info(
+            f"Master : reporting metrics. Y dim: {y.size}. Predictions size: {predictions.size}"
+        )
 
         step = self.iteration_counter
-        for avg in ["macro"]: #, "micro"]:
-            # try:
+        for avg in ["macro"]:
             roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
-            # except ValueError:
-            #     roc_auc = 0
             if self.run_mlflow:
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
             else:

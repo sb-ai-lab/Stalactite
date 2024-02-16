@@ -88,7 +88,6 @@ class EfficientNetTop(nn.Module):
         if is_single:
             logit = self.forward(x)
             loss = self.criterion(torch.squeeze(logit), gradients.type(torch.LongTensor))
-            print(loss.item()) #todo: remove
             grads = torch.autograd.grad(outputs=loss, inputs=x, retain_graph=True)
             loss.backward()
             optimizer.step()

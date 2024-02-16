@@ -1,4 +1,5 @@
 import copy
+import logging
 import math
 from functools import partial
 from typing import Callable, List, Optional, Sequence, Union, Tuple, Any
@@ -11,6 +12,8 @@ from torchsummary import summary
 from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig, _MBConvConfig
 from torchvision.utils import _log_api_usage_once
 from torchvision.ops.misc import Conv2dNormActivation
+
+logger = logging.getLogger(__name__)
 
 def _efficientnet_conf(
     width_mult: float,
@@ -152,7 +155,7 @@ class EfficientNet(nn.Module):
         optimizer.zero_grad()
         logit = self.forward(x)
         loss = self.criterion(torch.squeeze(logit), y.type(torch.LongTensor))
-        print(loss.item())  # todo: remove
+        logger.info(f"loss: {loss.item()}")  # todo: remove
         loss.backward()
         optimizer.step()
 
@@ -164,11 +167,11 @@ class EfficientNet(nn.Module):
 
 
 if __name__ == "__main__":
-    model = EfficientNet(width_mult=1, depth_mult=1.0, dropout=0.2)
+    model = EfficientNet(width_mult=0.1, depth_mult=0.1, dropout=0.2)
     # model2 = torchvision.models.efficientnet_b0()
     # print(model)
     # print(model2)
-    summary(model, (3, 224, 224))
+    summary(model, (1, 28, 28), device="cpu")
     # summary(model2, (3, 224, 224))
 
 

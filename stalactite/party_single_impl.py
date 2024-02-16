@@ -11,6 +11,7 @@ import logging
 import mlflow
 import torch
 
+from torchsummary import summary
 from sklearn.metrics import mean_absolute_error, roc_auc_score
 
 from stalactite.base import DataTensor
@@ -335,12 +336,12 @@ class PartySingleLogregMulticlass(PartySingleLogreg):
 class PartySingleEfficientNet(PartySingleLogregMulticlass):
     def initialize_model(self):
         self._model = EfficientNet(
-            width_mult=1,
-            depth_mult=1.0,
+            width_mult=0.1,
+            depth_mult=0.1,
             dropout=0.2,
             num_classes=10,
             init_weights=None)
-
+        logger.info(summary(self._model, (1, 28, 28), device="cpu"))
         self._optimizer = torch.optim.SGD(
             self._model.parameters(),
             lr=self._common_params.learning_rate,
@@ -397,16 +398,18 @@ class PartySingleEfficientNet(PartySingleLogregMulticlass):
 class PartySingleEfficientNetSplitNN(PartySingleLogregMulticlass):
     def initialize_model(self):
         self._model_top = EfficientNetTop(
-            input_dim=1280,  # todo: determine in somehow
+            input_dim=128,  # todo: determine in somehow
             dropout=0.2,
             num_classes=10,
             init_weights=None)
+        logger.info(summary(self._model_top, (128, 1, 1) , device="cpu"))
 
         self._model_bottom = EfficientNetBottom(
-             width_mult=1.0,
-             depth_mult=1.0,
-             stochastic_depth_prob=0.2,
+             width_mult=0.1,
+             depth_mult=0.1,
              init_weights=None)
+
+        logger.info(summary(self._model_bottom, (1, 28, 28), device="cpu"))
 
         self._optimizer = torch.optim.SGD([
             {"params": self._model_top.parameters()},

@@ -26,15 +26,6 @@ def load_processors(config_path: str):
     if len(os.listdir(config.data.host_path_data_dir)) == 0:
         load_mnist(config.data.host_path_data_dir, parts_num=1, binary=False)
 
-    # transform = transforms.Compose([
-    #     transforms.ToTensor(),
-    #     transforms.Normalize((0.5,), (0.5,)),
-    # ])
-
-    # train_dataset = MNIST(".", train=True, transform=transform, download=True)
-    # val_dataset = MNIST(".", train=False, transform=transform, download=False)
-    #
-    #
     dataset = {0: datasets.load_from_disk(
         os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
     )}
@@ -76,7 +67,7 @@ def run(config_path: Optional[str] = None):
 
     processors = load_processors(config_path)
     target_uids = [str(i) for i in range(config.data.dataset_size)]
-    divided = True
+    divided = False
 
     if divided:
         party = PartySingleEfficientNetSplitNN(
