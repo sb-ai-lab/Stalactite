@@ -155,7 +155,7 @@ class EfficientNet(nn.Module):
         optimizer.zero_grad()
         logit = self.forward(x)
         loss = self.criterion(torch.squeeze(logit), y.type(torch.LongTensor))
-        logger.info(f"loss: {loss.item()}")  # todo: remove
+        logger.info(f"loss: {loss.item()}")
         loss.backward()
         optimizer.step()
 
