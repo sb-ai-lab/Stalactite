@@ -5,14 +5,12 @@ from typing import Callable, List, Optional, Sequence, Union, Tuple, Any
 
 
 import torch
-import torchvision.models
 from torch import nn, Tensor
 from torchsummary import summary
 
 from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig, _MBConvConfig
 from torchvision.utils import _log_api_usage_once
 from torchvision.ops.misc import Conv2dNormActivation
-
 
 def _efficientnet_conf(
     width_mult: float,
@@ -154,6 +152,7 @@ class EfficientNet(nn.Module):
         optimizer.zero_grad()
         logit = self.forward(x)
         loss = self.criterion(torch.squeeze(logit), y.type(torch.LongTensor))
+        print(loss.item())  # todo: remove
         loss.backward()
         optimizer.step()
 

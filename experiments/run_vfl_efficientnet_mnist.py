@@ -1,11 +1,13 @@
 import os
 import logging
 import threading
+import random
 from threading import Thread
 from typing import List, Optional
 
 import mlflow
 import datasets
+import torch
 
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
@@ -41,7 +43,7 @@ def load_processors(config_path: str):
 
 
 def run(config_path: Optional[str] = None):
-
+    torch.manual_seed(22)
     config = VFLConfig.load_and_validate(config_path)
     processors = load_processors(config_path)
 
@@ -63,6 +65,7 @@ def run(config_path: Optional[str] = None):
         "model_name": model_name,
         "learning_rate": config.common.learning_rate,
         "dataset": config.data.dataset,
+        "model_type": "vfl"
 
     }
 

@@ -38,6 +38,8 @@ class EfficientNetTop(nn.Module):
         dropout: float = 0.1,
         input_dim=None,  # todo: get it somewhere
         num_classes: int = 1000,
+        init_weights: float = None
+
     ) -> None:
         """
         EfficientNet V1 and V2 main class
@@ -60,16 +62,12 @@ class EfficientNetTop(nn.Module):
         )
 
         for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out")
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.ones_(m.weight)
-                nn.init.zeros_(m.bias)
-            elif isinstance(m, nn.Linear):
-                init_range = 1.0 / math.sqrt(m.out_features)
-                nn.init.uniform_(m.weight, -init_range, init_range)
+            if isinstance(m, nn.Linear):
+                if init_weights:
+                    nn.init.constant_(m.weight, init_weights)
+                else:
+                    init_range = 1.0 / math.sqrt(m.out_features)
+                    nn.init.uniform_(m.weight, -init_range, init_range)
                 nn.init.zeros_(m.bias)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
@@ -90,6 +88,7 @@ class EfficientNetTop(nn.Module):
         if is_single:
             logit = self.forward(x)
             loss = self.criterion(torch.squeeze(logit), gradients.type(torch.LongTensor))
+            print(loss.item()) #todo: remove
             grads = torch.autograd.grad(outputs=loss, inputs=x, retain_graph=True)
             loss.backward()
             optimizer.step()

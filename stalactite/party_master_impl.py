@@ -73,7 +73,8 @@ class PartyMasterImpl(PartyMaster):
             self._model = EfficientNetTop(
                 input_dim=1280,  # todo: determine in somehow
                 dropout=0.2,
-                num_classes=10)  # todo: determine in somehow
+                num_classes=10,
+                init_weights=None)  # todo: determine in somehow
         elif self._model_name == "other_one":
             pass
         else:
@@ -244,7 +245,7 @@ class PartyMasterImplLogreg(PartyMasterImpl):
         """
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        return [torch.zeros(self._batch_size, self.target.shape[1]) for _ in range(world_size)]
+        return [torch.zeros(self._batch_size, self.target.shape[1] if self.processor.multilabel else 1) for _ in range(world_size)]
 
     def aggregate(
             self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
@@ -316,7 +317,7 @@ class PartyMasterImplLogreg(PartyMasterImpl):
             f"Master %s: reporting metrics. Y dim: {y.size()}. " f"Predictions size: {predictions.size()}" % self.id
         )
 
-        y = y.numpy()
+        y = y.numpy() #todo: remove
         predictions = predictions.detach().numpy()
 
         mae = metrics.mean_absolute_error(y, predictions)
@@ -374,6 +375,8 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
         y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
         criterion = torch.nn.CrossEntropyLoss()
         loss = criterion(torch.squeeze(predictions), y.type(torch.LongTensor))
+        if self.run_mlflow:
+            mlflow.log_metric("loss", loss.item(), step=self.iteration_counter)
         grads = torch.autograd.grad(outputs=loss, inputs=self.aggregated_output)
 
         for i, member_id in enumerate(participating_members):

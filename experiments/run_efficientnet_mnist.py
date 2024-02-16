@@ -76,7 +76,7 @@ def run(config_path: Optional[str] = None):
 
     processors = load_processors(config_path)
     target_uids = [str(i) for i in range(config.data.dataset_size)]
-    divided = False
+    divided = True
 
     if divided:
         party = PartySingleEfficientNetSplitNN(
@@ -99,9 +99,6 @@ def run(config_path: Optional[str] = None):
             use_mlflow=config.master.run_mlflow,
             target_uids=target_uids
         )
-
-
-
 
     party.run()
 

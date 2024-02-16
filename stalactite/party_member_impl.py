@@ -120,7 +120,7 @@ class PartyMemberImpl(PartyMember):
         elif self._model_name == "logreg":
             self._model = LogisticRegressionBatch(
                 input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
+                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1] if self.processor.multilabel else 1,
                 learning_rate=self._common_params.learning_rate,
                 class_weights=None,
                 init_weights=0.005)
@@ -128,7 +128,8 @@ class PartyMemberImpl(PartyMember):
             self._model = EfficientNetBottom(
                 width_mult=1.0,
                 depth_mult=1.0,
-                stochastic_depth_prob=0.2)
+                stochastic_depth_prob=0.2,
+                init_weights=0.005)
         else:
             raise ValueError("unknown model %s" % self._model_name)
 
@@ -178,7 +179,7 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        self._model.update_weights(X_train, upd, optimizer=self._optimizer)
+        self._model.update_weights(X_train, upd)  # todo: add for split-learning, optimizer=self._optimizer)
         logger.info("Member %s: successfully updated weights" % self.id)
 
     def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:

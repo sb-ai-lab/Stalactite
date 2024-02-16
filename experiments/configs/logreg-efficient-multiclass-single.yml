@@ -1,9 +1,9 @@
 common:
-  epochs: 1
+  epochs: 10
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
-  batch_size: 20
+  batch_size: 200
   experiment_label: experiment-mnist-efficientnet-logreg
   reports_export_folder: "../../reports"
   vfl_model_name: logreg
@@ -23,7 +23,7 @@ master:
 
 data:
   random_seed: 0
-  dataset_size: 100
+  dataset_size: 1000
   dataset: 'mnist'
   use_smm: False
   host_path_data_dir:  ../../data/sber_ds_vfl/mnist_single_multiclass

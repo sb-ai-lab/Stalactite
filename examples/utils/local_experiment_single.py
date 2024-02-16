@@ -37,7 +37,7 @@ def load_processors(config_path: str):
 
     elif config.data.dataset.lower() == "sbol":
 
-        if not os.path.exists(config.data.host_path_data_dir):
+        if len(os.listdir(config.data.host_path_data_dir)) == 0:
             load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1)
 
         dataset = {0: datasets.load_from_disk(
@@ -85,6 +85,7 @@ def run(config_path: Optional[str] = None):
 
     if config.master.run_mlflow:
         mlflow.log_params(log_params)
+    target_uids = [str(i) for i in range(config.data.dataset_size)]
 
     processors = load_processors(config_path)
 
@@ -105,7 +106,8 @@ def run(config_path: Optional[str] = None):
             epochs=config.common.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-            use_mlflow=config.master.run_mlflow
+            use_mlflow=config.master.run_mlflow,
+            target_uids=target_uids
         )
     else:
         raise ValueError(f"unknown model name: {model_name}")

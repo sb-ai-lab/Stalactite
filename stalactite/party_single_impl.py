@@ -94,7 +94,7 @@ class PartySingle:
             tensor_idx = [int(x) for x in batch]
 
             x = self.x_train[tensor_idx]
-            y = self.target[tensor_idx]
+            y = self.target[tensor_idx][:, 6] #TODO: REMOVE IT
 
             self.update_weights(x, y)
 
@@ -202,6 +202,8 @@ class PartySingle:
         :param step: Current step or iteration.
         :return: None
         """
+
+        y = y[:, 6]  # todo: remove
         acc = ComputeAccuracy_numpy(is_linreg=self.model_name == "linreg", is_multilabel=True)
 
         mae = mean_absolute_error(y.numpy(), predictions)
@@ -277,9 +279,9 @@ class PartySingleLogreg(PartySingle):
     def initialize_model(self):
         self._model = LogisticRegressionBatch(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-            output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
+            output_dim=1 , #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
             learning_rate=self._common_params.learning_rate,
-            class_weights=self.class_weights,
+            class_weights=None,#self.class_weights[6],
             init_weights=0.005)
 
     def compute_predictions(
@@ -337,7 +339,7 @@ class PartySingleEfficientNet(PartySingleLogregMulticlass):
             depth_mult=1.0,
             dropout=0.2,
             num_classes=10,
-            init_weights=0.005)
+            init_weights=None)
 
         self._optimizer = torch.optim.SGD(
             self._model.parameters(),
@@ -397,12 +399,14 @@ class PartySingleEfficientNetSplitNN(PartySingleLogregMulticlass):
         self._model_top = EfficientNetTop(
             input_dim=1280,  # todo: determine in somehow
             dropout=0.2,
-            num_classes=10)
+            num_classes=10,
+            init_weights=None)
 
         self._model_bottom = EfficientNetBottom(
              width_mult=1.0,
              depth_mult=1.0,
-             stochastic_depth_prob=0.2)
+             stochastic_depth_prob=0.2,
+             init_weights=None)
 
         self._optimizer = torch.optim.SGD([
             {"params": self._model_top.parameters()},

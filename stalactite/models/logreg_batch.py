@@ -39,7 +39,7 @@ class LogisticRegressionBatch(torch.nn.Module):
         self.optimizer.zero_grad()
         logit = self.forward(x)
         if is_single:
-            loss = self.criterion(torch.squeeze(logit), gradients.type(torch.LongTensor))
+            loss = self.criterion(torch.squeeze(logit), gradients.type(torch.FloatTensor)) #todo: LongTensor
             loss.backward()
         else:
             logit.backward(gradient=gradients)

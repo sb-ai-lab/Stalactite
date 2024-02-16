@@ -58,7 +58,9 @@ def load_processors(config_path: str):
                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
             )
         processors = [
-            TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
+            TabularPreprocessor(
+                dataset=dataset[i], member_id=i, params=config
+            ) for i, v in dataset.items()
         ]
 
     else:
