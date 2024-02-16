@@ -7,7 +7,7 @@ common:
 
 vfl_model:
   epochs: 5
-  batch_size: 2500
+  batch_size: 8500
   vfl_model_name: logreg
   is_consequently: False
   use_class_weights: False

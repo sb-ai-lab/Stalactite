@@ -71,10 +71,20 @@ class ArbiteredPartySingle(PartyAgent):
         pass
 
     def _optimizer_step(self, gradient: torch.Tensor):
-        self._optimizer.zero_grad()
+        # self._optimizer.zero_grad()
+
         self._prev_model_parameter = self._model_parameter.weight.data.clone()
         self._model_parameter.weight.grad = gradient.T
         self._optimizer.step()
+        print(
+            'PARAM',
+            torch.sum(self._model_parameter.weight.data),
+            torch.sum(self._prev_model_parameter),
+            torch.sum(gradient.T),
+            torch.sum(torch.where(gradient.T < 0, 0, 1)),
+            torch.sum(torch.where(gradient.T > 0, 0, 1))
+        )
+
 
     def _get_delta_gradients(self) -> torch.Tensor:
         if self._prev_model_parameter is not None:
@@ -99,6 +109,8 @@ class ArbiteredPartySingle(PartyAgent):
 
         unique, counts = np.unique(self.target, return_counts=True)
         self._pos_weight = counts[0] / counts[1]
+
+        self.alpha = 0.001 # l2 reg
 
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
@@ -168,6 +180,8 @@ class ArbiteredPartySingle(PartyAgent):
     def compute_gradient(self, aggregated_predictions_diff: DataTensor, uids: List[str]) -> DataTensor:
         X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
         g = torch.matmul(X.T, aggregated_predictions_diff) / X.shape[0]
+        g = g + self.alpha * self._model_parameter.weight.data.T
+
         return g
 
     # def update_weights(self, uids: List[str], upd: DataTensor):
