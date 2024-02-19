@@ -68,6 +68,11 @@ class SecurityProtocol(ABC):
     _keys: Optional[Keys] = None
 
     @abstractmethod
+    def initialize(self):
+        """ Initialize protocol if requires some additional attributes after kays are added. """
+        ...
+
+    @abstractmethod
     def encrypt(self, data: torch.Tensor) -> Any:
         """ Encrypt data using public key.
 
@@ -340,6 +345,7 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
         pk = party.recv(pk_task, recv_results=True).result
 
         self.security_protocol.keys = pk
+        self.security_protocol.initialize()
 
 
         self.loop(batcher=self.make_batcher(uids=uids, party_members=party.members), party=party)
@@ -370,11 +376,12 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                     other_kwargs={'uids': titer.batch}
                 )
             )
-
+            print('master_partial_preds')
             master_partial_preds = self.predict_partial(uids=titer.batch)  # d
 
             participant_partial_predictions_tasks = party.gather(participant_partial_pred_tasks, recv_results=True)
             partial_predictions = [task.result for task in participant_partial_predictions_tasks]
+            print('partial_predictions')
 
 
             predictions_delta = self.aggregate_partial_predictions(
@@ -383,6 +390,7 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                 uids=titer.batch,
             )  # d
 
+            print('predictions_delta', predictions_delta[0])
 
             party.broadcast(
                 ArbiteredMethod.compute_gradient,
@@ -394,14 +402,19 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
             )
 
             master_gradient = self.compute_gradient(predictions_delta, titer.batch)  # g_enc
+            print('master_gradient', master_gradient[0])
+
             calculate_updates_task = party.send(
                 send_to_id=party.arbiter,
                 method_name=ArbiteredMethod.calculate_updates,
                 method_kwargs=MethodKwargs(tensor_kwargs={'gradient': master_gradient}),
             )
             model_updates = party.recv(calculate_updates_task, recv_results=True)
+            print('model_updates')
 
             self.update_weights(upd=model_updates.result, uids=titer.batch)
+            print('update_weights')
+
             # self.update_weights(upd=master_gradient, uids=titer.batch) # !!! TODO rm
 
             # TODO REPORT METRICS
@@ -414,11 +427,15 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
             )
 
             master_predictions, targets = self.predict(uids=None)
+            print('master_predictions')
+
             participant_partial_predictions_tasks = party.gather(predict_tasks, recv_results=True)
             aggr_predictions = self.aggregate_predictions(
                 master_predictions=master_predictions,
                 members_predictions=[task.result for task in participant_partial_predictions_tasks],
             )
+            print('aggr_predictions')
+
 
             self.report_metrics(targets, aggr_predictions, 'Train', step=titer.seq_num)
 
@@ -504,6 +521,7 @@ class ArbiteredPartyMember(PartyMember, ABC):
         pk = party.recv(pk_task, recv_results=True).result
 
         self.security_protocol.keys = pk
+        self.security_protocol.initialize()
 
         self.loop(batcher=self.batcher, party=party)
 

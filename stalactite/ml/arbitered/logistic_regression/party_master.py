@@ -5,6 +5,7 @@ import datasets
 import mlflow
 import numpy as np
 import torch
+from joblib import Parallel, delayed
 from pydantic import BaseModel
 from sklearn import metrics
 from sklearn.metrics import roc_auc_score
@@ -13,6 +14,7 @@ from stalactite.base import Batcher, PartyCommunicator, RecordsBatch, DataTensor
 from stalactite.batching import ListBatcher
 from stalactite.configs import VFLModelConfig
 from stalactite.data_preprocessors import ImagePreprocessor
+from stalactite.helpers import log_timing
 from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.ml.arbitered.base import ArbiteredPartyMaster, SecurityProtocol
 from stalactite.models import LogisticRegressionBatch
@@ -86,7 +88,6 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
         # X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
         # Xw = self._model.predict(X)
         Xw, y = self.predict(uids, is_test=False)
-
         d = 0.25 * Xw - 0.5 * y
         return d
 
@@ -94,6 +95,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
             self, master_prediction: DataTensor, members_predictions: PartyDataTensor, uids: RecordsBatch,
     ) -> DataTensor:
         y = self.target[[int(x) for x in uids]]
+        master_prediction = self.security_protocol.encrypt(master_prediction)
         for member_pred in members_predictions:
             master_prediction += member_pred
 
@@ -101,11 +103,23 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
         # return master_prediction * weights
         return master_prediction
 
-
     def compute_gradient(self, aggregated_predictions_diff: DataTensor, uids: List[str]) -> DataTensor:
-        X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        g = torch.matmul(X.T, aggregated_predictions_diff) / X.shape[0]
-        return g
+        with log_timing('Master compute gradient.'):
+            X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
+            # g = torch.matmul(X.T, aggregated_predictions_diff) / X.shape[0]
+            Xt = X.T.numpy(force=True).astype('float')
+            print(self.id, 'X.t', Xt.shape)
+
+            # g = np.dot(Xt, aggregated_predictions_diff) / X.shape[0]
+
+
+            n_jobs_eff = min((Xt.shape[0] // 3) + 1, 10)
+            with Parallel(10) as p:
+                g = np.concatenate(
+                    p(delayed(np.dot)(x, aggregated_predictions_diff) for x in np.array_split(Xt, n_jobs_eff))
+                )
+            print(self.id, 'g.shape', g.shape)
+            return g
 
     def records_uids(self) -> List[str]:
         return self.target_uids
@@ -128,8 +142,13 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
         dataset = self.processor.fit_transform()
         self._dataset = dataset
 
-        self.target = dataset[self.processor.data_params.train_split][self.processor.data_params.label_key][:, 6].unsqueeze(1)
-        self.test_target = dataset[self.processor.data_params.test_split][self.processor.data_params.label_key][:, 6].unsqueeze(1)
+        self.target = dataset[self.processor.data_params.train_split][self.processor.data_params.label_key][:,
+                      6].unsqueeze(1)
+        self.test_target = dataset[self.processor.data_params.test_split][self.processor.data_params.label_key][:,
+                           6].unsqueeze(1)
+
+        self.target = torch.where(self.target == 0., -1., 1.)
+        self.test_target = torch.where(self.test_target == 0., -1., 1.)
 
         unique, counts = np.unique(self.target, return_counts=True)
         self._pos_weight = counts[0] / counts[1]
@@ -146,19 +165,19 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
         self.is_finalized = True
         logger.info("Master %s: has finalized" % self.id)
 
-
     def predict(self, uids: Optional[List[str]], is_test: bool = False):
-        if not is_test:
-            if uids is None:
-                uids = self._uids_to_use
-            X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-            y = self.target[[int(x) for x in uids]]
-        else:
-            X = self._dataset[self._data_params.test_split][self._data_params.features_key]
-            y = self.test_target
-        Xw = self._model.predict(X)
+        with log_timing(f'Prediction on the master {self.id}', log_func=print):
+            if not is_test:
+                if uids is None:
+                    uids = self._uids_to_use
+                X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
+                y = self.target[[int(x) for x in uids]]
+            else:
+                X = self._dataset[self._data_params.test_split][self._data_params.features_key]
+                y = self.test_target
+            Xw = self._model.predict(X)
 
-        return Xw, y
+            return Xw, y
 
     def aggregate_predictions(self, master_predictions: DataTensor, members_predictions: PartyDataTensor) -> DataTensor:
         predictions = torch.sigmoid(torch.sum(torch.hstack([master_predictions] + members_predictions), dim=1))
@@ -180,7 +199,6 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
             print(f'{name} ROC AUC {avg}: {roc_auc}')
             if self.run_mlflow:
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-
 
     @property
     def batcher(self) -> Batcher:

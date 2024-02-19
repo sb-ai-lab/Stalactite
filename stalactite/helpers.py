@@ -1,3 +1,5 @@
+import logging
+import time
 from contextlib import contextmanager
 from threading import Thread
 from typing import List, Callable, Optional
@@ -8,6 +10,14 @@ from stalactite.base import PartyMaster, PartyMember
 from stalactite.configs import VFLConfig
 from stalactite.ml.arbitered.base import PartyArbiter
 
+@contextmanager
+def log_timing(name: str, log_func: Callable = print):
+    time_start = time.time()
+    log_func(f'Started {name}')
+    try:
+        yield
+    finally:
+        log_func(f'{name} time: {round(time.time() - time_start, 4)} sec.')
 
 @contextmanager
 def reporting(config: VFLConfig):

@@ -39,7 +39,6 @@ class LogisticRegressionBatch(torch.nn.Module):
             collected_from_arbiter: bool = False
     ) -> None:
         if collected_from_arbiter:
-            print('collected_from_arbiter', self.linear.weight.data.shape, gradients.T.shape)
             updated_weight = self.linear.weight.data.clone() - gradients.T
             self.linear.weight.data = updated_weight
             #

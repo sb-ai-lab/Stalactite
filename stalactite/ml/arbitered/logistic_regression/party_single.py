@@ -179,8 +179,8 @@ class ArbiteredPartySingle(PartyAgent):
 
     def compute_gradient(self, aggregated_predictions_diff: DataTensor, uids: List[str]) -> DataTensor:
         X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        g = torch.matmul(X.T, aggregated_predictions_diff) / X.shape[0]
-        g = g + self.alpha * self._model_parameter.weight.data.T
+        g = 1 / X.shape[0] * torch.matmul(X.T, aggregated_predictions_diff)
+        # g = g + self.alpha * self._model_parameter.weight.data.T
 
         return g
 
@@ -207,8 +207,9 @@ class ArbiteredPartySingle(PartyAgent):
         else:
             X = self._dataset[self._data_params.test_split][self._data_params.features_key]
             y = self.test_target
-        with torch.no_grad():
-            Xw = self._model_parameter(X)
+
+        Xw = torch.matmul(X, self._model_parameter.weight.data.detach().T)
+        print('Xw.shape', Xw.shape)
 
         return Xw, y
 

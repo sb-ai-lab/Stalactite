@@ -1,10 +1,12 @@
 from typing import List, Optional
 import logging
 
+import numpy as np
 import torch
 
 from stalactite.base import RecordsBatch, DataTensor, Batcher
 from stalactite.batching import ListBatcher
+from stalactite.helpers import log_timing
 from stalactite.ml.arbitered.base import ArbiteredPartyMember, SecurityProtocol
 from stalactite.models import LogisticRegressionBatch
 
@@ -40,21 +42,28 @@ class ArbiteredPartyMemberLogReg(ArbiteredPartyMember):
         # X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
         predictions = self.predict(uids, is_test=False)
         Xw = 0.25 * predictions
+        Xw = self.security_protocol.encrypt(Xw)
         return Xw
 
     def predict(self, uids: Optional[List[str]], is_test: bool = False) -> DataTensor:
-        if not is_test:
-            if uids is None:
-                uids = self._uids_to_use
-            X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        else:
-            X = self._dataset[self._data_params.test_split][self._data_params.features_key]
-        return self._model.predict(X)
+        with log_timing(f'Prediction on the member {self.id}', log_func=print):
+            if not is_test:
+                if uids is None:
+                    uids = self._uids_to_use
+                X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
+            else:
+                X = self._dataset[self._data_params.test_split][self._data_params.features_key]
+            return self._model.predict(X)
 
     def compute_gradient(self, aggregated_predictions_diff: DataTensor, uids: List[str]) -> DataTensor:
-        X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        g = torch.matmul(X.T, aggregated_predictions_diff) / X.shape[0]
-        return g
+        with log_timing(f'{self.id} compute gradient.'):
+            X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
+            # g = torch.matmul(X.T, aggregated_predictions_diff) / X.shape[0]
+            Xt = X.T.numpy(force=True).astype('float')
+            print(self.id, 'X.t', Xt.shape)
+            g = np.dot(Xt, aggregated_predictions_diff) / X.shape[0]
+            print(self.id, 'g.shape', g.shape)
+            return g
 
     @property
     def batcher(self) -> Batcher:

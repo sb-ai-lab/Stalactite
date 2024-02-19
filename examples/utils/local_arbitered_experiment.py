@@ -90,7 +90,7 @@ def run(config_path: Optional[str] = None):
             uid="arbiter",
             epochs=config.vfl_model.epochs,
             batch_size=config.vfl_model.batch_size,
-            security_protocol=SecurityProtocolArbiterPaillier(),
+            security_protocol=SecurityProtocolArbiterPaillier(n_jobs=10),
             learning_rate=config.vfl_model.learning_rate,
             momentum=0.0,
         )
@@ -105,7 +105,7 @@ def run(config_path: Optional[str] = None):
             batch_size=config.vfl_model.batch_size,
             model_update_dim_size=0,
             run_mlflow=config.master.run_mlflow,
-            security_protocol=SecurityProtocolPaillier(),
+            security_protocol=SecurityProtocolPaillier(n_jobs=10),
         )
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
@@ -117,7 +117,7 @@ def run(config_path: Optional[str] = None):
                 processor=processors[member_rank + 1],
                 batch_size=config.vfl_model.batch_size,
                 epochs=config.vfl_model.epochs,
-                security_protocol=SecurityProtocolPaillier(),
+                security_protocol=SecurityProtocolPaillier(n_jobs=10),
             )
             for member_rank, member_uid in enumerate(member_ids)
         ]
@@ -139,7 +139,7 @@ def run(config_path: Optional[str] = None):
                 participant=member,
                 world_size=config.common.world_size,
                 shared_party_info=shared_party_info,
-                recv_timeout=config.member.recv_timeout,
+                recv_timeout=3600.,
             )
             comm.run()
             logger.info("Finishing thread %s" % threading.current_thread().name)
@@ -150,7 +150,7 @@ def run(config_path: Optional[str] = None):
                 participant=arbiter,
                 world_size=config.common.world_size,
                 shared_party_info=shared_party_info,
-                recv_timeout=360.,
+                recv_timeout=3600.,
             )
             comm.run()
             logger.info("Finishing thread %s" % threading.current_thread().name)
