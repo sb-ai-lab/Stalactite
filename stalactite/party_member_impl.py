@@ -10,6 +10,7 @@ from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
 from stalactite.batching import ListBatcher, ConsecutiveListBatcher
 from stalactite.models import LinearRegressionBatch, LogisticRegressionBatch
 from stalactite.models.split_learning.efficientnet_bottom import EfficientNetBottom
+from stalactite.models.split_learning.mlp_bottom import MLPBottom
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,12 @@ class PartyMemberImpl(PartyMember):
                 init_weights=None)
             logger.info(summary(self._model, (1, 28, 28), device="cpu"))
 
+        elif self._model_name == "mlp":
+            self._model = MLPBottom(
+                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+                hidden_channels=[1000, 300, 100]
+            )
+
         else:
             raise ValueError("unknown model %s" % self._model_name)
 
@@ -182,7 +189,7 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        if self._model_name == "efficientnet":
+        if self._model_name in ["efficientnet", "mlp"]:
             self._model.update_weights(X_train, upd, optimizer=self._optimizer) #todo: refactor
         else:
             self._model.update_weights(X_train, upd)
