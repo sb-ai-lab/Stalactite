@@ -17,8 +17,8 @@ from sklearn.metrics import mean_absolute_error, roc_auc_score
 from stalactite.base import DataTensor
 from stalactite.batching import Batcher, ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy
-from stalactite.models import LogisticRegressionBatch, LinearRegressionBatch, EfficientNet
-from stalactite.models.split_learning import EfficientNetTop, EfficientNetBottom
+from stalactite.models import LogisticRegressionBatch, LinearRegressionBatch, EfficientNet, MLP
+from stalactite.models.split_learning import EfficientNetTop, EfficientNetBottom, MLPTop, MLPBottom
 from stalactite.data_preprocessors.base_preprocessor import DataPreprocessor
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ class PartySingle:
             tensor_idx = [int(x) for x in batch]
 
             x = self.x_train[tensor_idx]
-            y = self.target[tensor_idx][:, 6] #TODO: REMOVE IT
+            y = self.target[tensor_idx]#[:, 6] #TODO: REMOVE IT
 
             self.update_weights(x, y)
 
@@ -204,7 +204,7 @@ class PartySingle:
         :return: None
         """
 
-        y = y[:, 6]  # todo: remove
+        #y = y[:, 6]  # todo: remove
         acc = ComputeAccuracy_numpy(is_linreg=self.model_name == "linreg", is_multilabel=True)
 
         mae = mean_absolute_error(y.numpy(), predictions)
@@ -476,3 +476,120 @@ class PartySingleEfficientNetSplitNN(PartySingleLogregMulticlass):
         predictions = self._model_top.predict(bottom_model_outputs)
 
         return torch.softmax(predictions, dim=1).detach().numpy()
+
+
+class PartySingleMLP(PartySingle):
+
+    model_name = 'mlp'
+
+    def update_weights(
+            self,
+            x: DataTensor,
+            y: DataTensor,
+    ):
+        self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer)
+
+    def initialize_model(self):
+        self._model = MLP(
+            input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+            output_dim=1, #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1], #single label
+            hidden_channels=[1000, 300, 100],
+            init_weights=None,
+            multilabel=True,
+            class_weights=self.class_weights)
+
+        self._optimizer = torch.optim.SGD(
+            self._model.parameters(),
+            lr=self._common_params.learning_rate,
+            momentum=self._common_params.momentum
+        )
+
+    def compute_predictions(
+            self,
+            is_test: bool = False,
+    ) -> DataTensor:
+        features = self.x_test if is_test else self.x_train
+        return torch.sigmoid(self._model.predict(features)).detach().numpy()
+
+
+class PartySingleMLPSplitNN(PartySingleLogregMulticlass):
+    def initialize_model(self):
+        self._model_top = MLPTop(
+            input_dim=100,
+            output_dim=1,
+            init_weights=None,
+            class_weights=self.class_weights)
+        logger.info(summary(self._model_top, (2, 100), device="cpu"))
+
+        self._model_bottom = MLPBottom(
+            input_dim=1345,
+            hidden_channels=[1000, 300, 100],
+            init_weights=None)
+
+        logger.info(summary(self._model_bottom, (2, 1345), device="cpu"))
+
+        self._optimizer = torch.optim.SGD([
+            {"params": self._model_top.parameters()},
+            {"params": self._model_bottom.parameters()}
+        ],
+            lr=self._common_params.learning_rate,
+            momentum=self._common_params.momentum
+        )
+
+        if self.use_mlflow:
+            mlflow.log_param("model_type", "divided")
+
+    def update_weights(
+            self,
+            x: DataTensor,
+            y: DataTensor,
+    ):
+        bottom_model_outputs = self._model_bottom.forward(x)
+        top_grads = self._model_top.update_weights(
+            x=bottom_model_outputs,
+            gradients=y,
+            is_single=True,
+            optimizer=self._optimizer
+        )
+        self._model_bottom.update_weights(x=x, gradients=top_grads, optimizer=self._optimizer)
+
+    def loop(self, batcher: Batcher) -> None:
+        """ Perform training iterations using the given batcher.
+
+        :param batcher: An iterable batch generator used for training.
+        :return: None
+        """
+
+        for titer in batcher:
+            step = titer.seq_num
+            logger.debug(f"batch: {step}")
+            batch = titer.batch
+            tensor_idx = [int(x) for x in batch]
+
+            x = self.x_train[tensor_idx]
+            y = self.target[tensor_idx]
+
+            self.update_weights(x, y)
+
+            predictions = self.compute_predictions(is_test=False)
+            predictions_test = self.compute_predictions(is_test=True)
+
+            if (titer.previous_batch is None) and (step > 0):
+                break
+            step += 1
+
+            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
+                self.report_metrics(self.target, predictions, name="Train", step=step)
+            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
+                self.report_metrics(self.test_target, predictions_test, name="Test", step=step)
+
+    def compute_predictions(
+            self,
+            is_test: bool = False,
+    ) -> DataTensor:
+
+        features = self.x_test if is_test else self.x_train
+        bottom_model_outputs = self._model_bottom.forward(features)
+        predictions = self._model_top.predict(bottom_model_outputs)
+
+        return torch.sigmoid(predictions).detach().numpy()

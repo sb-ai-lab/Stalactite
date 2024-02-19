@@ -64,7 +64,7 @@ class EfficientNetBottom(nn.Module):
             Conv2dNormActivation(
                 1, firstconv_output_channels, kernel_size=3, stride=2, norm_layer=norm_layer,
                 activation_layer=nn.SiLU
-            ) #todo: add in_channels to init params
+            )
         )
 
         # building inverted residual blocks

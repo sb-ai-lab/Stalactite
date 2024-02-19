@@ -1,0 +1,34 @@
+common:
+  epochs: 1
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 1
+  batch_size: 250
+  experiment_label: experiment-sbol-mlp
+  reports_export_folder: "../../reports"
+  vfl_model_name: mlp
+  is_consequently: False
+  learning_rate: 0.01
+  momentum: 0
+  use_class_weights: True
+#  random_seed: 0 # TODO
+
+prerequisites:
+  mlflow_host: 'node16.bdcl'
+  mlflow_port: '9876'
+
+master:
+  container_host: 'node16.bdcl'
+  run_mlflow: True
+
+data:
+  random_seed: 0
+  dataset_size: 850
+  dataset: 'sbol'
+  use_smm: True
+  host_path_data_dir:  /home/dmitriy/data/my_test/vfl_multilabel_sber_sample10000_parts1
+  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
+  train_split: "train_train" # name of the train split
+  test_split: "train_val" # name of the test split
+  features_key: "features_part_"
+  label_key: "labels"
