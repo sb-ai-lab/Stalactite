@@ -114,6 +114,7 @@ class PartyMemberImpl(PartyMember):
         self._uids_to_use = uids
 
     def initialize_model(self) -> None:
+        init_weights = None  # todo: remove
         """ Initialize the model based on the specified model name. """
         if self._model_name == "linreg":
             self._model = LinearRegressionBatch(
@@ -137,7 +138,7 @@ class PartyMemberImpl(PartyMember):
         elif self._model_name == "mlp":
             self._model = MLPBottom(
                 input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                hidden_channels=[1000, 300, 100]
+                hidden_channels=[1000, 300, 100], init_weights=init_weights
             )
 
         else:

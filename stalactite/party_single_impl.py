@@ -490,11 +490,12 @@ class PartySingleMLP(PartySingle):
         self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer)
 
     def initialize_model(self):
+        init_weights = 0.005
         self._model = MLP(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
             output_dim=1, #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1], #single label
             hidden_channels=[1000, 300, 100],
-            init_weights=None,
+            init_weights=init_weights,
             multilabel=True,
             class_weights=self.class_weights)
 
@@ -503,6 +504,10 @@ class PartySingleMLP(PartySingle):
             lr=self._common_params.learning_rate,
             momentum=self._common_params.momentum
         )
+
+        if self.use_mlflow:
+            mlflow.log_param("model_type", "base")
+            mlflow.log_param("init_weights", init_weights)
 
     def compute_predictions(
             self,
@@ -514,19 +519,20 @@ class PartySingleMLP(PartySingle):
 
 class PartySingleMLPSplitNN(PartySingleLogregMulticlass):
     def initialize_model(self):
+        init_weights = 0.005
         self._model_top = MLPTop(
             input_dim=100,
             output_dim=1,
-            init_weights=None,
+            init_weights=init_weights,
             class_weights=self.class_weights)
         logger.info(summary(self._model_top, (2, 100), device="cpu"))
 
         self._model_bottom = MLPBottom(
-            input_dim=1345,
+            input_dim=1356,
             hidden_channels=[1000, 300, 100],
-            init_weights=None)
+            init_weights=init_weights)
 
-        logger.info(summary(self._model_bottom, (2, 1345), device="cpu"))
+        logger.info(summary(self._model_bottom, (2, 1356), device="cpu"))
 
         self._optimizer = torch.optim.SGD([
             {"params": self._model_top.parameters()},
@@ -538,6 +544,7 @@ class PartySingleMLPSplitNN(PartySingleLogregMulticlass):
 
         if self.use_mlflow:
             mlflow.log_param("model_type", "divided")
+            mlflow.log_param("init_weights", init_weights)
 
     def update_weights(
             self,

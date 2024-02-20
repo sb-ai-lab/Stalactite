@@ -37,7 +37,8 @@ class MLPBottom(nn.Module):
         if multilabel:
             self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
         else:
-            self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+            raise ValueError()
+            # self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
         layers = []
         in_dim = input_dim

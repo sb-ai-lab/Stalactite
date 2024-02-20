@@ -22,7 +22,7 @@ def load_processors(config_path: str):
     config = VFLConfig.load_and_validate(config_path)
 
     if len(os.listdir(config.data.host_path_data_dir)) == 0:
-        load_sbol_smm(config.data.host_path_data_dir, parts_num=1)
+        load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1)
 
     dataset = {0: datasets.load_from_disk(
         os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
@@ -65,7 +65,7 @@ def run(config_path: Optional[str] = None):
 
     processors = load_processors(config_path)
     target_uids = [str(i) for i in range(config.data.dataset_size)]
-    divided = True
+    divided = False
 
     if divided:
         party = PartySingleMLPSplitNN(

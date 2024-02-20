@@ -63,7 +63,7 @@ class MLPTop(nn.Module):
             logit = self.forward(x)
             loss = self.criterion(torch.squeeze(logit), gradients.type(torch.FloatTensor))
             grads = torch.autograd.grad(outputs=loss, inputs=x, retain_graph=True)
-            loss.backward()
+            loss.backward()  # todo: check if it works properly (updates weights only on master model)
             optimizer.step()
             return grads[0]
         else:

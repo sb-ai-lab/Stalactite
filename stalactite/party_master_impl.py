@@ -1,6 +1,7 @@
 import logging
 import time
 from typing import List
+from copy import copy, deepcopy
 
 import mlflow
 import torch
@@ -70,16 +71,18 @@ class PartyMasterImpl(PartyMaster):
         self.aggregated_output = None
 
     def initialize_model(self) -> None:
+        init_weights = None #todo: remove
+
         """ Initialize the model based on the specified model name. """
         if self._model_name == "efficientnet":
             self._model = EfficientNetTop(
                 input_dim=128,  # todo: determine in somehow
                 dropout=0.2,
                 num_classes=10,
-                init_weights=None)  # todo: determine in somehow
+                init_weights=init_weights)  # todo: determine in somehow
             logger.info(summary(self._model, (128, 1, 1), device="cpu"))
         elif self._model_name == "mlp":
-            self._model = MLPTop(input_dim=100, output_dim=1, multilabel=False)
+            self._model = MLPTop(input_dim=100, output_dim=1, multilabel=True)
         else:
             raise ValueError("unknown model %s" % self._model_name)
 
@@ -408,7 +411,7 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
         self.aggregated_output = predictions
         return predictions
 
-    def predict(self, x: DataTensor, use_test: bool = False, proba:str =None) -> DataTensor:
+    def predict(self, x: DataTensor, use_test: bool = False, proba: str = None) -> DataTensor:
         """ Make predictions using the current model.
         :return: Model predictions.
         """
@@ -435,10 +438,14 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
     def update_predict(self, upd: DataTensor, agg_members_output: DataTensor) -> DataTensor:
         logger.info("Master: updating and predicting.")
         self._check_if_ready()
-        # get aggregated output from previous batch
-        self.update_weights(agg_members_output=self.aggregated_output, upd=upd)
+        # get aggregated output from previous batch if exist (we do not make update_weights if it's the first iter)
+        if self.aggregated_output is not None:
+            self.update_weights(
+                agg_members_output=self.aggregated_output, upd=upd)
         predictions = self.predict(agg_members_output)
         logger.info("Master: updated and predicted.")
+        # save current agg_members_output for making update_predict for next batch
+        self.aggregated_output = copy(agg_members_output)
         return predictions
 
     def loop(self, batcher: Batcher, communicator: PartyCommunicator) -> None:
@@ -555,11 +562,32 @@ class PartyMasterImplMLPSplitNN(PartyMasterImplSplitNN):
         self._check_if_ready()
         return [torch.zeros(self._batch_size, 100) for _ in range(world_size)]
 
+
+    def aggregate(
+            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+    ) -> DataTensor:
+        """ Aggregate party predictions for logistic regression.
+
+        :param participating_members: List of participating party member identifiers.
+        :param party_predictions: List of party predictions.
+        :param infer: Flag indicating whether to perform inference.
+
+        :return: Aggregated predictions after applying sigmoid function.
+        """
+        logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
+        self._check_if_ready()
+
+        for member_id, member_prediction in zip(participating_members, party_predictions):
+            self.party_predictions[member_id] = member_prediction
+        party_predictions = list(self.party_predictions.values())
+        predictions = torch.sum(torch.stack(party_predictions, dim=1), dim=1)
+        return predictions
+
     def compute_updates(
             self,
             participating_members: List[str],
             predictions: DataTensor,
-            party_predictions: PartyDataTensor,
+            agg_predictions: DataTensor,
             world_size: int,
             subiter_seq_num: int,
     ) -> List[DataTensor]:
@@ -567,7 +595,7 @@ class PartyMasterImplMLPSplitNN(PartyMasterImplSplitNN):
 
         :param participating_members: List of participating party members identifiers.
         :param predictions: Model predictions.
-        :param party_predictions: List of party predictions.
+        :param agg_predictions: Aggregated predictions.
         :param world_size: Number of party members.
         :param subiter_seq_num: Sub-iteration sequence number.
 
@@ -577,11 +605,11 @@ class PartyMasterImplMLPSplitNN(PartyMasterImplSplitNN):
         self._check_if_ready()
         self.iteration_counter += 1
         y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
-        criterion = torch.nn.BCEWithLogitsLoss()
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
         loss = criterion(torch.squeeze(predictions), y.type(torch.FloatTensor))
         if self.run_mlflow:
             mlflow.log_metric("loss", loss.item(), step=self.iteration_counter)
-        grads = torch.autograd.grad(outputs=loss, inputs=self.aggregated_output)
+        grads = torch.autograd.grad(outputs=loss, inputs=agg_predictions, retain_graph=True)
 
         for i, member_id in enumerate(participating_members):
             self.updates[member_id] = grads[0]
@@ -628,10 +656,11 @@ class PartyMasterImplMLPSplitNN(PartyMasterImplSplitNN):
             # for master model
             master_predictions = self.update_predict(upd=updates[0], agg_members_output=agg_members_predictions)
 
+
             updates = self.compute_updates(
                 titer.participating_members,
                 master_predictions,
-                party_members_predictions,
+                agg_members_predictions, #todo: determine compute updates for split NN
                 communicator.world_size,
                 titer.subiter_seq_num,
             )
