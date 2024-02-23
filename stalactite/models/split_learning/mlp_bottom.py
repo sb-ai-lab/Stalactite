@@ -80,4 +80,7 @@ class MLPBottom(nn.Module):
         return self.forward(x)
 
 
+if __name__ == "__main__":
+    model = MLPBottom(input_dim=200, hidden_channels=[1000, 300, 100])
+    summary(model, (200,), device="cpu", batch_size=3)
 

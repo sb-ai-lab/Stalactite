@@ -17,8 +17,8 @@ from sklearn.metrics import mean_absolute_error, roc_auc_score
 from stalactite.base import DataTensor
 from stalactite.batching import Batcher, ListBatcher
 from stalactite.metrics import ComputeAccuracy_numpy
-from stalactite.models import LogisticRegressionBatch, LinearRegressionBatch, EfficientNet, MLP
-from stalactite.models.split_learning import EfficientNetTop, EfficientNetBottom, MLPTop, MLPBottom
+from stalactite.models import LogisticRegressionBatch, LinearRegressionBatch, EfficientNet, MLP, ResNet
+from stalactite.models.split_learning import EfficientNetTop, EfficientNetBottom, MLPTop, MLPBottom, ResNetBottom, ResNetTop
 from stalactite.data_preprocessors.base_preprocessor import DataPreprocessor
 
 logger = logging.getLogger(__name__)
@@ -519,7 +519,7 @@ class PartySingleMLP(PartySingle):
 
 class PartySingleMLPSplitNN(PartySingleLogregMulticlass):
     def initialize_model(self):
-        init_weights = 0.005
+        init_weights = None
         self._model_top = MLPTop(
             input_dim=100,
             output_dim=1,
@@ -546,6 +546,7 @@ class PartySingleMLPSplitNN(PartySingleLogregMulticlass):
             mlflow.log_param("model_type", "divided")
             mlflow.log_param("init_weights", init_weights)
 
+    # todo: do appropriate inheritance for splitNN networks
     def update_weights(
             self,
             x: DataTensor,
@@ -557,6 +558,135 @@ class PartySingleMLPSplitNN(PartySingleLogregMulticlass):
             gradients=y,
             is_single=True,
             optimizer=self._optimizer
+        )
+        self._model_bottom.update_weights(x=x, gradients=top_grads, optimizer=self._optimizer)
+
+    def loop(self, batcher: Batcher) -> None:
+        """ Perform training iterations using the given batcher.
+
+        :param batcher: An iterable batch generator used for training.
+        :return: None
+        """
+
+        for titer in batcher:
+            step = titer.seq_num
+            logger.debug(f"batch: {step}")
+            batch = titer.batch
+            tensor_idx = [int(x) for x in batch]
+
+            x = self.x_train[tensor_idx]
+            y = self.target[tensor_idx]
+
+            self.update_weights(x, y)
+
+            predictions = self.compute_predictions(is_test=False)
+            predictions_test = self.compute_predictions(is_test=True)
+
+            if (titer.previous_batch is None) and (step > 0):
+                break
+            step += 1
+
+            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
+                self.report_metrics(self.target, predictions, name="Train", step=step)
+            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
+                self.report_metrics(self.test_target, predictions_test, name="Test", step=step)
+
+    def compute_predictions(
+            self,
+            is_test: bool = False,
+    ) -> DataTensor:
+
+        features = self.x_test if is_test else self.x_train
+        bottom_model_outputs = self._model_bottom.forward(features)
+        predictions = self._model_top.predict(bottom_model_outputs)
+
+        return torch.sigmoid(predictions).detach().numpy()
+
+
+class PartySingleResNet(PartySingle):
+
+    model_name = 'resnet'
+
+    def update_weights(
+            self,
+            x: DataTensor,
+            y: DataTensor,
+    ):
+        self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer, criterion=self._criterion)
+
+    def initialize_model(self):
+        init_weights = 0.005
+        self._model = ResNet(
+            input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+            output_dim=1, #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1], #single label
+            hid_factor=[0.1, 0.1],
+            init_weights=init_weights,
+            )
+
+        self._optimizer = torch.optim.SGD(
+            self._model.parameters(),
+            lr=self._common_params.learning_rate,
+            momentum=self._common_params.momentum
+        )
+
+        self._criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
+
+        if self.use_mlflow:
+            mlflow.log_param("model_type", "base")
+            mlflow.log_param("init_weights", init_weights)
+
+    def compute_predictions(
+            self,
+            is_test: bool = False,
+    ) -> DataTensor:
+        features = self.x_test if is_test else self.x_train
+        return torch.sigmoid(self._model.predict(features)).detach().numpy()
+
+
+class PartySingleResNetSplitNN(PartySingleLogregMulticlass):
+    def initialize_model(self):
+        init_weights = 0.005
+        self._model_top = ResNetTop(
+            input_dim=1356, #todo: add
+            output_dim=1, #todo: add,
+            init_weights=init_weights,
+            use_bn=True,
+        )
+        logger.info(summary(self._model_top, (1356,), device="cpu", batch_size=5))  # todo: add
+
+        self._model_bottom = ResNetBottom(
+            input_dim=1356,
+            hid_factor=[0.1, 0.1],
+            init_weights=init_weights)
+
+        logger.info(summary(self._model_bottom, (1356,), device="cpu", batch_size=5))  # todo: add
+
+        self._optimizer = torch.optim.SGD([
+            {"params": self._model_top.parameters()},
+            {"params": self._model_bottom.parameters()}
+        ],
+            lr=self._common_params.learning_rate,
+            momentum=self._common_params.momentum
+        )
+
+        self._criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
+
+        if self.use_mlflow:
+            mlflow.log_param("model_type", "divided")
+            mlflow.log_param("init_weights", init_weights)
+
+    def update_weights(
+            self,
+            x: DataTensor,
+            y: DataTensor,
+    ):
+        bottom_model_outputs = self._model_bottom.forward(x)
+        top_grads = self._model_top.update_weights(
+            x=bottom_model_outputs,
+            gradients=y,
+            is_single=True,
+            optimizer=self._optimizer,
+            criterion=self._criterion
         )
         self._model_bottom.update_weights(x=x, gradients=top_grads, optimizer=self._optimizer)
 

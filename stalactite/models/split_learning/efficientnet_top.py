@@ -82,7 +82,7 @@ class EfficientNetTop(nn.Module):
         return self._forward_impl(x)
 
     def update_weights(self, x: torch.Tensor, gradients: torch.Tensor, is_single: bool = False,
-                       optimizer: torch.optim.Optimizer = None) -> Tensor:
+                       optimizer: torch.optim.Optimizer = None) -> Optional[Tensor]:
         optimizer.zero_grad()
 
         if is_single:

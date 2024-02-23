@@ -5,12 +5,10 @@ import torch
 from torchsummary import summary
 import scipy as sp
 
-
 from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
 from stalactite.batching import ListBatcher, ConsecutiveListBatcher
 from stalactite.models import LinearRegressionBatch, LogisticRegressionBatch
-from stalactite.models.split_learning.efficientnet_bottom import EfficientNetBottom
-from stalactite.models.split_learning.mlp_bottom import MLPBottom
+from stalactite.models.split_learning import EfficientNetBottom, ResNetBottom, MLPBottom
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +112,7 @@ class PartyMemberImpl(PartyMember):
         self._uids_to_use = uids
 
     def initialize_model(self) -> None:
-        init_weights = None  # todo: remove
+        init_weights = 0.005  # todo: remove
         """ Initialize the model based on the specified model name. """
         if self._model_name == "linreg":
             self._model = LinearRegressionBatch(
@@ -140,7 +138,11 @@ class PartyMemberImpl(PartyMember):
                 input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
                 hidden_channels=[1000, 300, 100], init_weights=init_weights
             )
-
+        elif self._model_name == "resnet":
+            self._model = ResNetBottom(
+                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+                hid_factor=[0.1, 0.1],
+                init_weights=init_weights)
         else:
             raise ValueError("unknown model %s" % self._model_name)
 
@@ -190,7 +192,7 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        if self._model_name in ["efficientnet", "mlp"]:
+        if self._model_name in ["efficientnet", "mlp", "resnet"]:
             self._model.update_weights(X_train, upd, optimizer=self._optimizer) #todo: refactor
         else:
             self._model.update_weights(X_train, upd)
