@@ -140,6 +140,7 @@ class GRpcArbiterConfig(GRpcConfig):
     security_protocol_params: Optional[PaillierSPParams] = Field(default=None)
 
 
+
 class PartyConfig(BaseModel):
     """VFL base parties` parameters config."""
 
