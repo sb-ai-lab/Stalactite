@@ -70,7 +70,7 @@ class PartyMasterImpl(PartyMaster):
         self.aggregated_output = None
 
     def initialize_model(self) -> None:
-        init_weights = 0.005 #todo: remove
+        init_weights = None #todo: remove
 
         """ Initialize the model based on the specified model name. """
         if self._model_name == "efficientnet":
@@ -89,9 +89,12 @@ class PartyMasterImpl(PartyMaster):
                 init_weights=init_weights,
                 use_bn=True,
             )
+            logger.info(summary(self._model, (1356,), device="cpu", batch_size=5))  # todo: add
         else:
             raise ValueError("unknown model %s" % self._model_name)
 
+        if self.run_mlflow:
+            mlflow.log_param("init_weights", init_weights)
     def initialize_optimizer(self) -> None:
         self._optimizer = torch.optim.SGD([
             {"params": self._model.parameters()},
@@ -773,7 +776,7 @@ class PartyMasterImplResNetSplitNN(PartyMasterImplSplitNN):
     def compute_updates(
             self,
             participating_members: List[str],
-            predictions: DataTensor,
+            master_predictions: DataTensor,
             agg_predictions: DataTensor,
             world_size: int,
             subiter_seq_num: int,
@@ -793,7 +796,7 @@ class PartyMasterImplResNetSplitNN(PartyMasterImplSplitNN):
         self.iteration_counter += 1
         y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
         criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
-        loss = criterion(torch.squeeze(predictions), y.type(torch.FloatTensor))
+        loss = criterion(torch.squeeze(master_predictions), y.type(torch.FloatTensor))
         if self.run_mlflow:
             mlflow.log_metric("loss", loss.item(), step=self.iteration_counter)
         # master_grads = torch.autograd.grad(outputs=loss, inputs=agg_predictions, retain_graph=True)
@@ -802,7 +805,9 @@ class PartyMasterImplResNetSplitNN(PartyMasterImplSplitNN):
             self.updates[member_id] = torch.autograd.grad(
                 outputs=loss, inputs=self.party_predictions[member_id], retain_graph=True
             )[0]
-
+        self.updates["master"] = torch.autograd.grad(
+            outputs=loss, inputs=master_predictions, retain_graph=True
+        )[0]
         #todo: add master_grad to updates #or remain like this and concat grads when update master model
             #grads[0]
 
@@ -850,8 +855,12 @@ class PartyMasterImplResNetSplitNN(PartyMasterImplSplitNN):
             agg_members_predictions = self.aggregate(titer.participating_members, party_members_predictions)
 
             # for master model
-            master_grad = torch.cat(updates, dim=1)
-            master_predictions = self.update_predict(upd=master_grad, agg_members_output=agg_members_predictions)
+            # master_grad = torch.cat(updates, dim=1)
+            if titer.seq_num == 0:
+                self.updates["master"] = None
+            #     assert torch.equal(master_grad, self.updates["master"])
+
+            master_predictions = self.update_predict(upd=self.updates["master"], agg_members_output=agg_members_predictions) #master_grad todo: ?
 
             updates = self.compute_updates(
                 titer.participating_members,
@@ -871,7 +880,10 @@ class PartyMasterImplResNetSplitNN(PartyMasterImplSplitNN):
                     method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids}),
                     participating_members=titer.participating_members,
                 )
-                party_members_predictions = [task.result for task in communicator.gather(predict_tasks, recv_results=True)]
+
+                ordered_gather = sorted(communicator.gather(predict_tasks, recv_results=True),
+                                        key=lambda x: int(x.from_id.split('-')[-1]))
+                party_members_predictions = [task.result for task in ordered_gather]
 
                 agg_members_predictions = self.aggregate(communicator.members, party_members_predictions, infer=True)
                 master_predictions = self.predict(x=agg_members_predictions, proba="sigmoid")
@@ -888,11 +900,10 @@ class PartyMasterImplResNetSplitNN(PartyMasterImplSplitNN):
                     method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids, "use_test": True}),
                     participating_members=titer.participating_members,
                 )
+                ordered_gather = sorted(communicator.gather(predict_test_tasks, recv_results=True),
+                                        key=lambda x: int(x.from_id.split('-')[-1]))
 
-                party_members_predictions = [
-                    task.result for task in communicator.gather(predict_test_tasks, recv_results=True)
-                ]
-
+                party_members_predictions = [task.result for task in ordered_gather]
                 agg_members_predictions = self.aggregate(communicator.members, party_members_predictions, infer=True)
                 master_predictions = self.predict(x=agg_members_predictions, proba="sigmoid")
                 self.report_metrics(self.test_target, master_predictions, name="Test")

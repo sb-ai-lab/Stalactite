@@ -615,7 +615,7 @@ class PartySingleResNet(PartySingle):
         self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer, criterion=self._criterion)
 
     def initialize_model(self):
-        init_weights = 0.005
+        init_weights = None
         self._model = ResNet(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
             output_dim=1, #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1], #single label
@@ -645,7 +645,7 @@ class PartySingleResNet(PartySingle):
 
 class PartySingleResNetSplitNN(PartySingleLogregMulticlass):
     def initialize_model(self):
-        init_weights = 0.005
+        init_weights = None
         self._model_top = ResNetTop(
             input_dim=1356, #todo: add
             output_dim=1, #todo: add,
@@ -656,7 +656,7 @@ class PartySingleResNetSplitNN(PartySingleLogregMulticlass):
 
         self._model_bottom = ResNetBottom(
             input_dim=1356,
-            hid_factor=[0.1, 0.1],
+            hid_factor=[1, 1],
             init_weights=init_weights)
 
         logger.info(summary(self._model_bottom, (1356,), device="cpu", batch_size=5))  # todo: add

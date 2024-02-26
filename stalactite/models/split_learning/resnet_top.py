@@ -73,7 +73,9 @@ class ResNetTop(nn.Module):
             optimizer.step()
             return grads[0]
         else:
-            x.backward(gradient=gradients)
+            model_output = self.forward(x)
+            model_output.backward(gradient=gradients)
+            # x.backward(gradient=gradients) #todo: rewise
             optimizer.step()
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:

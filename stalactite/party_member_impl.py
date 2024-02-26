@@ -112,7 +112,7 @@ class PartyMemberImpl(PartyMember):
         self._uids_to_use = uids
 
     def initialize_model(self) -> None:
-        init_weights = 0.005  # todo: remove
+        init_weights = None  # todo: remove
         """ Initialize the model based on the specified model name. """
         if self._model_name == "linreg":
             self._model = LinearRegressionBatch(
@@ -141,8 +141,11 @@ class PartyMemberImpl(PartyMember):
         elif self._model_name == "resnet":
             self._model = ResNetBottom(
                 input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                hid_factor=[0.1, 0.1],
+                hid_factor=[1, 1],
                 init_weights=init_weights)
+
+            n_features = 1345 if self.id == "member-0" else 11
+            logger.info(summary(self._model, (n_features,), device="cpu", batch_size=5))  # todo: add
         else:
             raise ValueError("unknown model %s" % self._model_name)
 
