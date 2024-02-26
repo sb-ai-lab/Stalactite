@@ -15,11 +15,17 @@ from stalactite.base import (
     PartyCommunicator,
     PartyMaster,
     PartyMember,
-    Task,
+    Task, PartyAgent,
 )
+from stalactite.ml.arbitered.base import PartyArbiter, ArbiteredPartyMaster, ArbiteredPartyMember
 from stalactite.communications.helpers import ParticipantType
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+sh = logging.StreamHandler()
+sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logger.addHandler(sh)
+logger.propagate = False
 
 
 class RecvFuture(Future):
@@ -42,11 +48,12 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
 
     # todo: add docs
     # todo: introduce the single interface for that
-    participant: Union[PartyMaster, PartyMember]
+    participant: PartyAgent
     _party_info: Optional[Dict[str, _ParticipantInfo]]
     recv_timeout: float
-    master_id: Optional[str]
     _lock = threading.Lock()
+    master: str
+    members = list()
 
     @property
     def is_ready(self) -> bool:
@@ -65,8 +72,14 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         while len(self._party_info) < self.world_size + 1:
             time.sleep(0.1)
 
-        self.members = [uid for uid, pinfo in self._party_info.items() if pinfo.type == ParticipantType.member]
-
+        for uid, pinfo in self._party_info.items():
+            if pinfo.type == ParticipantType.member:
+                if uid not in self.members:
+                    self.members.append(uid)
+            elif pinfo.type == ParticipantType.master:
+                self.master = uid
+            else:
+                raise ValueError(f'Unknown participant type in rendezvous: {pinfo.type}')
         logger.info("Party communicator %s: rendezvous has been successfully performed" % self.participant.id)
 
     def send(
@@ -123,17 +136,13 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             self,
             method_name: Method,
             method_kwargs: Optional[List[MethodKwargs]] = None,
-            result: Optional[Any] = None,
+            result: Optional[Union[Any, List[Any]]] = None,
             participating_members: Optional[List[str]] = None,
             **kwargs,
     ) -> List[Task]:
 
         if participating_members is None:
             participating_members = self.members
-
-        assert (
-                len(set(participating_members).difference(set(self.members))) == 0
-        ), "Some of the members are disconnected, cannot perform collective operation"
 
         if method_kwargs is not None:
             assert len(method_kwargs) == len(participating_members), (
@@ -143,14 +152,22 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         else:
             method_kwargs = [None for _ in range(len(participating_members))]
 
+        if isinstance(result, list):
+            assert len(method_kwargs) == len(participating_members), (
+                f"Number of results in scatter operation ({len(method_kwargs)}) is not equal to the "
+                f"`participating_members` number ({len(participating_members)})"
+            )
+        else:
+            result = [result for _ in range(len(participating_members))]
+
         tasks = []
-        for send_to_id, m_kwargs in zip(participating_members, method_kwargs):
+        for send_to_id, m_kwargs, res in zip(participating_members, method_kwargs, result):
             tasks.append(
                 self.send(
                     send_to_id=send_to_id,
                     method_name=method_name,
                     method_kwargs=m_kwargs,
-                    result=result,
+                    result=res,
                     **kwargs,
                 )
             )
@@ -192,9 +209,11 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             RecvFuture(method_name=task.method_name, receive_from_id=task.from_id if not recv_results else task.to_id)
             for task in tasks
         ]
+
         for recv_f in _recv_futures:
             threading.Thread(target=self._get_from_recv, args=(recv_f,), daemon=True).start()
         done_tasks, pending_tasks = concurrent.futures.wait(_recv_futures, timeout=self.recv_timeout)
+
         if number_to := len(pending_tasks):
             raise TimeoutError(f"{self.participant.id} could not gather tasks from {number_to} members.")
         return [task.result() for task in done_tasks]
@@ -228,7 +247,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
         self.participant = participant
         self.world_size = world_size
         self.recv_timeout = recv_timeout
-        self.master_id = self.participant.id
+        self.master = self.participant.id
 
         self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
         self._event_futures: Optional[Dict[str, Future]] = dict()
@@ -241,8 +260,7 @@ class LocalMasterPartyCommunicator(LocalPartyCommunicator):
         try:
             logger.info("Party communicator %s: running" % self.participant.id)
             self.rendezvous()
-
-            self.participant.run(communicator=self)
+            self.participant.run(self)
 
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:
@@ -257,7 +275,6 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
     def __init__(
             self,
             participant: PartyMember,
-            master_id: str,
             world_size: int,
             shared_party_info: Optional[Dict[str, _ParticipantInfo]],
             recv_timeout: float = 360.0,
@@ -271,7 +288,6 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
         self.participant = participant
         self.world_size = world_size
         self.recv_timeout = recv_timeout
-        self.master_id = master_id
         self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
         self._event_futures: Optional[Dict[str, Future]] = dict()
 
@@ -283,9 +299,79 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
         try:
             logger.info("Party communicator %s: running" % self.participant.id)
             self.rendezvous()
-            self.participant.master_id = self.master_id
-            self.participant.run(communicator=self)
+            self.participant.master_id = self.master
+            self.participant.run(self)
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:
             logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
             raise
+
+
+class ArbiteredLocalPartyCommunicator(LocalPartyCommunicator, ABC):
+    arbiter: str
+
+    def __init__(
+            self,
+            participant: PartyAgent,
+            world_size: int,
+            shared_party_info: Optional[Dict[str, _ParticipantInfo]],
+            recv_timeout: float = 360.0,
+    ):
+        self.participant = participant
+        self.world_size = world_size
+        self.recv_timeout = recv_timeout
+        self._party_info: Optional[Dict[str, _ParticipantInfo]] = shared_party_info
+        self._event_futures: Optional[Dict[str, Future]] = dict()
+
+    def rendezvous(self):
+        """Wait until all the participants of the party are initialized."""
+        logger.info("Party communicator %s: performing rendezvous" % self.participant.id)
+        if isinstance(self.participant, PartyArbiter):
+            ptype = ParticipantType.arbiter
+        elif isinstance(self.participant, ArbiteredPartyMaster):
+            ptype = ParticipantType.master
+        elif isinstance(self.participant, ArbiteredPartyMember):
+            ptype = ParticipantType.member
+        else:
+            raise RuntimeError(f'Tried to initialize an agent of type {type(self.participant)}')
+        self._party_info[self.participant.id] = _ParticipantInfo(type=ptype, received_tasks=defaultdict(dict))
+
+        # todo: allow to work with timeout for rendezvous operation
+        while len(self._party_info) < self.world_size + 2: # members + master + arbiter
+            time.sleep(0.1)
+
+        for uid, pinfo in self._party_info.items():
+            if pinfo.type == ParticipantType.member:
+                if uid not in self.members:
+                    self.members.append(uid)
+            elif pinfo.type == ParticipantType.master:
+                self.master = uid
+            elif pinfo.type == ParticipantType.arbiter:
+                self.arbiter = uid
+            else:
+                raise ValueError(f'Unknown participant type in rendezvous: {pinfo.type}')
+
+        if self.arbiter is None:
+            raise RuntimeError('Arbiter did not join the experiment via rendezvous')
+        if self.master is None:
+            raise RuntimeError('Master did not join the experiment via rendezvous')
+
+        logger.info("Party communicator %s: rendezvous has been successfully performed" % self.participant.id)
+
+    def run(self):
+        """
+        Run the VFL agent in an arbitered setting.
+        Wait until rendezvous is finished and start sending, receiving and processing tasks from the main loop.
+        """
+        try:
+            logger.info("Party communicator %s: running" % self.participant.id)
+            self.rendezvous()
+            self.participant.members = self.members
+            self.participant.master = self.master
+            self.participant.arbiter = self.arbiter
+            self.participant.run(self)
+            logger.info("Party communicator %s: finished" % self.participant.id)
+        except:
+            logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
+            raise
+

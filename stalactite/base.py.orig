@@ -136,18 +136,18 @@ class PartyMaster(ABC):
         self.master_initialize(party=party)
 
         self.loop(
-            batcher=self.make_batcher(uids=uids, party=party),
+            make_batcher=self.make_batcher(uids=uids, party=party),
             party=party
         )
 
         self.master_finalize(party=party)
         logger.info("Finished master %s" % self.id)
 
-    def loop(self, batcher: Batcher, party: Party):
+    def loop(self, make_batcher: Batcher, party: Party):
         logger.info("Master %s: entering training loop" % self.id)
         updates = self.make_init_updates(party.world_size)
 
-        for titer in batcher:
+        for titer in make_batcher:
             party_predictions = party.update_predict(
                 titer.participating_members, titer.batch, titer.previous_batch, updates
             )
@@ -162,14 +162,14 @@ class PartyMaster(ABC):
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
                 logger.debug(f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
                              % (self.id, titer.seq_num, titer.epoch))
-                party_predictions = party.predict(batcher.uids)
+                party_predictions = party.predict(make_batcher.uids)
                 predictions = self.aggregate(party.members, party_predictions, infer=True)
                 self.report_metrics(self.target, predictions, name="Train")
 
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
                 logger.debug(f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
                              % (self.id, titer.seq_num, titer.epoch))
-                party_predictions = party.predict(uids=batcher.uids, use_test=True)
+                party_predictions = party.predict(uids=make_batcher.uids, use_test=True)
                 predictions = self.aggregate(party.members, party_predictions, infer=True)
                 self.report_metrics(self.test_target, predictions, name="Test")
 =======

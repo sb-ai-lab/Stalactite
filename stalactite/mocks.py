@@ -47,7 +47,7 @@ class MockPartyMasterImpl(PartyMaster):  # TODO
         self.is_initialized = True
 
     def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
-        logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
+        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
         return ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
 
@@ -175,16 +175,16 @@ class MockPartyMemberImpl(PartyMember):
             raise RuntimeError("The member has not been initialized")
 
     def _create_batcher(self, epochs: int, uids: List[str], batch_size: int) -> None:
-        logger.info("Member %s: making a batcher for uids" % (self.id))
+        logger.info("Member %s: making a make_batcher for uids" % (self.id))
         self._check_if_ready()
         self._batcher = ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
 
     @property
-    def batcher(self) -> Batcher:
+    def make_batcher(self) -> Batcher:
         if self._batcher is None:
             if self._uids_to_use is None:
-                raise RuntimeError("Cannot create batcher, you must `register_records_uids` first.")
+                raise RuntimeError("Cannot create make_batcher, you must `register_records_uids` first.")
             self._create_batcher(epochs=self.epochs, uids=self._uids_to_use, batch_size=self._batch_size)
         else:
-            logger.info("Member %s: using created batcher" % (self.id))
+            logger.info("Member %s: using created make_batcher" % (self.id))
         return self._batcher

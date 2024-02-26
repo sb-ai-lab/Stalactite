@@ -147,10 +147,11 @@ def member(ctx):
 )
 @click.option(
     "--rank", type=int, help="Rank of the member used for correct data loading."
-)  # TODO remove after refactoring of the preprocessing
+)
 @click.option("-d", "--detached", is_flag=True, show_default=True, default=False, help="Run non-blocking start.")
+@click.option("--infer", is_flag=True, show_default=True, default=False, help="Run distributed inference.")
 @click.pass_context
-def start(ctx, config_path, rank, detached):
+def start(ctx, config_path, rank, detached, infer):
     """
     Start a VFL-distributed Member in an isolated container.
 
@@ -174,21 +175,27 @@ def start(ctx, config_path, rank, detached):
         raise_path_not_exist(configs_path)
 
         data_path = os.path.abspath(config.data.host_path_data_dir)
+        model_path = os.path.abspath(config.vfl_model.vfl_model_path)
+
+        command = ["python", "run_grpc_member.py", "--config-path", f"{os.path.abspath(config_path)}"]
+        if infer:
+            command.append("--infer")
 
         member_container = client.create_container(
             image=BASE_IMAGE_TAG,
-            command=["python", "run_grpc_member.py", "--config-path", f"{os.path.abspath(config_path)}"],
+            command=command,
             detach=True,
             environment={"RANK": rank},
             labels={KEY_CONTAINER_LABEL: ctx.obj["member_container_label"]},
-            volumes=[f"{data_path}", f"{configs_path}"],
+            volumes=[f"{data_path}", f"{configs_path}", f"{model_path}"],
             host_config=client.create_host_config(
                 binds=[
                     f"{configs_path}:{configs_path}:rw",
                     f"{data_path}:{data_path}:rw",
+                    f"{model_path}:{model_path}:rw",
                 ],
             ),
-            name=ctx.obj["member_container_name"](rank),
+            name=ctx.obj["member_container_name"](rank) + ("-predict" if infer else ""),
         )
         logger.info(f'Member {rank} container id: {member_container.get("Id")}')
         client.start(container=member_container.get("Id"))
@@ -202,7 +209,6 @@ def start(ctx, config_path, rank, detached):
     except APIError as exc:
         logger.error(f"Error while starting member-{rank} container", exc_info=exc)
         raise
-
 
 @member.command()
 @click.option(
@@ -266,8 +272,9 @@ def status(ctx, agent_id, rank):
 @click.option("--rank", type=str, default=None, help="Rank of the member.")  # TODO rm after refactor?
 @click.option("--follow", is_flag=True, show_default=True, default=False, help="Follow log output.")
 @click.option("--tail", type=str, default="all", help="Number of lines to show from the end of the logs.")
+@click.option("--infer", is_flag=True, show_default=True, default=False, help="Show logs of the distributed inference.")
 @click.pass_context
-def logs(ctx, agent_id, rank, follow, tail):
+def logs(ctx, agent_id, rank, follow, tail, infer):
     """
     Retrieve members` containers logs present at the time of execution.
 
@@ -282,7 +289,7 @@ def logs(ctx, agent_id, rank, follow, tail):
     if agent_id is not None:
         container_name_or_id = agent_id
     else:
-        container_name_or_id = ctx.obj["member_container_name"](rank)
+        container_name_or_id = ctx.obj["member_container_name"](rank) + ("-predict" if infer else "")
     client = APIClient()
     get_logs(
         agent_id=container_name_or_id,
@@ -308,8 +315,9 @@ def master(ctx):
     "--config-path", type=str, required=True, help="Absolute path to the configuration file in `YAML` format."
 )
 @click.option("-d", "--detached", is_flag=True, show_default=True, default=False, help="Run non-blocking start.")
+@click.option("--infer", is_flag=True, show_default=True, default=False, help="Run distributed inference.")
 @click.pass_context
-def start(ctx, config_path, detached):
+def start(ctx, config_path, detached, infer):
     """
     Start VFL Master in an isolated container.
 
@@ -327,27 +335,33 @@ def start(ctx, config_path, detached):
 
     data_path = os.path.abspath(config.data.host_path_data_dir)
     configs_path = os.path.dirname(os.path.abspath(config_path))
+    model_path = os.path.abspath(config.vfl_model.vfl_model_path)
 
     raise_path_not_exist(configs_path)
+
+    command = ["python", "run_grpc_master.py", "--config-path", f"{os.path.abspath(config_path)}"]
+    if infer:
+        command.append("--infer")
 
     try:
         logger.info("Starting gRPC master container")
 
         master_container = client.create_container(
             image=BASE_IMAGE_TAG,
-            command=["python", "run_grpc_master.py", "--config-path", f"{os.path.abspath(config_path)}"],
+            command=command,
             detach=True,
             labels={KEY_CONTAINER_LABEL: ctx.obj["master_container_label"]},
-            volumes=[f"{data_path}", f"{configs_path}"],
+            volumes=[f"{data_path}", f"{configs_path}", f"{model_path}"],
             host_config=client.create_host_config(
                 binds=[
                     f"{configs_path}:{configs_path}:rw",
                     f"{data_path}:{data_path}:rw",
+                    f"{model_path}:{model_path}:rw",
                 ],
                 port_bindings={config.grpc_server.port: config.grpc_server.port},
             ),
             ports=[config.grpc_server.port],
-            name=ctx.obj["master_container_name"],
+            name=ctx.obj["master_container_name"] + ("-predict" if infer else ""),
         )
         client.start(container=master_container.get("Id"))
         logger.info(f'Master container id: {master_container.get("Id")}')
@@ -378,14 +392,15 @@ def stop(ctx, leave_containers):
     """
     logger.info("Stopping master container")
     client = ctx.obj.get("client", APIClient())
-    try:
-        containers = client.containers(all=True, filters={"name": ctx.obj["master_container_name"]})
-        if len(containers) < 1:
-            logger.warning("Found 0 containers. Skipping.")
-            return
-        stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
-    except APIError as exc:
-        logger.error("Error while stopping (and removing) master container", exc_info=exc)
+    for name in [ctx.obj["master_container_name"], ctx.obj["master_container_name"] + "-predict"]:
+        try:
+            containers = client.containers(all=True, filters={"name": name})
+            if len(containers) < 1:
+                logger.warning("Found 0 containers. Skipping.")
+                return
+            stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
+        except APIError as exc:
+            logger.error("Error while stopping (and removing) master container", exc_info=exc)
 
 
 @master.command()
@@ -406,8 +421,9 @@ def status(ctx):
 @master.command()
 @click.option("--follow", is_flag=True, show_default=True, default=False, help="Follow log output.")
 @click.option("--tail", type=str, default="all", help="Number of lines to show from the end of the logs.")
+@click.option("--infer", is_flag=True, show_default=True, default=False, help="Show logs of the distributed inference.")
 @click.pass_context
-def logs(ctx, follow, tail):
+def logs(ctx, follow, tail, infer):
     """
     Retrieve master`s container logs present at the time of execution.
 
@@ -417,7 +433,7 @@ def logs(ctx, follow, tail):
     """
     client = APIClient()
     get_logs(
-        agent_id=ctx.obj["master_container_name"],
+        agent_id=ctx.obj["master_container_name"] + ("-predict" if infer else ""),
         tail=tail,
         follow=follow,
         docker_client=client,
@@ -493,14 +509,16 @@ def start(ctx, config_path):
 
         data_path = os.path.abspath(config.data.host_path_data_dir)
         configs_path = os.path.dirname(os.path.abspath(config_path))
+        model_path = os.path.abspath(config.vfl_model.vfl_model_path)
 
         raise_path_not_exist(configs_path)
 
-        volumes = [f"{data_path}", f"{configs_path}"]
+        volumes = [f"{data_path}", f"{configs_path}", f"{model_path}"]
         mounts_host_config = client.create_host_config(
             binds=[
                 f"{configs_path}:{configs_path}:rw",
                 f"{data_path}:{data_path}:rw",
+                f"{model_path}:{model_path}:rw",
             ]
         )
 
@@ -569,7 +587,6 @@ def start(ctx, config_path):
                 participant=member,
                 world_size=config.common.world_size,
                 shared_party_info=shared_party_info,
-                master_id=master.id,
             )
             comm.run()
             logger.info("Finishing thread %s" % threading.current_thread().name)
@@ -827,10 +844,133 @@ def logs(agent_id, config_path, tail):
 
 @cli.command()
 @click.option("--config-path", type=str, required=True)
-def predict():
+@click.option(
+    "--single-process",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Run single-node single-process (multi-thread) test.",
+)
+@click.option(
+    "--multi-process",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Run single-node multi-process (dockerized) test.",
+)
+def predict(multi_process, single_process, config_path):
     click.echo("Run VFL predictions")
-    # TODO
-    raise NotImplementedError
+    config = VFLConfig.load_and_validate(config_path)
+    if multi_process and not single_process:
+        logger.info("Starting multi-process single-node experiment")
+        client = APIClient()
+        logger.info("Building an image of the agent. If build for the first time, it may take a while...")
+        build_base_image(client, logger=logger, use_gpu=config.docker.use_gpu)
+
+        if networks := client.networks(names=[PREREQUISITES_NETWORK]):
+            network = networks.pop()["Name"]
+        else:
+            network = PREREQUISITES_NETWORK
+            client.create_network(network)
+        networking_config = client.create_networking_config({network: client.create_endpoint_config()})
+
+        raise_path_not_exist(config.data.host_path_data_dir)
+
+        data_path = os.path.abspath(config.data.host_path_data_dir)
+        model_path = os.path.abspath(config.vfl_model.vfl_model_path)
+        configs_path = os.path.dirname(os.path.abspath(config_path))
+
+        raise_path_not_exist(configs_path)
+
+        volumes = [f"{data_path}", f"{configs_path}", f"{model_path}"]
+        mounts_host_config = client.create_host_config(
+            binds=[
+                f"{configs_path}:{configs_path}:rw",
+                f"{data_path}:{data_path}:rw",
+                f"{model_path}:{model_path}:rw",
+            ]
+        )
+
+        container_label = BASE_CONTAINER_LABEL
+        master_container_name = BASE_MASTER_CONTAINER_NAME + "-predict"
+        try:
+            logger.info("Starting gRPC master container")
+            grpc_server_host = "grpc-master"
+
+            master_container = client.create_container(
+                image=BASE_IMAGE_TAG,
+                command=["python", "run_grpc_master.py", "--config-path", f"{os.path.abspath(config_path)}", "--infer"],
+                detach=True,
+                environment={},
+                hostname=grpc_server_host,
+                labels={KEY_CONTAINER_LABEL: container_label},
+                volumes=volumes,
+                host_config=mounts_host_config,
+                networking_config=networking_config,
+                name=master_container_name,
+            )
+            logger.info(f'Master container id: {master_container.get("Id")}')
+            client.start(container=master_container.get("Id"))
+
+            for member_rank in range(config.common.world_size):
+                logger.info(f"Starting gRPC member-{member_rank} container")
+                member_container_name = BASE_MEMBER_CONTAINER_NAME + f"-{member_rank}" + "-predict"
+
+                member_container = client.create_container(
+                    image=BASE_IMAGE_TAG,
+                    command=[
+                        "python", "run_grpc_member.py", "--config-path", f"{os.path.abspath(config_path)}", "--infer"
+                    ],
+                    detach=True,
+                    environment={"RANK": member_rank, "GRPC_SERVER_HOST": grpc_server_host},
+                    labels={KEY_CONTAINER_LABEL: container_label},
+                    volumes=volumes,
+                    host_config=mounts_host_config,
+                    networking_config=networking_config,
+                    name=member_container_name,
+                )
+                logger.info(f'Member {member_rank} container id: {member_container.get("Id")}')
+                client.start(container=member_container.get("Id"))
+        except APIError as exc:
+            logger.error(
+                "Error while agents containers launch. If the container name is in use, alternatively to renaming you "
+                "can remove all containers from previous experiment by running "
+                f'`stalactite local --multi-process stop`',
+                exc_info=exc,
+            )
+            raise
+    elif single_process and not multi_process:
+        master = get_party_master(config_path, is_infer=True)
+        members = [
+            get_party_member(config_path, member_rank=rank, is_infer=True)
+            for rank in range(config.common.world_size)
+        ]
+        shared_party_info = dict()
+        def local_master_main():
+            logger.info("Starting thread %s" % threading.current_thread().name)
+            comm = LocalMasterPartyCommunicator(
+                participant=master, world_size=config.common.world_size, shared_party_info=shared_party_info
+            )
+            comm.run()
+            logger.info("Finishing thread %s" % threading.current_thread().name)
+
+        def local_member_main(member: PartyMember):
+            logger.info("Starting thread %s" % threading.current_thread().name)
+            comm = LocalMemberPartyCommunicator(
+                participant=member,
+                world_size=config.common.world_size,
+                shared_party_info=shared_party_info,
+            )
+            comm.run()
+            logger.info("Finishing thread %s" % threading.current_thread().name)
+
+        with reporting(config):
+            run_local_agents(
+                master=master,
+                members=members,
+                target_master_func=local_master_main,
+                target_member_func=local_member_main
+            )
 
 
 @cli.group()
