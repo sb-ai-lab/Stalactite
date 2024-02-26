@@ -28,6 +28,9 @@ class LogisticRegressionBatch(torch.nn.Module):
         self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
         self.optimizer = torch.optim.SGD(self.linear.parameters(), lr=learning_rate, momentum=momentum)
 
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
     def forward(self, x: torch.Tensor):
         return self.linear(x)
 
@@ -61,3 +64,11 @@ class LogisticRegressionBatch(torch.nn.Module):
 
     def get_weights(self) -> torch.Tensor:
         return self.linear.weight.clone()
+
+
+    @property
+    def init_params(self):
+        return {
+            'input_dim': self.input_dim,
+            'output_dim': self.output_dim,
+        }

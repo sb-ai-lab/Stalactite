@@ -1,4 +1,9 @@
 import logging
+import os
+from abc import ABC
+from typing import Optional, Any
+
+import torch
 
 from stalactite.base import RecordsBatch, DataTensor
 from stalactite.ml.honest.base import HonestPartyMember
@@ -15,12 +20,20 @@ logger.addHandler(sh)
 
 
 class HonestPartyMemberLinReg(HonestPartyMember):
-    def initialize_model(self) -> None:
+
+    def initialize_model_from_params(self, **model_params) -> Any:
+        return LinearRegressionBatch(**model_params)
+
+    def initialize_model(self, do_load_model: bool = False) -> None:
         """ Initialize the model based on the specified model name. """
-        self._model = LinearRegressionBatch(
-            input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-            output_dim=1, reg_lambda=0.5
-        )
+        if do_load_model:
+            self._model = self.load_model()
+
+        else:
+            self._model = LinearRegressionBatch(
+                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+                output_dim=1, reg_lambda=0.5
+            )
 
     def update_weights(self, uids: RecordsBatch, upd: DataTensor) -> None:
         """ Update model weights based on input features and target values.
@@ -34,7 +47,7 @@ class HonestPartyMemberLinReg(HonestPartyMember):
         self._model.update_weights(X_train, upd)
         logger.info("Member %s: successfully updated weights" % self.id)
 
-    def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
+    def predict(self, uids: Optional[RecordsBatch], use_test: bool = False) -> DataTensor:
         """ Make predictions using the current model.
 
         :param uids: Batch of record unique identifiers.
@@ -42,11 +55,14 @@ class HonestPartyMemberLinReg(HonestPartyMember):
 
         :return: Model predictions.
         """
-        logger.info("Member %s: predicting. Batch size: %s" % (self.id, len(uids)))
+        logger.info("Member %s: predicting." % (self.id))
         self.check_if_ready()
         if use_test:
             logger.info("Member %s: using test data" % self.id)
-            X = self._dataset[self._data_params.test_split][self._data_params.features_key]
+            if uids is None:
+                X = self._dataset[self._data_params.test_split][self._data_params.features_key]
+            else:
+                X = self._dataset[self._data_params.test_split][self._data_params.features_key][[int(x) for x in uids]]
         else:
             X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
         predictions = self._model.predict(X)

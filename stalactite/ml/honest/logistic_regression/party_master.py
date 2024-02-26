@@ -84,7 +84,7 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
 
         return [self.updates[member_id] for member_id in participating_members]
 
-    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str) -> None:
+    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
         """Report metrics for logistic regression.
 
         Compute main classification metrics, if `use_mlflow` parameter was set to true, log them to MlFLow, log them to
@@ -107,7 +107,6 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         acc = ComputeAccuracy_numpy(is_linreg=False).compute(y, predictions)
         logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
         logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
-        step = self.iteration_counter
         if self.run_mlflow:
             mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
             mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)

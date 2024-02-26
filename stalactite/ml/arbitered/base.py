@@ -5,9 +5,11 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Union, TypeVar
 
+import numpy as np
 import torch
+import tenseal as ts
 
 from stalactite.base import (
     PartyMember,
@@ -30,6 +32,8 @@ sh = logging.StreamHandler()
 sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(sh)
 
+T = TypeVar('T', np.ndarray, ts.CKKSTensor)
+
 
 @dataclass
 class Keys:
@@ -43,7 +47,7 @@ class Role(str, enum.Enum):
     member = "member"
 
 
-class ArbiteredMethod(str, enum.Enum): # TODO Move to method
+class ArbiteredMethod(str, enum.Enum):  # TODO Move to method
     service_return_answer = "service_return_answer"
     service_heartbeat = "service_heartbeat"
 
@@ -119,6 +123,28 @@ class SecurityProtocol(ABC):
             raise ValueError('Trying to set keys which do not contain public key.')
         self._keys = keys
 
+    @abstractmethod
+    def multiply_plain_cypher(self, plain_arr: Any, cypher_arr: T) -> T:
+        """ Multiply plaintext matrix to the encrypted matrix .
+
+        :param plain_arr: Plaintext matrix of shape (n; x).
+        :param cypher_arr: Encrypted matrix of shape (x; m).
+
+        :return: Encrypted matrix - result of the matmul operation of shape (n; m).
+        """
+        ...
+
+    @abstractmethod
+    def add_matrices(self, array1: Union[Any, T], array2: T) -> T:
+        """ Add plain or cyphered matrix to cyphered matrix.
+
+        :param array1: Plaintext or encrypted matrix of shape (n; m).
+        :param array2: Encrypted matrix of shape (n; m).
+
+        :return: Encrypted matrix - result of the matrix summation of shape (n; m).
+        """
+        ...
+
 
 class SecurityProtocolArbiter(SecurityProtocol, ABC):
     """ Expanded functionality (trusted party arbiter) base proxy class for Homomorphic Encryption (HE) protocol. """
@@ -129,10 +155,10 @@ class SecurityProtocolArbiter(SecurityProtocol, ABC):
         ...
 
     @abstractmethod
-    def decrypt(self, decrypted_data: Any) -> torch.Tensor:
+    def decrypt(self, encrypted_data: Any) -> torch.Tensor:
         """ Decrypt data using private key.
 
-        :param decrypted_data: Data to decrypt using the private key.
+        :param encrypted_data: Data to decrypt using the private key.
         :return: Decrypted data.
         """
         ...
@@ -241,9 +267,9 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
     _batcher: Batcher
 
     def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
-        logger.info("Master %s: making a batcher for uids of length %s" % (self.id, len(uids)))
+        logger.info("Master %s: making a make_batcher for uids of length %s" % (self.id, len(uids)))
         self.check_if_ready()
-        assert party_members is not None, "Master is trying to initialize batcher without members list"
+        assert party_members is not None, "Master is trying to initialize make_batcher without members list"
         batcher = ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
         self._batcher = batcher
         return batcher
@@ -347,7 +373,6 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
         self.security_protocol.keys = pk
         self.security_protocol.initialize()
 
-
         self.loop(batcher=self.make_batcher(uids=uids, party_members=party.members), party=party)
         #
         party.broadcast(
@@ -382,7 +407,6 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
             participant_partial_predictions_tasks = party.gather(participant_partial_pred_tasks, recv_results=True)
             partial_predictions = [task.result for task in participant_partial_predictions_tasks]
             print('partial_predictions')
-
 
             predictions_delta = self.aggregate_partial_predictions(
                 master_prediction=master_partial_preds,
@@ -436,7 +460,6 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
             )
             print('aggr_predictions')
 
-
             self.report_metrics(targets, aggr_predictions, 'Train', step=titer.seq_num)
 
             predict_tasks = party.broadcast(
@@ -471,7 +494,6 @@ class ArbiteredPartyMember(PartyMember, ABC):
         :return: Predictions.
         """
         ...
-
 
     @abstractmethod
     def predict_partial(self, uids: RecordsBatch) -> DataTensor:
@@ -523,7 +545,7 @@ class ArbiteredPartyMember(PartyMember, ABC):
         self.security_protocol.keys = pk
         self.security_protocol.initialize()
 
-        self.loop(batcher=self.batcher, party=party)
+        self.loop(batcher=self.make_batcher, party=party)
 
         finalize_task = party.recv(Task(method_name=Method.finalize, from_id=party.master, to_id=self.id))
         self.execute_received_task(finalize_task)
@@ -584,5 +606,3 @@ class ArbiteredPartyMember(PartyMember, ABC):
             )
 
             self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
-
-

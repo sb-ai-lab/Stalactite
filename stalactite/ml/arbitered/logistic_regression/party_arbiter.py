@@ -81,7 +81,7 @@ class PartyArbiterLogReg(PartyArbiter):
     def batcher(self) -> Batcher:
         if self._batcher is None:
             if self._uids_to_use is None:
-                raise RuntimeError("Cannot create batcher, you must `register_records_uids` first.")
+                raise RuntimeError("Cannot create make_batcher, you must `register_records_uids` first.")
             self._batcher = ListBatcher(
                 epochs=self.epochs,
                 members=self.members,
@@ -89,7 +89,7 @@ class PartyArbiterLogReg(PartyArbiter):
                 batch_size=self.batch_size
             )
         else:
-            logger.info("Member %s: using created batcher" % (self.id))
+            logger.info("Member %s: using created make_batcher" % (self.id))
         return self._batcher
 
     def calculate_updates(self, gradients: dict) -> dict[str, DataTensor]:

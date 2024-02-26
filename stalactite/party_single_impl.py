@@ -73,7 +73,7 @@ class PartySingle:
         self.finalize()
 
     def loop(self, batcher: Batcher) -> None:
-        """ Perform training iterations using the given batcher.
+        """ Perform training iterations using the given make_batcher.
 
         :param batcher: An iterable batch generator used for training.
         :return: None
@@ -109,7 +109,7 @@ class PartySingle:
         return [str(x) for x in range(self.target.shape[0])]
 
     def make_batcher(self, uids: List[str]) -> Batcher:
-        """ Create a batcher based on the provided UUIDs.
+        """ Create a make_batcher based on the provided UUIDs.
 
         :param uids: List of UUIDs.
         :return: A Batcher object.

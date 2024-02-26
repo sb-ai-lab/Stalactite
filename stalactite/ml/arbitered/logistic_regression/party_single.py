@@ -156,7 +156,7 @@ class ArbiteredPartySingle(PartyAgent):
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
 
     def loop(self, batcher: Batcher, party) -> None:
-        """ Perform training iterations using the given batcher.
+        """ Perform training iterations using the given make_batcher.
 
         :param batcher: An iterable batch generator used for training.
         :return: None

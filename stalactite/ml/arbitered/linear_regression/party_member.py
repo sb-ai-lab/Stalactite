@@ -30,7 +30,7 @@ class ArbiteredPartyMemberLinReg(ArbiteredPartyMember):
         pass
 
     @property
-    def batcher(self) -> Batcher:
+    def make_batcher(self) -> Batcher:
         pass
 
     def records_uids(self) -> List[str]:

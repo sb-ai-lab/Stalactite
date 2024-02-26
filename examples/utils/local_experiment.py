@@ -82,6 +82,7 @@ def run(config_path: Optional[str] = None):
 
     with reporting(config):
         target_uids = [str(i) for i in range(config.data.dataset_size)]
+        inference_target_uids = [str(i) for i in range(500)]
 
         shared_party_info = dict()
         if 'logreg' in config.vfl_model.vfl_model_name:
@@ -100,9 +101,13 @@ def run(config_path: Optional[str] = None):
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
             processor=processors[0],
             target_uids=target_uids,
+            inference_target_uids=inference_target_uids,
             batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
             model_update_dim_size=0,
             run_mlflow=config.master.run_mlflow,
+            do_train=config.vfl_model.do_train,
+            do_predict=config.vfl_model.do_predict,
         )
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
@@ -111,14 +116,20 @@ def run(config_path: Optional[str] = None):
             member_class(
                 uid=member_uid,
                 member_record_uids=target_uids,
+                member_inference_record_uids=inference_target_uids,
                 model_name=config.vfl_model.vfl_model_name,
                 processor=processors[member_rank],
                 batch_size=config.vfl_model.batch_size,
+                eval_batch_size=config.vfl_model.eval_batch_size,
                 epochs=config.vfl_model.epochs,
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
                 is_consequently=config.vfl_model.is_consequently,
                 members=member_ids if config.vfl_model.is_consequently else None,
+                do_train=config.vfl_model.do_train,
+                do_predict=config.vfl_model.do_predict,
+                do_save_model=config.vfl_model.do_save_model,
+                model_path=config.vfl_model.vfl_model_path
             )
             for member_rank, member_uid in enumerate(member_ids)
         ]

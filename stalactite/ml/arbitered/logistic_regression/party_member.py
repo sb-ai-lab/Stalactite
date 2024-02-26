@@ -66,10 +66,10 @@ class ArbiteredPartyMemberLogReg(ArbiteredPartyMember):
             return g
 
     @property
-    def batcher(self) -> Batcher:
+    def make_batcher(self) -> Batcher:
         if self._batcher is None:
             if self._uids_to_use is None:
-                raise RuntimeError("Cannot create batcher, you must `register_records_uids` first.")
+                raise RuntimeError("Cannot create make_batcher, you must `register_records_uids` first.")
             self._batcher = ListBatcher(
                 epochs=self.epochs,
                 members=None,
@@ -77,7 +77,7 @@ class ArbiteredPartyMemberLogReg(ArbiteredPartyMember):
                 batch_size=self.batch_size
             )
         else:
-            logger.info("Member %s: using created batcher" % (self.id))
+            logger.info("Member %s: using created make_batcher" % (self.id))
         return self._batcher
 
     def records_uids(self) -> List[str]:

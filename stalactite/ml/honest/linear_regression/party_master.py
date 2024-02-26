@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional, Any
 import logging
 
 import mlflow
@@ -19,7 +19,9 @@ logger.addHandler(sh)
 
 class HonestPartyMasterLinReg(HonestPartyMaster):
     """ Implementation class of the PartyMaster used for local and distributed VFL training. """
-
+    do_save_model = False
+    do_load_model = False
+    model_path = None
     def __init__(
             self,
             uid: str,
@@ -27,10 +29,14 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             report_train_metrics_iteration: int,
             report_test_metrics_iteration: int,
             target_uids: List[str],
+            inference_target_uids: List[str],
             batch_size: int,
+            eval_batch_size: int,
             model_update_dim_size: int,
             processor=None,
             run_mlflow: bool = False,
+            do_train: bool = True,
+            do_predict: bool = False,
     ) -> None:
         """ Initialize PartyMaster.
 
@@ -51,38 +57,52 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.target_uids = target_uids
+        self.inference_target_uids = inference_target_uids
         self.is_initialized = False
         self.is_finalized = False
         self._batch_size = batch_size
+        self._eval_batch_size = eval_batch_size
         self._weights_dim = model_update_dim_size
         self.run_mlflow = run_mlflow
         self.processor = processor
+        self.do_train = do_train
+        self.do_predict = do_predict
         self.iteration_counter = 0
         self.party_predictions = dict()
         self.updates = dict()
 
-    def initialize(self) -> None:
+    def initialize(self, is_infer: bool = False) -> None:
         """ Initialize the party master. """
         logger.info("Master %s: initializing" % self.id)
         ds = self.processor.fit_transform()
         self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
         self.test_target = ds[self.processor.data_params.test_split][self.processor.data_params.label_key]
+
         self.class_weights = self.processor.get_class_weights() \
             if self.processor.common_params.use_class_weights else None
         self.is_initialized = True
 
-    def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
-        """ Make a batcher for training.
+    def make_batcher(
+            self,
+            uids: Optional[List[str]] = None,
+            party_members: Optional[List[str]] = None,
+            is_infer: bool = False,
+    ) -> Batcher:
+        """ Make a make_batcher for training.
 
         :param uids: List of unique identifiers of dataset records.
         :param party_members: List of party members` identifiers.
 
         :return: Batcher instance.
         """
-        logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
+        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
-        assert party_members is not None, "Master is trying to initialize batcher without members list"
-        return ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
+        batch_size = self._eval_batch_size if is_infer else self._batch_size
+        epochs = 1 if is_infer else self.epochs
+        if uids is None:
+            raise RuntimeError('Master must initialize batcher with collected uids.')
+        assert party_members is not None, "Master is trying to initialize make_batcher without members list"
+        return ListBatcher(epochs=epochs, members=party_members, uids=uids, batch_size=batch_size)
 
     def make_init_updates(self, world_size: int) -> PartyDataTensor:
         """ Make initial updates for party members.
@@ -95,7 +115,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         self._check_if_ready()
         return [torch.rand(self._batch_size) for _ in range(world_size)]
 
-    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str) -> None:
+    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
         """ Report metrics based on target values and predictions.
 
         :param y: Target values.
@@ -113,7 +133,6 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
 
         if self.run_mlflow:
-            step = self.iteration_counter
             mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
             mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
 
@@ -170,7 +189,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
 
         return [self.updates[member_id] for member_id in participating_members]
 
-    def finalize(self) -> None:
+    def finalize(self, is_infer: bool = False) -> None:
         """ Finalize the party master. """
         logger.info("Master %s: finalizing" % self.id)
         self._check_if_ready()
@@ -184,18 +203,33 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         if not self.is_initialized and not self.is_finalized:
             raise RuntimeError("The master has not been initialized")
 
+    def initialize_model_from_params(self, **model_params) -> Any:
+        raise AttributeError('Honest master does not hold a model.')
+
 
 class HonestPartyMasterLinRegConsequently(HonestPartyMasterLinReg):
     """ Implementation class of the PartyMaster used for local and VFL training in a sequential manner. """
 
-    def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
-        """ Make a batcher for training in sequential order.
+    def make_batcher(
+            self,
+            uids: Optional[List[str]] = None,
+            party_members: Optional[List[str]] = None,
+            is_infer: bool = False,
+    ) -> Batcher:
+        """ Make a make_batcher for training in sequential order.
 
         :param uids: List of unique identifiers for dataset records.
         :param party_members: List of party member identifiers.
 
         :return: ConsecutiveListBatcher instance.
         """
-        logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
+        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
-        return ConsecutiveListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
+        epochs = 1 if is_infer else self.epochs
+        batch_size = self._eval_batch_size if is_infer else self._batch_size
+        if uids is None:
+            raise RuntimeError('Master must initialize batcher with collected uids.')
+        if not is_infer:
+            return ConsecutiveListBatcher(epochs=epochs, members=party_members, uids=uids, batch_size=batch_size)
+        else:
+            return ListBatcher(epochs=epochs, members=party_members, uids=uids, batch_size=batch_size)

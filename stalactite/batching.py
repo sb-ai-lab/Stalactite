@@ -31,6 +31,7 @@ class ListBatcher(Batcher):
                         batch=batch,
                         previous_batch=previous_batch,
                         participating_members=self.members,
+                        last_batch=False,
                     )
                     iter_num += 1
                     iter_in_batch += 1
@@ -42,6 +43,7 @@ class ListBatcher(Batcher):
                 batch=batch,
                 previous_batch=None,
                 participating_members=self.members,
+                last_batch=True
             )
 
         return _iter_func()
@@ -64,6 +66,7 @@ class ConsecutiveListBatcher(ListBatcher):
                             batch=batch,
                             previous_batch=previous_batch,
                             participating_members=[member],
+                            last_batch=False
                         )
                     iter_num += 1
                     iter_in_batch += 1
@@ -75,6 +78,7 @@ class ConsecutiveListBatcher(ListBatcher):
                     epoch=epoch_num,
                     batch=batch,
                     previous_batch=None,
-                    participating_members=[member]
+                    participating_members=[member],
+                    last_batch=True,
                 )
         return _iter_func()

@@ -37,6 +37,7 @@ def load_yaml_config(yaml_path: Union[str, Path]) -> dict:
 
 class CommonConfig(BaseModel):
     """Common experimental parameters config."""
+    use_grpc: bool = Field(default=False, description="Whether to use local or gRPC-based communicators")
 
     # epochs: int = Field(default=3, description="Number of epochs to train a model")
     world_size: int = Field(default=2, description="Number of the VFL member agents (without the master)")
@@ -62,6 +63,7 @@ class CommonConfig(BaseModel):
 class VFLModelConfig(BaseModel):
     epochs: int = Field(default=3, description="Number of epochs to train a model")
     batch_size: int = Field(default=100, description="Batch size used for training")
+    eval_batch_size: int = Field(default=100, description="Batch size used for evaluation")
     vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn'] = Field(
         default='linreg',
         description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`'
@@ -69,6 +71,13 @@ class VFLModelConfig(BaseModel):
     is_consequently: bool = Field(default=False, description='Run linear regression updates in sequential mode')
     use_class_weights: bool = Field(default=False, description='Logistic regression')  # TODO
     learning_rate: float = Field(default=0.01, description='Learning rate')
+    do_train: bool = Field(default=True, description='Whether to run a training loop.')
+    do_predict: bool = Field(default=True, description='Whether to run an inference loop.')
+    do_save_model: bool = Field(default=True, description='Whether to save the model after training.')
+    vfl_model_path: str = Field(
+        default='.',
+        description="Directory to save the model after the training or load the model for inference"
+    )
 
 
 class DataConfig(BaseModel):
@@ -115,38 +124,50 @@ class GRpcServerConfig(GRpcConfig):
     """gRPC server and servicer parameters config."""
 
 
+class TensealSPParams(BaseModel):
+    """ Security protocol parameters if the Tenseal is used. """
+    poly_modulus_degree: int = Field(default=8192, description="Tenseal `poly_modulus_degree` param")
+    coeff_mod_bit_sizes: Optional[list[int]] = Field(default=None, description="Tenseal `coeff_mod_bit_sizes` param")
+    global_scale_pow: int = Field(
+        default=20, description="Tenseal `global_scale` parameter will be calculated as 2 ** ts_global_scale_pow"
+    )
+    n_threads: int = Field(default=None, description='Number of threads to use for computations')
+
+    # ts_algorithm: Literal["CKKS", "BFV"] = Field(default="CKKS", description="Tenseal scheme to use")
+
+    # ts_plain_modulus: Optional[int] = Field(
+    #     default=None, description="Tenseal `plain_modulus` param. Should not be passed when the scheme is CKKS."
+    # )
+    # ts_generate_galois_keys: bool = Field(
+    #     default=True,
+    #     description="Whether to generate galois keys (galois keys are required to do ciphertext rotations)",
+    # )
+    # ts_generate_relin_keys: bool = Field(
+    #     default=True, description="Whether to generate relinearization keys (needed for encrypted multiplications)"
+    # )
+    # ts_context_path: Optional[str] = Field(default=None, description="Path to saved Tenseal private context file.")
+    # @field_validator("ts_algorithm")
+    # @classmethod
+    # def validate_ts_algorithm(cls, v: str):
+    #     mapping = {
+    #         "CKKS": ts.SCHEME_TYPE.CKKS,
+    #         "BFV": ts.SCHEME_TYPE.BFV,
+    #     }
+    #     return mapping.get(v, ts.SCHEME_TYPE.CKKS)
+
+
+class PaillierSPParams(BaseModel):
+    """ Security protocol parameters if the Paillier is used. """
+    precision: float = Field(default=1e-8, description='Precision of the paillier encoding.')
+    n_threads: int = Field(default=None, description='Number of threads to use for computations')
+
+
 class GRpcArbiterConfig(GRpcConfig):
     """gRPC arbiter server and servicer parameters config."""
-
     container_host: str = Field(default="0.0.0.0", description="Host of the container with gRPC arbiter service")
     use_arbiter: bool = Field(default=False, description="Whether to include arbiter for VFL with HE")
     grpc_operations_timeout: float = Field(default=300, description="Timeout of the unary calls to gRPC arbiter server")
-    ts_algorithm: Literal["CKKS", "BFV"] = Field(default="CKKS", description="Tenseal scheme to use")
-    ts_poly_modulus_degree: int = Field(default=8192, description="Tenseal `poly_modulus_degree` param")
-    ts_coeff_mod_bit_sizes: Optional[list[int]] = Field(default=None, description="Tenseal `coeff_mod_bit_sizes` param")
-    ts_global_scale_pow: int = Field(
-        default=20, description="Tenseal `global_scale` parameter will be calculated as 2 ** ts_global_scale_pow"
-    )
-    ts_plain_modulus: Optional[int] = Field(
-        default=None, description="Tenseal `plain_modulus` param. Should not be passed when the scheme is CKKS."
-    )
-    ts_generate_galois_keys: bool = Field(
-        default=True,
-        description="Whether to generate galois keys (galois keys are required to do ciphertext rotations)",
-    )
-    ts_generate_relin_keys: bool = Field(
-        default=True, description="Whether to generate relinearization keys (needed for encrypted multiplications)"
-    )
-    ts_context_path: Optional[str] = Field(default=None, description="Path to saved Tenseal private context file.")
-
-    @field_validator("ts_algorithm")
-    @classmethod
-    def validate_ts_algorithm(cls, v: str):
-        mapping = {
-            "CKKS": ts.SCHEME_TYPE.CKKS,
-            "BFV": ts.SCHEME_TYPE.BFV,
-        }
-        return mapping.get(v, ts.SCHEME_TYPE.CKKS)
+    security_protocol_params: Optional[Union[TensealSPParams, PaillierSPParams]] = Field(default=None)
 
 
 class PartyConfig(BaseModel):
@@ -232,7 +253,7 @@ class VFLConfig(BaseModel):
                 f"{self.master.disconnect_idle_client_time}, respectively."
             )
 
-        if self.grpc_arbiter.use_arbiter:
+        if self.grpc_arbiter.use_arbiter and self.common.use_grpc:
             if (
                     f"{self.grpc_arbiter.host}:{self.grpc_arbiter.port}"
                     == f"{self.grpc_server.host}:{self.grpc_server.port}"
@@ -268,6 +289,13 @@ class VFLConfig(BaseModel):
         if not os.path.isabs(reports_dir):
             reports_dir = os.path.normpath(os.path.join(self.config_dir_path, reports_dir))
         os.makedirs(reports_dir, exist_ok=True)
+
+        if not os.path.isabs(self.vfl_model.vfl_model_path):
+            self.vfl_model.vfl_model_path = os.path.normpath(
+                os.path.join(self.config_dir_path, self.vfl_model.vfl_model_path)
+            )
+        os.makedirs(self.vfl_model.vfl_model_path, exist_ok=True)
+
         return self
 
     @classmethod

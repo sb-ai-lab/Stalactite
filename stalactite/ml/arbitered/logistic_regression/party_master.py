@@ -112,7 +112,6 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
 
             # g = np.dot(Xt, aggregated_predictions_diff) / X.shape[0]
 
-
             n_jobs_eff = min((Xt.shape[0] // 3) + 1, 10)
             with Parallel(10) as p:
                 g = np.concatenate(
@@ -201,5 +200,5 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
 
     @property
-    def batcher(self) -> Batcher:
+    def make_batcher(self) -> Batcher:
         return self._batcher

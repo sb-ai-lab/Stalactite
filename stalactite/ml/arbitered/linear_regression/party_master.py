@@ -79,9 +79,9 @@ class ArbiteredPartyMasterLinReg(ArbiteredPartyMaster):
         pass # TODO >>>???????????
 
     def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
-        logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
+        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
-        assert party_members is not None, "Master is trying to initialize batcher without members list"
+        assert party_members is not None, "Master is trying to initialize make_batcher without members list"
         return ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
 
     def records_uids(self) -> List[str]:

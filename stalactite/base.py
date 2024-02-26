@@ -1,7 +1,9 @@
 import collections
 import enum
 import itertools
+import json
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
@@ -9,7 +11,6 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator, List, Optional, Union
 
 import torch
-
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +41,6 @@ class Method(str, enum.Enum):  # TODO _Method the same - unify
     update_predict = "update_predict"
 
 
-
-
-
 @dataclass(frozen=True)
 class TrainingIteration:
     seq_num: int
@@ -51,6 +49,7 @@ class TrainingIteration:
     batch: RecordsBatch
     previous_batch: Optional[RecordsBatch]
     participating_members: Optional[List[str]]
+    last_batch: bool
 
 
 @dataclass
@@ -229,6 +228,26 @@ class PartyAgent(ABC):
     is_initialized: bool
     is_finalized: bool
     id: str
+    do_train: bool
+    do_predict: bool
+    do_save_model: bool
+    _model: torch.nn.Module
+    model_path: str
+    @abstractmethod
+    def make_batcher(
+            self,
+            uids: Optional[List[str]] = None,
+            party_members: Optional[List[str]] = None,
+            is_infer: bool = False
+    ) -> Batcher:
+        """ Make a make_batcher for training.
+
+        :param uids: List of unique identifiers of dataset records.
+        :param party_members: List of party members` identifiers.
+
+        :return: Batcher instance.
+        """
+        ...
 
     def check_if_ready(self):
         if not self.is_initialized and not self.is_finalized:
@@ -246,8 +265,9 @@ class PartyAgent(ABC):
             raise UnsupportedError(f'Method {task.method_name} is not supported on {self.id}') from exc
         return result
 
+    @abstractmethod
     def run(self, party: PartyCommunicator) -> None:
-        """ Run the VFL experiment with the party agent.
+        """ Run the VFL model training with the party agent.
 
         Current method should implement initialization of the party agent, launching of the main training loop,
         and finalization of the experiment.
@@ -257,6 +277,7 @@ class PartyAgent(ABC):
         """
         ...
 
+    @abstractmethod
     def loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
         """ Run main training loop on the VFL agent.
 
@@ -268,14 +289,54 @@ class PartyAgent(ABC):
         ...
 
     @abstractmethod
-    def initialize(self):
+    def inference_loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        """ Run main inference loop on the VFL agent.
+
+        :param batcher: Batcher for creating inference batches.
+        :param party: Communicator instance used for communication between VFL agents.
+
+        :return: None
+        """
+        ...
+
+    @abstractmethod
+    def initialize(self, is_infer: bool = False):
         """ Initialize the party agent. """
         ...
 
     @abstractmethod
-    def finalize(self):
+    def finalize(self, is_infer: bool = False):
         """ Finalize the party agent. """
         ...
+
+    @abstractmethod
+    def initialize_model_from_params(self, **model_params) -> Any:
+        ...
+
+    def save_model(self):
+        """ Save model for further inference. """
+        if self._model is not None and self.do_save_model:
+            if self.model_path is None:
+                raise RuntimeError('If `do_save_model` is True, the `model_path` must be not None.')
+            os.makedirs(os.path.join(self.model_path, f'agent_{self.id}'), exist_ok=True)
+            torch.save(self._model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', 'model.pt'))
+            with open(os.path.join(self.model_path, f'agent_{self.id}', 'model_init_params.json'), 'w') as f:
+                json.dump(getattr(self._model, 'init_params', {}), f)
+
+    def load_model(self) -> Any:
+        """ Load model saved for inference. """
+        if self.model_path is None:
+            raise RuntimeError('If `do_load_model` is True, the `model_path` must be not None.')
+        if not os.path.exists(os.path.join(self.model_path, f'agent_{self.id}')):
+            raise FileNotFoundError(
+                f'You should train the model before launching the inference, however, {self.id} cannot find the model '
+                f'at {os.path.join(self.model_path)}.'
+            )
+        with open(os.path.join(self.model_path, f'agent_{self.id}', 'model_init_params.json')) as f:
+            init_model_params = json.load(f)
+        model = self.initialize_model_from_params(**init_model_params)
+        model.load_state_dict(torch.load(os.path.join(self.model_path, f'agent_{self.id}', 'model.pt')))
+        return model
 
 
 class PartyMaster(PartyAgent, ABC):
@@ -317,17 +378,6 @@ class PartyMaster(PartyAgent, ABC):
         return shared_uids
 
     @abstractmethod
-    def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
-        """ Make a batcher for training.
-
-        :param uids: List of unique identifiers of dataset records.
-        :param party_members: List of party members` identifiers.
-
-        :return: Batcher instance.
-        """
-        ...
-
-    @abstractmethod
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
         """ Report metrics based on target values and predictions.
 
@@ -342,8 +392,6 @@ class PartyMaster(PartyAgent, ABC):
         ...
 
 
-
-
 class PartyMember(PartyAgent, ABC):
     """ Abstract base class for the member party in the VFL experiment. """
 
@@ -351,17 +399,9 @@ class PartyMember(PartyAgent, ABC):
     report_test_metrics_iteration: int
     _iter_time: list[tuple[int, float]] = list()
 
-    @property
-    @abstractmethod
-    def batcher(self) -> Batcher:
-        """ Get the batcher for training.
-
-        :return: Batcher instance.
-        """
-        ...
 
     @abstractmethod
-    def records_uids(self) -> List[str]:
+    def records_uids(self, is_infer: bool = False) -> List[str]:
         """ Get the list of existing dataset unique identifiers.
 
         :return: List of unique identifiers.

@@ -166,3 +166,4 @@ rsync_repo
 reports/
 configs/config-local.yml
 .DS_Store
+saved_models/
