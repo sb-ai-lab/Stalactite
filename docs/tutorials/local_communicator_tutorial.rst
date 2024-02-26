@@ -83,6 +83,7 @@ define the ``load_processors`` function
 
         # We initialize the target uids here because we want to simulate only partially available data
         target_uids = [str(i) for i in range(config.data.dataset_size)]
+        inference_target_uids = [str(i) for i in range(500)]
         # Local communicator requires party information, we initialize it as an empty dictionary as no data is passed for
         # the experiment
         shared_party_info = dict()
@@ -93,27 +94,40 @@ After we can get all required data, let's initialize the master class
 
 .. code-block:: python
 
-    from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
+    from stalactite.ml import (
+        HonestPartyMasterLinRegConsequently,
+        HonestPartyMasterLinReg,
+        HonestPartyMemberLogReg,
+        HonestPartyMemberLinReg,
+        HonestPartyMasterLogReg
+    )
 
     def run(config_path: str):
         ...
-        if 'logreg' in config.common.vfl_model_name:
-            master_class = PartyMasterImplLogreg
+        if 'logreg' in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterLogReg
+            member_class = HonestPartyMemberLogReg
         else:
-            if config.common.is_consequently:
-                master_class = PartyMasterImplConsequently
+            member_class = HonestPartyMemberLinReg
+            if config.vfl_model.is_consequently:
+                master_class = HonestPartyMasterLinRegConsequently
             else:
-                master_class = PartyMasterImpl
+                master_class = HonestPartyMasterLinReg
+
         master = master_class(
             uid="master",
-            epochs=config.common.epochs,
+            epochs=config.vfl_model.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
             processor=processors[0], # For the master we take the first processor
             target_uids=target_uids,
-            batch_size=config.common.batch_size,
+            inference_target_uids=inference_target_uids,
+            batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
             model_update_dim_size=0, # Let us leave this parameter as is, it will be updated later
             run_mlflow=config.master.run_mlflow,
+            do_train=config.vfl_model.do_train,
+            do_predict=config.vfl_model.do_predict,
         )
         ....
 
@@ -125,23 +139,29 @@ After the master is ready, we need to prepare the members:
     def run(config_path: str):
         ...
         # Members ids are required before the initialization only in local sequential linear regression case
-        # for the batcher initialization (it needs to have a list of the participants),
+        # for the make_batcher initialization (it needs to have a list of the participants),
         # and are not applicable or used in other cases
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
 
         members = [
-            PartyMemberImpl(
+            member_class(
                 uid=member_uid,
                 member_record_uids=target_uids,
-                model_name=config.common.vfl_model_name,
+                member_inference_record_uids=inference_target_uids,
+                model_name=config.vfl_model.vfl_model_name,
                 processor=processors[member_rank],
-                batch_size=config.common.batch_size,
-                epochs=config.common.epochs,
+                batch_size=config.vfl_model.batch_size,
+                eval_batch_size=config.vfl_model.eval_batch_size,
+                epochs=config.vfl_model.epochs,
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-                is_consequently=config.common.is_consequently,
-                members=member_ids if config.common.is_consequently else None,
+                is_consequently=config.vfl_model.is_consequently,
+                members=member_ids if config.vfl_model.is_consequently else None,
+                do_train=config.vfl_model.do_train,
+                do_predict=config.vfl_model.do_predict,
+                do_save_model=config.vfl_model.do_save_model,
+                model_path=config.vfl_model.vfl_model_path
             )
             for member_rank, member_uid in enumerate(member_ids)
         ]

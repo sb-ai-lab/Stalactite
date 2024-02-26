@@ -27,10 +27,15 @@ VFL model are training and model specific parameters also used in any experiment
 
     vfl_model:
       vfl_model_name: # Model name to train
+      vfl_model_path: # Directory to save the model for further evaluation
+      do_train: # Whether to do training of the model
+      do_predict: # Whether to do evaluation of the model
+      do_save_model: # Whether to save the model to the `vfl_model_path` after training
       epochs: # Number of training epochs
       batch_size: # Training batch size
-      # For local experiment with `linreg` model you can choose the consequent batcher, to update on member at a time
-      is_consequently: False # Set True for consequent batcher
+      eval_batch_size: # Evaluation batch size
+      # For local experiment with `linreg` model you can choose the consequent make_batcher, to update on member at a time
+      is_consequently: False # Set True for consequent make_batcher
       learning_rate: # Experiment learning rate
       use_class_weights: # Used in `logreg`
 

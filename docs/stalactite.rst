@@ -5,11 +5,13 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 8
 
    stalactite.communications
    stalactite.data_preprocessors
    stalactite.models
+   stalactite.ml
+
 
 Submodules
 ----------
@@ -21,22 +23,6 @@ stalactite.base module
    :members: PartyCommunicator, PartyMaster, PartyMember
    :undoc-members:
 
-
-stalactite.party\_master\_impl module
--------------------------------------
-
-.. automodule:: stalactite.party_master_impl
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-stalactite.party\_member\_impl module
--------------------------------------
-
-.. automodule:: stalactite.party_member_impl
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 stalactite.party\_single\_impl module
 -------------------------------------
