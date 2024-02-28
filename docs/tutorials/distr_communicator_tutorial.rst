@@ -28,47 +28,67 @@ defined in the :ref:`local_comm_tutorial`, we import it from the examples folder
 
     from examples.utils.local_experiment import load_processors
 
-    def get_party_master(config_path: str):
+    def get_party_master(config_path: str, is_infer: bool = False):
         config = VFLConfig.load_and_validate(config_path) # Load configuration file
         processors = load_processors(config) # Load processors
-        # Define target uids (simulating only partially available data)
+        # Define target uids and evaluation target uids (simulating only partially available data)
         target_uids = [str(i) for i in range(config.data.dataset_size)]
+        inference_target_uids = [str(i) for i in range(1000)]
         # The rest of party master definition is similar to the local example
-        if 'logreg' in config.common.vfl_model_name:
-            master_class = PartyMasterImplLogreg
+        if 'logreg' in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterLogReg
         else:
             if config.common.is_consequently:
-                master_class = PartyMasterImplConsequently
+                master_class = HonestPartyMasterLinRegConsequently
             else:
-                master_class = PartyMasterImpl
+                master_class = HonestPartyMasterLinReg
         return master_class(
             uid="master",
-            epochs=config.common.epochs,
+            epochs=config.vfl_model.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
             processor=processors[0],
             target_uids=target_uids,
-            batch_size=config.common.batch_size,
+            batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
             model_update_dim_size=0,
             run_mlflow=config.master.run_mlflow,
+            do_train=not is_infer, # To launch from stalactite CLI we use separate commands for training and inference
+            do_predict=is_infer, # To launch from stalactite CLI we use separate commands for training and inference
+            inference_target_uids=inference_target_uids,
         )
 
     # Because we create separate containers we pass the rank to load correct processors
-    def get_party_member(config_path: str, member_rank: int):
+    def get_party_member(config_path: str, member_rank: int, is_infer: bool = False):
         config = VFLConfig.load_and_validate(config_path)
-        processors = load_processors(config_path)
+        processors = load_processors(config)
         target_uids = [str(i) for i in range(config.data.dataset_size)]
-        # We do not pass members ids due to sequential distributed algorithm cannot be used
-        return PartyMemberImpl(
+        inference_target_uids = [str(i) for i in range(1000)]
+        if 'logreg' in config.vfl_model.vfl_model_name:
+            member_class = HonestPartyMemberLogReg
+        else:
+            member_class = HonestPartyMemberLinReg
+        return member_class(
             uid=f"member-{member_rank}",
             member_record_uids=target_uids,
-            model_name=config.common.vfl_model_name,
+            member_inference_record_uids=inference_target_uids,
+            model_name=config.vfl_model.vfl_model_name,
             processor=processors[member_rank],
-            batch_size=config.common.batch_size,
-            epochs=config.common.epochs,
+            batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
+            epochs=config.vfl_model.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+            do_train=not is_infer,
+            do_predict=is_infer,
+            do_save_model=True, # To work with the stalactite CLI train and predict we always save the model
+            model_path=config.vfl_model.vfl_model_path,
         )
+
+        # Alternatively, we can set `do_train=config.vfl_model.do_train` and `do_predict=config.vfl_model.do_predict`
+        # for both master and member configuration
+        # For the member configuration, `do_save_model` can be altered with: `config.vfl_model.do_save_model`
+
 
 The CLI ``stalactite local --multi-process start`` and ``stalactite <master/member> start`` commands launches containers
 using the ``grpc-base:latest`` image built from one of the dockerfiles which can be found in the ``docker/`` folder in
@@ -92,7 +112,14 @@ For the master communicator the following script is used (``run_grpc_master.py``
 
     @click.command()
     @click.option("--config-path", type=str, default="../configs/config.yml")
-    def main(config_path):
+    @click.option(
+        "--infer",
+        is_flag=True,
+        show_default=True,
+        default=False,
+        help="Run in an inference mode.",
+    )
+    def main(config_path, infer):
         # Same to the local experiment load the configuration into the VFLConfig Pydantic model
         config = VFLConfig.load_and_validate(config_path)
 
@@ -100,7 +127,7 @@ For the master communicator the following script is used (``run_grpc_master.py``
         with reporting(config):
             # In the GRpcMasterPartyCommunicator several keyword arguments appear, mostly required for the gRPC server start
             comm = GRpcMasterPartyCommunicator(
-                participant=get_party_master(config_path),
+                participant=get_party_master(config_path, is_infer=infer),
                 world_size=config.common.world_size,
                 port=config.grpc_server.port,
                 host=config.grpc_server.host,
@@ -136,7 +163,14 @@ For the member communicator we implemented the following (``run_grpc_member.py``
 
     @click.command()
     @click.option("--config-path", type=str, default="../configs/config.yml")
-    def main(config_path):
+    @click.option(
+        "--infer",
+        is_flag=True,
+        show_default=True,
+        default=False,
+        help="Run in an inference mode.",
+    )
+    def main(config_path, infer):
         # Due to the metrics and parameters are logged from the master, we do not need to start the mlflow
         # experiment here
 
@@ -153,7 +187,7 @@ For the member communicator we implemented the following (``run_grpc_member.py``
         # Again, GRpcMemberPartyCommunicator requires additional keyword args to act as the gRPC client to the
         # server on master
         comm = GRpcMemberPartyCommunicator(
-            participant=get_party_member(config_path, member_rank),
+            participant=get_party_member(config_path, member_rank, is_infer=infer),
             master_host=grpc_host,
             master_port=config.grpc_server.port,
             max_message_size=config.grpc_server.max_message_size,

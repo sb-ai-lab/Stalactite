@@ -18,7 +18,7 @@ from stalactite.base import (
     PartyCommunicator,
     PartyMaster,
     PartyMember,
-    Task,
+    Task, UnsupportedError,
 )
 from stalactite.communications.grpc_utils.generated_code import (
     communicator_pb2,
@@ -29,7 +29,6 @@ from stalactite.communications.grpc_utils.utils import (
     ClientStatus,
     SerializedMethodMessage,
     Status,
-    UnsupportedError,
     collect_kwargs,
     prepare_kwargs,
     start_thread,

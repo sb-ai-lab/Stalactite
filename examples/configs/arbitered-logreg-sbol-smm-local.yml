@@ -1,0 +1,33 @@
+common:
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 1
+  experiment_label: tests-sbol-smm-single
+  reports_export_folder: "../../reports"
+
+vfl_model:
+  epochs: 15
+  batch_size: 500
+  vfl_model_name: logreg
+  is_consequently: False
+  use_class_weights: False
+  learning_rate: 0.02
+
+prerequisites:
+  mlflow_host: 'node3.bdcl'
+  mlflow_port: '5555'
+
+master:
+  container_host: 'node3.bdcl'
+  run_mlflow: True
+
+data:
+  random_seed: 0
+  dataset_size: 8500
+  dataset: 'sbol_smm'
+  host_path_data_dir: ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
+  features_key: "features_part_"
+  label_key: "labels"

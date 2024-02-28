@@ -16,7 +16,7 @@ class ImagePreprocessor:
         self.data_params.features_key = self.data_params.features_key + str(member_id)
         self.member_id = member_id
 
-    def fit_transform(self):
+    def fit_transform(self) -> datasets.DatasetDict:
         """
 
         The input is the training and test data in the form of a data set for each participant with pictures separated vertically.

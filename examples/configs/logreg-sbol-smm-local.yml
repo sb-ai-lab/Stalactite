@@ -8,10 +8,16 @@ common:
 vfl_model:
   epochs: 1
   batch_size: 2500
+  eval_batch_size: 200
   vfl_model_name: logreg
   is_consequently: False
   use_class_weights: False
   learning_rate: 0.05
+  do_train: True
+  do_predict: True
+  do_save_model: True
+  vfl_model_path: ../../saved_models/logreg_model
+
 
 prerequisites:
   mlflow_host: 'node3.bdcl'

@@ -1,6 +1,6 @@
 common:
   experiment_label: experiment-vm
-  reports_export_folder: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/reports"
+  reports_export_folder: "../../reports"
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
@@ -23,7 +23,7 @@ prerequisites:
 data:
   random_seed: 0
   dataset_size: 1000
-  host_path_data_dir: /mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data/sber_ds_vfl/mnist_binary38_parts2 # /home/dmitriy/data #
+  host_path_data_dir: ../../data/sber_ds_vfl/mnist_binary38_parts2
   dataset: 'mnist'
   dataset_part_prefix: 'part_'
   train_split: "train_train"
@@ -55,7 +55,7 @@ member:
 
 docker:
   docker_compose_command: "docker compose"
-  docker_compose_path: '/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/prerequisites'
+  docker_compose_path: '../../prerequisites'
   use_gpu: False
 
 

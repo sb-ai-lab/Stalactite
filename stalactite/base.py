@@ -1,7 +1,9 @@
 import collections
 import enum
 import itertools
+import json
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
@@ -47,6 +49,7 @@ class TrainingIteration:
     batch: RecordsBatch
     previous_batch: Optional[RecordsBatch]
     participating_members: Optional[List[str]]
+    last_batch: bool
 
 
 @dataclass
@@ -99,6 +102,8 @@ class PartyCommunicator(ABC):
     world_size: int
     # todo: add docs about order guaranteeing
     members: List[str]
+    arbiter: Optional[str] = None
+    master: Optional[str] = None
 
     @abstractmethod
     def rendezvous(self) -> None:
@@ -176,7 +181,7 @@ class PartyCommunicator(ABC):
             self,
             method_name: Method,
             method_kwargs: Optional[List[MethodKwargs]] = None,
-            result: Optional[Any] = None,
+            result: Optional[Union[Any, List[Any]]] = None,
             participating_members: Optional[List[str]] = None,
             **kwargs,
     ) -> List[Task]:
@@ -218,10 +223,125 @@ class PartyCommunicator(ABC):
         ...
 
 
-class PartyMaster(ABC):
+class PartyAgent(ABC):
+    """ Abstract base class for the party in the VFL experiment. """
+    is_initialized: bool
+    is_finalized: bool
+    id: str
+    do_train: bool
+    do_predict: bool
+    do_save_model: bool
+    _model: torch.nn.Module
+    model_path: str
+    @abstractmethod
+    def make_batcher(
+            self,
+            uids: Optional[List[str]] = None,
+            party_members: Optional[List[str]] = None,
+            is_infer: bool = False
+    ) -> Batcher:
+        """ Make a make_batcher for training.
+
+        :param uids: List of unique identifiers of dataset records.
+        :param party_members: List of party members` identifiers.
+
+        :return: Batcher instance.
+        """
+        ...
+
+    def check_if_ready(self):
+        if not self.is_initialized and not self.is_finalized:
+            raise RuntimeError(f"The agent {self.id} has not been initialized")
+
+    def execute_received_task(self, task: Task) -> Optional[Union[DataTensor, List[str]]]:
+        """ Execute received method on the master.
+
+        :param task: Received task to execute.
+        :return: Execution result.
+        """
+        try:
+            result = getattr(self, task.method_name)(**task.kwargs_dict)
+        except AttributeError as exc:
+            raise UnsupportedError(f'Method {task.method_name} is not supported on {self.id}') from exc
+        return result
+
+    @abstractmethod
+    def run(self, party: PartyCommunicator) -> None:
+        """ Run the VFL model training with the party agent.
+
+        Current method should implement initialization of the party agent, launching of the main training loop,
+        and finalization of the experiment.
+
+        :param party: Communicator instance used for communication between VFL agents.
+        :return: None
+        """
+        ...
+
+    @abstractmethod
+    def loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        """ Run main training loop on the VFL agent.
+
+        :param batcher: Batcher for creating training batches.
+        :param party: Communicator instance used for communication between VFL agents.
+
+        :return: None
+        """
+        ...
+
+    @abstractmethod
+    def inference_loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        """ Run main inference loop on the VFL agent.
+
+        :param batcher: Batcher for creating inference batches.
+        :param party: Communicator instance used for communication between VFL agents.
+
+        :return: None
+        """
+        ...
+
+    @abstractmethod
+    def initialize(self, is_infer: bool = False):
+        """ Initialize the party agent. """
+        ...
+
+    @abstractmethod
+    def finalize(self, is_infer: bool = False):
+        """ Finalize the party agent. """
+        ...
+
+    @abstractmethod
+    def initialize_model_from_params(self, **model_params) -> Any:
+        ...
+
+    def save_model(self):
+        """ Save model for further inference. """
+        if self._model is not None and self.do_save_model:
+            if self.model_path is None:
+                raise RuntimeError('If `do_save_model` is True, the `model_path` must be not None.')
+            os.makedirs(os.path.join(self.model_path, f'agent_{self.id}'), exist_ok=True)
+            torch.save(self._model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', 'model.pt'))
+            with open(os.path.join(self.model_path, f'agent_{self.id}', 'model_init_params.json'), 'w') as f:
+                json.dump(getattr(self._model, 'init_params', {}), f)
+
+    def load_model(self) -> Any:
+        """ Load model saved for inference. """
+        if self.model_path is None:
+            raise RuntimeError('If `do_load_model` is True, the `model_path` must be not None.')
+        if not os.path.exists(os.path.join(self.model_path, f'agent_{self.id}')):
+            raise FileNotFoundError(
+                f'You should train the model before launching the inference, however, {self.id} cannot find the model '
+                f'at {os.path.join(self.model_path)}.'
+            )
+        with open(os.path.join(self.model_path, f'agent_{self.id}', 'model_init_params.json')) as f:
+            init_model_params = json.load(f)
+        model = self.initialize_model_from_params(**init_model_params)
+        model.load_state_dict(torch.load(os.path.join(self.model_path, f'agent_{self.id}', 'model.pt')))
+        return model
+
+
+class PartyMaster(PartyAgent, ABC):
     """ Abstract base class for the master party in the VFL experiment. """
 
-    id: str
     epochs: int
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
@@ -235,125 +355,6 @@ class PartyMaster(ABC):
     def train_timings(self) -> list:
         """ Return list of tuples representing iteration timings from the main loop. """
         return self._iter_time
-
-    def run(self, communicator: PartyCommunicator) -> None:  # TODO rename to party
-        """ Run the VFL experiment with the master party.
-
-        Current method implements initialization of the master and members, launches the main training loop,
-        and finalizes the experiment.
-
-        :param communicator: Communicator instance used for communication between VFL agents.
-        :return: None
-        """
-        logger.info("Running master %s" % self.id)
-
-        records_uids_tasks = communicator.broadcast(
-            Method.records_uids,
-            participating_members=communicator.members,
-        )
-
-        records_uids_results = communicator.gather(records_uids_tasks, recv_results=True)
-
-        collected_uids_results = [task.result for task in records_uids_results]
-
-        communicator.broadcast(
-            Method.initialize,
-            participating_members=communicator.members,
-        )
-        self.initialize()
-
-        uids = self.synchronize_uids(collected_uids_results, world_size=communicator.world_size)
-        communicator.broadcast(
-            Method.register_records_uids,
-            method_kwargs=MethodKwargs(other_kwargs={"uids": uids}),
-            participating_members=communicator.members,
-        )
-
-        self.loop(batcher=self.make_batcher(uids=uids, party_members=communicator.members), communicator=communicator)
-
-        communicator.broadcast(
-            Method.finalize,
-            participating_members=communicator.members,
-        )
-        self.finalize()
-        logger.info("Finished master %s" % self.id)
-
-    def loop(self, batcher: Batcher, communicator: PartyCommunicator) -> None:
-        """ Run main training loop on the VFL master.
-
-        :param batcher: Batcher for creating training batches.
-        :param communicator: Communicator instance used for communication between VFL agents.
-
-        :return: None
-        """
-        logger.info("Master %s: entering training loop" % self.id)
-        updates = self.make_init_updates(communicator.world_size)
-        for titer in batcher:
-            logger.debug(
-                f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
-            )
-            iter_start_time = time.time()
-            if titer.seq_num == 0:
-                updates = updates[:len(titer.participating_members)]
-            update_predict_tasks = communicator.scatter(
-                Method.update_predict,
-                method_kwargs=[
-                    MethodKwargs(
-                        tensor_kwargs={"upd": participant_updates},
-                        other_kwargs={"previous_batch": titer.previous_batch, "batch": titer.batch},
-                    )
-                    for participant_updates in updates
-                ],
-                participating_members=titer.participating_members,
-            )
-
-            party_predictions = [task.result for task in communicator.gather(update_predict_tasks, recv_results=True)]
-
-            predictions = self.aggregate(titer.participating_members, party_predictions)
-
-            updates = self.compute_updates(
-                titer.participating_members,
-                predictions,
-                party_predictions,
-                communicator.world_size,
-                titer.subiter_seq_num,
-            )
-
-            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
-                logger.debug(
-                    f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_tasks = communicator.broadcast(
-                    Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids}),
-                    participating_members=titer.participating_members,
-                )
-                party_predictions = [task.result for task in communicator.gather(predict_tasks, recv_results=True)]
-
-                predictions = self.aggregate(communicator.members, party_predictions, infer=True)
-                self.report_metrics(self.target, predictions, name="Train")
-
-            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
-                logger.debug(
-                    f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_test_tasks = communicator.broadcast(
-                    Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids, "use_test": True}),
-                    participating_members=titer.participating_members,
-                )
-
-                party_predictions_test = [
-                    task.result for task in communicator.gather(predict_test_tasks, recv_results=True)
-                ]
-
-                predictions = self.aggregate(communicator.members, party_predictions_test, infer=True)
-                self.report_metrics(self.test_target, predictions, name="Test")
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
     def synchronize_uids(self, collected_uids: list[list[str]], world_size: int) -> List[str]:
         """ Synchronize unique records identifiers across party members.
@@ -377,198 +378,30 @@ class PartyMaster(ABC):
         return shared_uids
 
     @abstractmethod
-    def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
-        """ Make a batcher for training.
-
-        :param uids: List of unique identifiers of dataset records.
-        :param party_members: List of party members` identifiers.
-
-        :return: Batcher instance.
-        """
-        ...
-
-    @abstractmethod
-    def initialize(self):
-        """ Initialize the party master. """
-        ...
-
-    @abstractmethod
-    def finalize(self):
-        """ Finalize the party master. """
-        ...
-
-    @abstractmethod
-    def make_init_updates(self, world_size: int) -> PartyDataTensor:
-        """ Make initial updates for party members.
-
-        :param world_size: Number of party members.
-
-        :return: Initial updates as a list of tensors.
-        """
-        ...
-
-    @abstractmethod
-    def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
-    ) -> DataTensor:
-        """ Aggregate members` predictions.
-
-        :param participating_members: List of participating party member identifiers.
-        :param party_predictions: List of party predictions.
-        :param infer: Flag indicating whether to perform inference.
-
-        :return: Aggregated predictions.
-        """
-        ...
-
-    @abstractmethod
-    def compute_updates(
-            self,
-            participating_members: List[str],
-            predictions: DataTensor,
-            party_predictions: PartyDataTensor,
-            world_size: int,
-            subiter_seq_num: int,
-    ) -> List[DataTensor]:
-        """ Compute updates based on members` predictions.
-
-        :param participating_members: List of participating party member identifiers.
-        :param predictions: Model predictions.
-        :param party_predictions: List of party predictions.
-        :param world_size: Number of party members.
-        :param subiter_seq_num: Sub-iteration sequence number.
-
-        :return: List of updates as tensors.
-        """
-        ...
-
-    @abstractmethod
-    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str):
+    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
         """ Report metrics based on target values and predictions.
 
         :param y: Target values.
         :param predictions: Model predictions.
         :param name: Name of the dataset ("Train" or "Test").
+        :param step: Iteration number.
+
 
         :return: None
         """
         ...
 
 
-class PartyMember(ABC):
+class PartyMember(PartyAgent, ABC):
     """ Abstract base class for the member party in the VFL experiment. """
 
-    id: str
-    master_id: str
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
     _iter_time: list[tuple[int, float]] = list()
 
-    def _execute_received_task(self, task: Task) -> Optional[Union[DataTensor, List[str]]]:
-        """ Execute received method on a member.
-
-        :param task: Received task to execute.
-        :return: Execution result.
-        """
-        return getattr(self, task.method_name)(**task.kwargs_dict)
-
-    def run(self, communicator: PartyCommunicator):
-        """ Run the VFL experiment with the member party.
-
-        Current method implements initialization of the member, launches the main training loop,
-        and finalizes the member.
-
-        :param communicator: Communicator instance used for communication between VFL agents.
-        :return: None
-        """
-        logger.info("Running member %s" % self.id)
-
-        synchronize_uids_task = communicator.recv(
-            Task(method_name=Method.records_uids, from_id=self.master_id, to_id=self.id)
-        )
-        uids = self._execute_received_task(synchronize_uids_task)
-        communicator.send(self.master_id, Method.records_uids, result=uids)
-
-        initialize_task = communicator.recv(Task(method_name=Method.initialize, from_id=self.master_id, to_id=self.id))
-        self._execute_received_task(initialize_task)
-
-        register_records_uids_task = communicator.recv(
-            Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
-        )
-        self._execute_received_task(register_records_uids_task)
-
-        self.loop(batcher=self.batcher, communicator=communicator)
-
-        finalize_task = communicator.recv(Task(method_name=Method.finalize, from_id=self.master_id, to_id=self.id))
-        self._execute_received_task(finalize_task)
-        logger.info("Finished member %s" % self.id)
-
-    def loop(self, batcher: Batcher, communicator: PartyCommunicator):
-        """ Run main training loop on the VFL member.
-
-        :param batcher: Batcher for creating training batches.
-        :param communicator: Communicator instance used for communication between VFL agents.
-
-        :return: None
-        """
-        logger.info("Member %s: entering training loop" % self.id)
-
-        for titer in batcher:
-            if titer.participating_members is not None:
-                if self.id not in titer.participating_members:
-                    logger.debug(f'Member {self.id} skipping {titer.seq_num}.')
-                    continue
-            logger.debug(
-                f"Member %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
-            )
-
-            iter_start_time = time.time()
-            update_predict_task = communicator.recv(
-                Task(method_name=Method.update_predict, from_id=self.master_id, to_id=self.id)
-            )
-            predictions = self._execute_received_task(update_predict_task)
-            communicator.send(
-                self.master_id,
-                Method.update_predict,
-                result=predictions,
-            )
-
-            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
-                logger.debug(
-                    f"Member %s: train loop - calculating train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_task = communicator.recv(
-                    Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id)
-                )
-                predictions = self._execute_received_task(predict_task)
-                communicator.send(self.master_id, Method.predict, result=predictions)
-
-            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
-                logger.debug(
-                    f"Member %s: train loop - calculating train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_task = communicator.recv(
-                    Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id)
-                )
-                predictions = self._execute_received_task(predict_task)
-                communicator.send(self.master_id, Method.predict, result=predictions)
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
-
-    @property
-    @abstractmethod
-    def batcher(self) -> Batcher:
-        """ Get the batcher for training.
-
-        :return: Batcher instance.
-        """
-        ...
 
     @abstractmethod
-    def records_uids(self) -> List[str]:
+    def records_uids(self, is_infer: bool = False) -> List[str]:
         """ Get the list of existing dataset unique identifiers.
 
         :return: List of unique identifiers.
@@ -585,16 +418,6 @@ class PartyMember(ABC):
         ...
 
     @abstractmethod
-    def initialize(self):
-        """ Initialize the party member. """
-        ...
-
-    @abstractmethod
-    def finalize(self):
-        """ Finalize the party member. """
-        ...
-
-    @abstractmethod
     def update_weights(self, uids: RecordsBatch, upd: DataTensor):
         """ Update model weights based on input features and target values.
 
@@ -603,25 +426,9 @@ class PartyMember(ABC):
         """
         ...
 
-    @abstractmethod
-    def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
-        """ Make predictions using the initialized model.
 
-        :param uids: Batch of record unique identifiers.
-        :param use_test: Flag indicating whether to use the test data.
+class UnsupportedError(Exception):  # TODO move from communications utils
+    """Custom exception class for indicating that an unsupported method is called on a class."""
 
-        :return: Model predictions.
-        """
-        ...
-
-    @abstractmethod
-    def update_predict(self, upd: DataTensor, previous_batch: RecordsBatch, batch: RecordsBatch) -> DataTensor:
-        """ Update model weights and make predictions.
-
-        :param upd: Updated model weights.
-        :param previous_batch: Previous batch of record unique identifiers.
-        :param batch: Current batch of record unique identifiers.
-
-        :return: Model predictions.
-        """
-        ...
+    def __init__(self, message: str = "Unsupported method for class."):
+        super().__init__(message)

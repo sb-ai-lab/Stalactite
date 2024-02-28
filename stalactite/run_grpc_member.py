@@ -9,14 +9,21 @@ from stalactite.data_utils import get_party_member
 
 @click.command()
 @click.option("--config-path", type=str, default="../configs/config.yml")
-def main(config_path):
+@click.option(
+    "--infer",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Run in an inference mode.",
+)
+def main(config_path, infer):
     member_rank = int(os.environ.get("RANK", 0))
     config = VFLConfig.load_and_validate(config_path)
 
     grpc_host = os.environ.get("GRPC_SERVER_HOST", config.master.container_host)
 
     comm = GRpcMemberPartyCommunicator(
-        participant=get_party_member(config_path, member_rank),
+        participant=get_party_member(config_path, member_rank, is_infer=infer),
         master_host=grpc_host,
         master_port=config.grpc_server.port,
         max_message_size=config.grpc_server.max_message_size,
