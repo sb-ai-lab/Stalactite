@@ -1,15 +1,40 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Any
 
 import torch.nn.parameter
 
-from stalactite.base import DataTensor, Batcher
+from stalactite.base import DataTensor, Batcher, PartyCommunicator
 from stalactite.batching import ListBatcher
 from stalactite.ml.arbitered.base import PartyArbiter, SecurityProtocolArbiter
 
 logger = logging.getLogger(__name__)
 
 class PartyArbiterLogReg(PartyArbiter):
+    def make_batcher(
+            self,
+            uids: Optional[List[str]] = None,
+            party_members: Optional[List[str]] = None,
+            is_infer: bool = False
+    ) -> Batcher:
+        if uids is None:
+            uids = self._uids_to_use
+
+        epochs = 1 if is_infer else self.epochs
+        batcher = ListBatcher(
+            epochs=epochs,
+            members=self.members if party_members is None else party_members,
+            uids=uids,
+            batch_size=self._batch_size
+        )
+        self._batcher = batcher
+        return batcher
+
+    def inference_loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        pass
+
+    def initialize_model_from_params(self, **model_params) -> Any:
+        pass
+
     _uids_to_use: List[str]
     _prev_model_parameter: Optional[torch.Tensor] = None
     _model_parameter: Optional[torch.Tensor] = None
@@ -28,7 +53,7 @@ class PartyArbiterLogReg(PartyArbiter):
     ) -> None:
         self.id = uid
         self.epochs = epochs
-        self.batch_size = batch_size
+        self._batch_size = batch_size
         self.security_protocol = security_protocol
         self.learning_rate = learning_rate
         self.momentum = momentum
@@ -71,20 +96,20 @@ class PartyArbiterLogReg(PartyArbiter):
         else:
             raise ValueError(f"No previous steps were performed.")
 
-    @property
-    def batcher(self) -> Batcher:
-        if self._batcher is None:
-            if self._uids_to_use is None:
-                raise RuntimeError("Cannot create make_batcher, you must `register_records_uids` first.")
-            self._batcher = ListBatcher(
-                epochs=self.epochs,
-                members=self.members,
-                uids=self._uids_to_use,
-                batch_size=self.batch_size
-            )
-        else:
-            logger.info("Member %s: using created make_batcher" % (self.id))
-        return self._batcher
+    # @property
+    # def batcher(self) -> Batcher:
+    #     if self._batcher is None:
+    #         if self._uids_to_use is None:
+    #             raise RuntimeError("Cannot create make_batcher, you must `register_records_uids` first.")
+    #         self._batcher = ListBatcher(
+    #             epochs=self.epochs,
+    #             members=self.members,
+    #             uids=self._uids_to_use,
+    #             batch_size=self.batch_size
+    #         )
+    #     else:
+    #         logger.info("Member %s: using created make_batcher" % (self.id))
+    #     return self._batcher
 
     def calculate_updates(self, gradients: dict) -> dict[str, DataTensor]:
         members = [key for key in gradients.keys() if key != self.master]
@@ -120,11 +145,11 @@ class PartyArbiterLogReg(PartyArbiter):
 
         return deltas
 
-    def initialize(self):
+    def initialize(self, is_infer: bool = False):
         self.security_protocol.generate_keys()
         self.is_initialized = True
 
-    def finalize(self):
+    def finalize(self, is_infer: bool = False):
         self.is_finalized = True
 
     def register_records_uids(self, uids: List[str]):

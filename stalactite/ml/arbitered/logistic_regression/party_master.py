@@ -22,6 +22,12 @@ from stalactite.models import LogisticRegressionBatch
 logger = logging.getLogger(__name__)
 
 class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
+    def inference_loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        pass
+
+    def initialize_model_from_params(self, **model_params) -> Any:
+        pass
+
     _data_params: BaseModel
     _dataset: datasets.DatasetDict
     _model: LogisticRegressionBatch
@@ -86,12 +92,16 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
         return d
 
     def aggregate_partial_predictions(
-            self, master_prediction: DataTensor, members_predictions: PartyDataTensor, uids: RecordsBatch,
+            self,
+            master_prediction: DataTensor,
+            members_predictions: PartyDataTensor | List[np.ndarray],
+            uids: RecordsBatch,
     ) -> DataTensor:
         y = self.target[[int(x) for x in uids]]
-        master_prediction = self.security_protocol.encrypt(master_prediction)
+        # master_prediction = self.security_protocol.encrypt(master_prediction)
+        print('np.max', torch.max(master_prediction))
         for member_pred in members_predictions:
-            master_prediction += member_pred
+            master_prediction = self.security_protocol.add_matrices(master_prediction, member_pred)
 
         # weights = torch.where(y == 1, self._pos_weight, 1)
         # return master_prediction * weights
@@ -101,16 +111,17 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
         with log_timing('Master compute gradient.'):
             X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
             # g = torch.matmul(X.T, aggregated_predictions_diff) / X.shape[0]
-            Xt = X.T.numpy(force=True).astype('float')
-            print(self.id, 'X.t', Xt.shape)
-
-            # g = np.dot(Xt, aggregated_predictions_diff) / X.shape[0]
-
-            n_jobs_eff = min((Xt.shape[0] // 3) + 1, 10)
-            with Parallel(10) as p:
-                g = np.concatenate(
-                    p(delayed(np.dot)(x, aggregated_predictions_diff) for x in np.array_split(Xt, n_jobs_eff))
-                )
+            # Xt = X.T.numpy(force=True).astype('float')
+            # print(self.id, 'X.t', Xt.shape)
+            #
+            # # g = np.dot(Xt, aggregated_predictions_diff) / X.shape[0]
+            #
+            # n_jobs_eff = min((Xt.shape[0] // 3) + 1, 10)
+            # with Parallel(10) as p:
+            #     g = np.concatenate(
+            #         p(delayed(np.dot)(x, aggregated_predictions_diff) for x in np.array_split(Xt, n_jobs_eff))
+            #     )
+            g = self.security_protocol.multiply_plain_cypher(X.T, aggregated_predictions_diff)
             print(self.id, 'g.shape', g.shape)
             return g
 
@@ -130,7 +141,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
             init_weights=0.005
         )
 
-    def initialize(self):
+    def initialize(self, is_infer: bool = False):
         logger.info("Master %s: initializing" % self.id)
         dataset = self.processor.fit_transform()
         self._dataset = dataset
@@ -153,7 +164,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
         self.is_initialized = True
         logger.info("Master %s: is initialized" % self.id)
 
-    def finalize(self):
+    def finalize(self, is_infer: bool = False):
         self.check_if_ready()
         self.is_finalized = True
         logger.info("Master %s: has finalized" % self.id)
@@ -168,6 +179,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
             else:
                 X = self._dataset[self._data_params.test_split][self._data_params.features_key]
                 y = self.test_target
+            print('predict', X.shape, X.dtype)
             Xw = self._model.predict(X)
 
             return Xw, y
@@ -193,6 +205,16 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyMaster):
             if self.run_mlflow:
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
 
-    @property
-    def make_batcher(self) -> Batcher:
-        return self._batcher
+    def make_batcher(
+            self,
+            uids: Optional[List[str]] = None,
+            party_members: Optional[List[str]] = None,
+            is_infer: bool = False
+    ) -> Batcher:
+        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, len(uids)))
+        self.check_if_ready()
+        batch_size = self._eval_batch_size if is_infer else self._batch_size
+        epochs = 1 if is_infer else self.epochs
+        if uids is None:
+            raise RuntimeError('Master must initialize batcher with collected uids.')
+        return ListBatcher(epochs=epochs, members=party_members, uids=uids, batch_size=batch_size)

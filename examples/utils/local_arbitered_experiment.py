@@ -90,7 +90,7 @@ def run(config_path: Optional[str] = None):
             uid="arbiter",
             epochs=config.vfl_model.epochs,
             batch_size=config.vfl_model.batch_size,
-            security_protocol=SecurityProtocolArbiterPaillier(n_jobs=10),
+            security_protocol=SecurityProtocolArbiterPaillier(**config.grpc_arbiter.security_protocol_params.init_params),
             learning_rate=config.vfl_model.learning_rate,
             momentum=0.0,
         )
@@ -105,7 +105,7 @@ def run(config_path: Optional[str] = None):
             batch_size=config.vfl_model.batch_size,
             model_update_dim_size=0,
             run_mlflow=config.master.run_mlflow,
-            security_protocol=SecurityProtocolPaillier(n_jobs=10),
+            security_protocol=SecurityProtocolPaillier(**config.grpc_arbiter.security_protocol_params.init_params),
         )
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
@@ -116,8 +116,9 @@ def run(config_path: Optional[str] = None):
                 member_record_uids=target_uids,
                 processor=processors[member_rank + 1],
                 batch_size=config.vfl_model.batch_size,
+                eval_batch_size=config.vfl_model.eval_batch_size,
                 epochs=config.vfl_model.epochs,
-                security_protocol=SecurityProtocolPaillier(n_jobs=10),
+                security_protocol=SecurityProtocolPaillier(**config.grpc_arbiter.security_protocol_params.init_params),
             )
             for member_rank, member_uid in enumerate(member_ids)
         ]

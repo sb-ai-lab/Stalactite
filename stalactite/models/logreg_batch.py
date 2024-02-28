@@ -25,6 +25,7 @@ class LogisticRegressionBatch(torch.nn.Module):
 
         self.input_dim = input_dim
         self.output_dim = output_dim
+        self.dtype = self.linear.weight.data.dtype
 
     def forward(self, x: torch.Tensor):
         return self.linear(x)
@@ -40,7 +41,7 @@ class LogisticRegressionBatch(torch.nn.Module):
     ) -> None:
         if collected_from_arbiter:
             updated_weight = self.linear.weight.data.clone() - gradients.T
-            self.linear.weight.data = updated_weight
+            self.linear.weight.data = updated_weight.to(self.dtype)
         else:
             optimizer.zero_grad()
             logit = self.forward(x)

@@ -39,14 +39,6 @@ class PrometheusMetric(enum.Enum):
         "master_iteration_time", "Time of iterations in the training loop", ["experiment_label", "iteration"]
     )
 
-
-# class UnsupportedError(Exception): # TODO move from communications utils
-#     """Custom exception class for indicating that an unsupported method is called on a class."""
-#
-#     def __init__(self, message: str = "Unsupported method for class."):
-#         super().__init__(message)
-
-
 class ArbiterServerError(Exception):
     """Custom exception class for errors related to the Arbiter server."""
 

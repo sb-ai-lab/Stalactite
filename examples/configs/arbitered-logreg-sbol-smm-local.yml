@@ -19,7 +19,7 @@ prerequisites:
 
 master:
   container_host: 'node3.bdcl'
-  run_mlflow: True
+  run_mlflow: False
 
 data:
   random_seed: 0
@@ -31,3 +31,11 @@ data:
   test_split: "train_val"
   features_key: "features_part_"
   label_key: "labels"
+
+grpc_arbiter:
+  use_arbiter: True
+  security_protocol_params:
+    he_type: paillier
+    key_length: 128
+    n_threads: 20
+    precision: 1e-9

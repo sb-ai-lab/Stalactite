@@ -41,6 +41,26 @@ class Method(str, enum.Enum):  # TODO _Method the same - unify
     update_predict = "update_predict"
 
 
+class ArbiteredMethod(str, enum.Enum):
+    service_return_answer = "service_return_answer"
+    service_heartbeat = "service_heartbeat"
+
+    records_uids = "records_uids"
+    register_records_uids = "register_records_uids"
+
+    initialize = "initialize"
+    finalize = "finalize"
+
+    update_weights = "update_weights"
+    predict = "predict"
+    update_predict = "update_predict"
+
+    get_public_key = "get_public_key"
+    predict_partial = "predict_partial"
+    compute_gradient = "compute_gradient"
+    calculate_updates = "calculate_updates"
+
+
 @dataclass(frozen=True)
 class TrainingIteration:
     seq_num: int
@@ -123,7 +143,7 @@ class PartyCommunicator(ABC):
     def send(
             self,
             send_to_id: str,
-            method_name: Method,
+            method_name: Union[Method, ArbiteredMethod],
             method_kwargs: Optional[MethodKwargs] = None,
             result: Optional[Any] = None,
             **kwargs,
@@ -156,7 +176,7 @@ class PartyCommunicator(ABC):
     @abstractmethod
     def broadcast(
             self,
-            method_name: Method,
+            method_name: Union[Method, ArbiteredMethod],
             method_kwargs: Optional[MethodKwargs] = None,
             result: Optional[Any] = None,
             participating_members: Optional[List[str]] = None,
@@ -179,7 +199,7 @@ class PartyCommunicator(ABC):
     @abstractmethod
     def scatter(
             self,
-            method_name: Method,
+            method_name: Union[Method, ArbiteredMethod],
             method_kwargs: Optional[List[MethodKwargs]] = None,
             result: Optional[Union[Any, List[Any]]] = None,
             participating_members: Optional[List[str]] = None,

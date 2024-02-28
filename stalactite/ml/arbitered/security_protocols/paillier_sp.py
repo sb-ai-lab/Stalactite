@@ -14,10 +14,18 @@ from stalactite.helpers import log_timing
 # from arrays_phe import ArrayEncryptor, ArrayDecryptor, encrypted_array_size_bytes, catchtime, pretty_print_params
 
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+sh = logging.StreamHandler()
+sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logger.addHandler(sh)
+logger.propagate = False
+
 class SecurityProtocolPaillier(SecurityProtocol):
-    def multiply_plain_cypher(self, plain_arr: np.ndarray, cypher_arr: np.ndarray) -> np.ndarray:
+    def multiply_plain_cypher(self, plain_arr: torch.Tensor, cypher_arr: np.ndarray) -> np.ndarray:
         assert plain_arr.shape[-1] == cypher_arr.shape[0], "Arrays' shapes must be suitable for matrix " \
                                                            f"product {plain_arr.shape}, {cypher_arr}"
+        plain_arr = plain_arr.numpy(force=True).astype('float')
 
         if self.n_jobs == 0:
             res = np.dot(plain_arr, cypher_arr)
@@ -32,7 +40,9 @@ class SecurityProtocolPaillier(SecurityProtocol):
                 )
         return res
 
-    def add_matrices(self, array1: np.ndarray, array2: np.ndarray) -> np.ndarray:
+    def add_matrices(self, array1: torch.Tensor, array2: np.ndarray) -> np.ndarray:
+        if isinstance(array1, torch.Tensor):
+            array1 = array1.numpy(force=True)
         if self.n_jobs == 0:
             res = array1 + array2
         else:
@@ -57,9 +67,10 @@ class SecurityProtocolPaillier(SecurityProtocol):
             res = res.reshape(orig_shape)
         return res
 
-    def __init__(self, precision: float = 1e-10, n_threads: int = 3, ):
+    def __init__(self, precision: float = 1e-10, n_threads: int = 3, key_length: int = 2048):
         self.precision = precision
         self.n_jobs = n_threads
+        self.key_length = key_length
 
         self.is_initialized = False
         self.enc_partial_function = None
@@ -120,8 +131,8 @@ class SecurityProtocolPaillier(SecurityProtocol):
 
 
 class SecurityProtocolArbiterPaillier(SecurityProtocolPaillier, SecurityProtocolArbiter):
-    def __init__(self, precision: float = 1e-10, n_threads: int = 3, ):
-        super().__init__(precision=precision, n_threads=n_threads)
+    def __init__(self, precision: float = 1e-10, n_threads: int = 3, key_length: int = 2048):
+        super().__init__(precision=precision, n_threads=n_threads, key_length=key_length)
 
         self.vec_decrypt = None
         self.vec_decrypt_encoded = None
@@ -171,6 +182,7 @@ class SecurityProtocolArbiterPaillier(SecurityProtocolPaillier, SecurityProtocol
                 return torch.from_numpy(res)
 
     def generate_keys(self) -> None:
-        public_key, private_key = paillier.generate_paillier_keypair()
+        logger.info(f'Arbiter generates key pair: n_length={self.key_length}, precision={self.precision}')
+        public_key, private_key = paillier.generate_paillier_keypair(n_length=self.key_length)
         self._keys = Keys(public=public_key, private=private_key)
         self.initialize()

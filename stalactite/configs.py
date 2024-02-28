@@ -125,11 +125,20 @@ class GRpcConfig(BaseModel):
 class GRpcServerConfig(GRpcConfig):
     """gRPC server and servicer parameters config."""
 
-
 class PaillierSPParams(BaseModel):
     """ Security protocol parameters if the Paillier is used. """
+    he_type: Literal['paillier']
     precision: float = Field(default=1e-8, description='Precision of the paillier encoding.')
+    key_length: int = Field(default=2048, description='Length of the paillier cryptokey.')
     n_threads: int = Field(default=None, description='Number of threads to use for computations')
+
+    @property
+    def init_params(self):
+        return {
+            "precision": self.precision,
+            "key_length": self.key_length,
+            "n_threads": self.n_threads,
+        }
 
 
 class GRpcArbiterConfig(GRpcConfig):
@@ -138,7 +147,6 @@ class GRpcArbiterConfig(GRpcConfig):
     use_arbiter: bool = Field(default=False, description="Whether to include arbiter for VFL with HE")
     grpc_operations_timeout: float = Field(default=300, description="Timeout of the unary calls to gRPC arbiter server")
     security_protocol_params: Optional[PaillierSPParams] = Field(default=None)
-
 
 
 class PartyConfig(BaseModel):

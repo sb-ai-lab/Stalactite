@@ -15,7 +15,7 @@ from stalactite.base import (
     PartyMember,
     PartyMaster,
     PartyCommunicator,
-    Method,
+    Method, ArbiteredMethod,
     MethodKwargs,
     Task,
     DataTensor,
@@ -26,6 +26,7 @@ from stalactite.base import (
 from stalactite.batching import ListBatcher
 
 logger = logging.getLogger(__name__)
+
 
 T = TypeVar('T', np.ndarray, ts.CKKSTensor)
 
@@ -40,26 +41,6 @@ class Role(str, enum.Enum):
     arbiter = "arbiter"
     master = "master"
     member = "member"
-
-
-class ArbiteredMethod(str, enum.Enum):  # TODO Move to method
-    service_return_answer = "service_return_answer"
-    service_heartbeat = "service_heartbeat"
-
-    records_uids = "records_uids"
-    register_records_uids = "register_records_uids"
-
-    initialize = "initialize"
-    finalize = "finalize"
-
-    update_weights = "update_weights"
-    predict = "predict"
-    update_predict = "update_predict"
-
-    get_public_key = "get_public_key"
-    predict_partial = "predict_partial"
-    compute_gradient = "compute_gradient"
-    calculate_updates = "calculate_updates"
 
 
 class SecurityProtocol(ABC):
@@ -172,10 +153,11 @@ class PartyArbiter(PartyAgent, ABC):
         """
         ...
 
-    @property
-    @abstractmethod
-    def batcher(self) -> Batcher:
-        ...
+    # @property
+    # @abstractmethod
+    # def batcher(self) -> Batcher:
+    #     ...
+
 
     def get_public_key(self) -> Keys:
         return self.security_protocol.public_key
@@ -219,7 +201,7 @@ class PartyArbiter(PartyAgent, ABC):
             participating_members=party.members + [party.master]
         )
 
-        self.loop(batcher=self.batcher, party=party)
+        self.loop(batcher=self.make_batcher(), party=party)
 
         finalize_task = party.recv(Task(method_name=Method.finalize, from_id=party.master, to_id=self.id))
         self.execute_received_task(finalize_task)
@@ -259,13 +241,21 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
     is_initialized: bool
     is_finalized: bool
     _batch_size: int
+    _eval_batch_size: int
     _batcher: Batcher
 
-    def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
+    def make_batcher(
+            self,
+            uids: Optional[List[str]] = None,
+            party_members: Optional[List[str]] = None,
+            is_infer: bool = False
+    ) -> Batcher:
         logger.info("Master %s: making a make_batcher for uids of length %s" % (self.id, len(uids)))
         self.check_if_ready()
         assert party_members is not None, "Master is trying to initialize make_batcher without members list"
-        batcher = ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
+        epochs = 1 if is_infer else self.epochs
+        batch_size = self._eval_batch_size if is_infer else self._batch_size
+        batcher = ListBatcher(epochs=epochs, members=party_members, uids=uids, batch_size=batch_size)
         self._batcher = batcher
         return batcher
 
@@ -361,8 +351,10 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
         )
         self.execute_received_task(register_records_uids_task)
 
-        pk_task = party.send(method_name=ArbiteredMethod.get_public_key,
-                             send_to_id=party.arbiter)  # TODO move to execute_task
+        pk_task = party.send(
+            method_name=ArbiteredMethod.get_public_key,
+            send_to_id=party.arbiter
+        )  # TODO move to execute_task
         pk = party.recv(pk_task, recv_results=True).result
 
         self.security_protocol.keys = pk
@@ -540,7 +532,7 @@ class ArbiteredPartyMember(PartyMember, ABC):
         self.security_protocol.keys = pk
         self.security_protocol.initialize()
 
-        self.loop(batcher=self.make_batcher, party=party)
+        self.loop(batcher=self.make_batcher(), party=party)
 
         finalize_task = party.recv(Task(method_name=Method.finalize, from_id=party.master, to_id=self.id))
         self.execute_received_task(finalize_task)
