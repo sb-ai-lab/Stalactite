@@ -85,7 +85,6 @@ class ArbiteredPartySingle(PartyAgent):
             torch.sum(torch.where(gradient.T > 0, 0, 1))
         )
 
-
     def _get_delta_gradients(self) -> torch.Tensor:
         if self._prev_model_parameter is not None:
             return self._prev_model_parameter - self._model_parameter.weight.data
@@ -93,7 +92,8 @@ class ArbiteredPartySingle(PartyAgent):
             raise ValueError(f"No previous steps were performed.")
 
     def _init_optimizer(self):
-        self._optimizer = torch.optim.SGD(self._model_parameter.parameters(), lr=self.learning_rate, momentum=self.momentum)
+        self._optimizer = torch.optim.SGD(self._model_parameter.parameters(), lr=self.learning_rate,
+                                          momentum=self.momentum)
 
     def initialize(self):
         dataset = self.processor.fit_transform()
@@ -110,7 +110,7 @@ class ArbiteredPartySingle(PartyAgent):
         unique, counts = np.unique(self.target, return_counts=True)
         self._pos_weight = counts[0] / counts[1]
 
-        self.alpha = 0.001 # l2 reg
+        self.alpha = 0.001  # l2 reg
 
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params

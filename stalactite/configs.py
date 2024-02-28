@@ -124,38 +124,6 @@ class GRpcServerConfig(GRpcConfig):
     """gRPC server and servicer parameters config."""
 
 
-class TensealSPParams(BaseModel):
-    """ Security protocol parameters if the Tenseal is used. """
-    poly_modulus_degree: int = Field(default=8192, description="Tenseal `poly_modulus_degree` param")
-    coeff_mod_bit_sizes: Optional[list[int]] = Field(default=None, description="Tenseal `coeff_mod_bit_sizes` param")
-    global_scale_pow: int = Field(
-        default=20, description="Tenseal `global_scale` parameter will be calculated as 2 ** ts_global_scale_pow"
-    )
-    n_threads: int = Field(default=None, description='Number of threads to use for computations')
-
-    # ts_algorithm: Literal["CKKS", "BFV"] = Field(default="CKKS", description="Tenseal scheme to use")
-
-    # ts_plain_modulus: Optional[int] = Field(
-    #     default=None, description="Tenseal `plain_modulus` param. Should not be passed when the scheme is CKKS."
-    # )
-    # ts_generate_galois_keys: bool = Field(
-    #     default=True,
-    #     description="Whether to generate galois keys (galois keys are required to do ciphertext rotations)",
-    # )
-    # ts_generate_relin_keys: bool = Field(
-    #     default=True, description="Whether to generate relinearization keys (needed for encrypted multiplications)"
-    # )
-    # ts_context_path: Optional[str] = Field(default=None, description="Path to saved Tenseal private context file.")
-    # @field_validator("ts_algorithm")
-    # @classmethod
-    # def validate_ts_algorithm(cls, v: str):
-    #     mapping = {
-    #         "CKKS": ts.SCHEME_TYPE.CKKS,
-    #         "BFV": ts.SCHEME_TYPE.BFV,
-    #     }
-    #     return mapping.get(v, ts.SCHEME_TYPE.CKKS)
-
-
 class PaillierSPParams(BaseModel):
     """ Security protocol parameters if the Paillier is used. """
     precision: float = Field(default=1e-8, description='Precision of the paillier encoding.')
@@ -167,7 +135,7 @@ class GRpcArbiterConfig(GRpcConfig):
     container_host: str = Field(default="0.0.0.0", description="Host of the container with gRPC arbiter service")
     use_arbiter: bool = Field(default=False, description="Whether to include arbiter for VFL with HE")
     grpc_operations_timeout: float = Field(default=300, description="Timeout of the unary calls to gRPC arbiter server")
-    security_protocol_params: Optional[Union[TensealSPParams, PaillierSPParams]] = Field(default=None)
+    security_protocol_params: Optional[PaillierSPParams] = Field(default=None)
 
 
 class PartyConfig(BaseModel):

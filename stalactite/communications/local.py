@@ -21,12 +21,6 @@ from stalactite.ml.arbitered.base import PartyArbiter, ArbiteredPartyMaster, Arb
 from stalactite.communications.helpers import ParticipantType
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
-logger.propagate = False
-
 
 class RecvFuture(Future):
     def __init__(self, method_name: str, receive_from_id: str):

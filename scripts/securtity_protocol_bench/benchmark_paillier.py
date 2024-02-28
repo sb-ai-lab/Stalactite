@@ -14,7 +14,8 @@ from constants import ARR_SIZES, PLAIN_ARR_SIZE
     "-e", "--experiment", type=str, required=False, help="MlFlow experiment name.", default="benchmark-paillier"
 )
 @click.option("--key-n-length", type=int, required=False, help="Length of the generated key.", default=512)
-def main(mlflow_addr: str, experiment: str, key_n_length: int):
+@click.option("--round", type=int, required=False, help="Round numpy arrays.", default=32)
+def main(mlflow_addr: str, experiment: str, key_n_length: int, round: int):
     # 'node3.bdcl:5555'
     mlflow.set_tracking_uri(f"http://{mlflow_addr}")
     experiment = f"{experiment}-{key_n_length}"
@@ -30,7 +31,9 @@ def main(mlflow_addr: str, experiment: str, key_n_length: int):
                     log_params = {
                         "n_jobs": n_threads,
                         "precision": precision,
-                        "array_size": shape_to_name(array_size)
+                        "array_size": shape_to_name(array_size),
+                        "round": round,
+                        "key_n_length": key_n_length,
                     }
                     mlflow.log_params(log_params)
 
@@ -45,6 +48,12 @@ def main(mlflow_addr: str, experiment: str, key_n_length: int):
 
                     s1 = np.random.uniform(-1e+5, 1e+5, size=array_size)
                     s2 = np.random.uniform(-1e+5, 1e+5, size=array_size)
+
+                    mant, expn = np.frexp(s1)
+                    s1 = np.ldexp(np.round(mant, round), expn)
+
+                    mant, expn = np.frexp(s2)
+                    s2 = np.ldexp(np.round(mant, round), expn)
 
                     print('Encrypting arrays')
                     s1_enc = paillier_sp.encrypt(s1, log=True)
@@ -78,6 +87,10 @@ def main(mlflow_addr: str, experiment: str, key_n_length: int):
 
                     for plain_size in PLAIN_ARR_SIZE:
                         plain_arr = np.random.uniform(-1e-1, 1e-1, size=(plain_size, array_size[0]))
+
+                        mant, expn = np.frexp(plain_arr)
+                        plain_arr = np.ldexp(np.round(mant, round), expn)
+
                         print('Multiplying')
                         mult_enc_s1s2 = paillier_sp.multiply_plain_cypher(plain_arr, s1_enc)
                         print('Decrypting arrays')

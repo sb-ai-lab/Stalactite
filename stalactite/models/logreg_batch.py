@@ -44,10 +44,6 @@ class LogisticRegressionBatch(torch.nn.Module):
         if collected_from_arbiter:
             updated_weight = self.linear.weight.data.clone() - gradients.T
             self.linear.weight.data = updated_weight
-            #
-            # self.optimizer.zero_grad()
-            # self.linear.weight.grad = gradients.T
-            # self.optimizer.step()
 
         else:
             self.optimizer.zero_grad()

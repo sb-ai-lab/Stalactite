@@ -12,12 +12,6 @@ from stalactite.models import LogisticRegressionBatch
 
 logger = logging.getLogger(__name__)
 
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
-
-
 class ArbiteredPartyMemberLogReg(ArbiteredPartyMember):
     def __init__(
             self,
