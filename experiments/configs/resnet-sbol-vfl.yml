@@ -1,9 +1,9 @@
 common:
-  epochs: 5
+  epochs: 1
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
-  batch_size: 2500
+  batch_size: 250
   experiment_label: experiment-sbol-resnet
   reports_export_folder: "../../reports"
   vfl_model_name: resnet
@@ -23,7 +23,7 @@ master:
 
 data:
   random_seed: 0
-  dataset_size: 8500
+  dataset_size: 850
   dataset: 'sbol'
   use_smm: True
   host_path_data_dir:  /home/dmitriy/data/my_test/vfl_multilabel_sber_sample10000_parts2
