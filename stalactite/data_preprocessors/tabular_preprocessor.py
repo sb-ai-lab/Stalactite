@@ -33,7 +33,7 @@ class TabularPreprocessor:
             split_dict[feature_name] = full_data_tensor.fit_transform(split_data)
             split_dict[feature_name] = standard_scaler.fit_transform(split_dict[feature_name])
             split_dict[label_name] = split_data[label_name]
-            split_dict[label_name] = [x[6] for x in split_dict[label_name]]  # todo: remove (for debugging only)
+            # split_dict[label_name] = [x[6] for x in split_dict[label_name]]  # todo: remove (for debugging only)
         if isinstance(train_split_data[label_name][0], list):
             self.multilabel = True
 

@@ -36,7 +36,8 @@ class PartyMasterImpl(PartyMaster):
             model_update_dim_size: int,
             processor=None,
             run_mlflow: bool = False,
-            model_name: str = None
+            model_name: str = None,
+            model_params: dict = None
     ) -> None:
         """ Initialize PartyMasterImpl.
 
@@ -68,29 +69,22 @@ class PartyMasterImpl(PartyMaster):
         self.updates = {"master": torch.tensor([])}
         self._model_name = model_name
         self.aggregated_output = None
+        self._model_params = model_params
 
     def initialize_model(self) -> None:
-        init_weights = None  # todo: add to config
 
         """ Initialize the model based on the specified model name. """
         if self._model_name == "efficientnet":
-            self._model = EfficientNetTop(
-                input_dim=128,  # todo: get from dataprocessor
-                dropout=0.2,  # todo: add to config
-                num_classes=10,  # todo: get from dataprocessor
-                init_weights=init_weights)
-            logger.info(summary(self._model, (128, 1, 1), device="cpu"))
+            self._model = EfficientNetTop(**self._model_params)
+            logger.info(summary(self._model, (self._model_params["input_dim"], 1, 1), device="cpu"))
         elif self._model_name == "mlp":
-            self._model = MLPTop(input_dim=100, output_dim=1, multilabel=True)
+            self._model = MLPTop(**self._model_params)
         elif self._model_name == "resnet":
-            self._model = ResNetTop(
-                input_dim=1356,  # todo: get from dataprocessor
-                output_dim=1,  # todo: get from dataprocessor
-                init_weights=init_weights,
-                use_bn=True,
+            self._model = ResNetTop(**self._model_params)
+            logger.info(
+                summary(self._model, (self._model_params["input_dim"],),
+                        device="cpu", batch_size=self._batch_size)
             )
-
-            logger.info(summary(self._model, (1356,), device="cpu", batch_size=5))  # todo: add
         else:
             raise ValueError("unknown model %s" % self._model_name)
 
@@ -104,7 +98,7 @@ class PartyMasterImpl(PartyMaster):
             raise ValueError("unknown model %s" % self._model_name)
 
         if self.run_mlflow:
-            mlflow.log_param("init_weights", init_weights)
+            mlflow.log_param("init_weights", self._model_params.get("init_weights", None))
 
     def initialize_optimizer(self) -> None:
         self._optimizer = torch.optim.SGD([
@@ -151,7 +145,7 @@ class PartyMasterImpl(PartyMaster):
         """
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        return [torch.rand(self._batch_size) for _ in range(world_size)]
+        return [torch.zeros(self._batch_size) for _ in range(world_size)]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str) -> None:
         """ Report metrics based on target values and predictions.
@@ -365,233 +359,18 @@ class PartyMasterImplLogreg(PartyMasterImpl):
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
 
 
-class PartyMasterImplSplitNN2(PartyMasterImpl):
-
-    def make_init_updates(self, world_size: int) -> PartyDataTensor:
-        """ Make initial updates for logistic regression.
-
-        :param world_size: Number of party members.
-        :return: Initial updates as a list of zero tensors.
-        """
-        logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
-        self._check_if_ready()
-        return [torch.zeros(self._batch_size, 128, 1, 1) for _ in range(world_size)]  # todo: get it from dataprocessor
-
-    def compute_updates(
-            self,
-            participating_members: List[str],
-            predictions: DataTensor,
-            party_predictions: PartyDataTensor,
-            world_size: int,
-            subiter_seq_num: int,
-    ) -> List[DataTensor]:
-        """ Compute updates for logistic regression.
-
-        :param participating_members: List of participating party members identifiers.
-        :param predictions: Model predictions.
-        :param party_predictions: List of party predictions.
-        :param world_size: Number of party members.
-        :param subiter_seq_num: Sub-iteration sequence number.
-
-        :return: List of gradients as tensors.
-        """
-        logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
-        self._check_if_ready()
-        self.iteration_counter += 1
-        y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
-        criterion = torch.nn.CrossEntropyLoss()
-        loss = criterion(torch.squeeze(predictions), y.type(torch.LongTensor))
-        if self.run_mlflow:
-            mlflow.log_metric("loss", loss.item(), step=self.iteration_counter)
-        grads = torch.autograd.grad(outputs=loss, inputs=self.aggregated_output)
-
-        for i, member_id in enumerate(participating_members):
-            self.updates[member_id] = grads[0]
-
-        return [self.updates[member_id] for member_id in participating_members]
-
-    def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
-    ) -> DataTensor:
-        """ Aggregate party predictions for logistic regression.
-
-        :param participating_members: List of participating party member identifiers.
-        :param party_predictions: List of party predictions.
-        :param infer: Flag indicating whether to perform inference.
-
-        :return: Aggregated predictions after applying sigmoid function.
-        """
-        logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
-        self._check_if_ready()
-
-        for member_id, member_prediction in zip(participating_members, party_predictions):
-            self.party_predictions[member_id] = member_prediction
-        party_predictions = list(self.party_predictions.values())
-        predictions = torch.mean(torch.stack(party_predictions, dim=1), dim=1)
-        self.aggregated_output = predictions
-        return predictions
-
-    def predict(self, x: DataTensor, use_test: bool = False, proba: str = None) -> DataTensor:
-        """ Make predictions using the current model.
-        :return: Model predictions.
-        """
-        logger.info("Master: predicting.")
-        self._check_if_ready()
-        predictions = self._model.predict(x)
-        logger.info("Master: made predictions.")
-        if proba is not None:
-            if proba == "sigmoid":
-                predictions = torch.sigmoid(predictions).detach().numpy()
-            elif proba == "softmax":
-                predictions = torch.softmax(predictions, dim=1).detach().numpy()
-            else:
-                raise ValueError(f"unsupported proba: {proba}")
-
-        return predictions
-
-    def update_weights(self, agg_members_output: DataTensor, upd: DataTensor) -> None:
-        logger.info(f"Master: updating weights. Incoming tensor: {upd.size()}")
-        self._check_if_ready()
-        self._model.update_weights(x=agg_members_output, gradients=upd, is_single=False, optimizer=self._optimizer)
-        logger.info("Member %s: successfully updated weights" % self.id)
-
-    def update_predict(self, upd: DataTensor, agg_members_output: DataTensor) -> DataTensor:
-        logger.info("Master: updating and predicting.")
-        self._check_if_ready()
-        # get aggregated output from previous batch if exist (we do not make update_weights if it's the first iter)
-        if self.aggregated_output is not None:
-            self.update_weights(
-                agg_members_output=self.aggregated_output, upd=upd)
-        predictions = self.predict(agg_members_output)
-        logger.info("Master: updated and predicted.")
-        # save current agg_members_output for making update_predict for next batch
-        self.aggregated_output = copy(agg_members_output)
-        return predictions
-
-    def loop(self, batcher: Batcher, communicator: PartyCommunicator) -> None:
-
-        """ Run main training loop on the VFL master.
-
-        :param batcher: Batcher for creating training batches.
-        :param communicator: Communicator instance used for communication between VFL agents.
-        :return: None
-        """
-        logger.info("Master %s: entering training loop" % self.id)
-        updates = self.make_init_updates(communicator.world_size)
-        for titer in batcher:
-            logger.debug(
-                f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
-            )
-            iter_start_time = time.time()
-            if titer.seq_num == 0:
-                updates = updates[:len(titer.participating_members)]
-            # tasks for members
-            update_predict_tasks = communicator.scatter(
-                Method.update_predict,
-                method_kwargs=[
-                    MethodKwargs(
-                        tensor_kwargs={"upd": participant_updates},
-                        other_kwargs={"previous_batch": titer.previous_batch, "batch": titer.batch},
-                    )
-                    for participant_updates in updates
-                ],
-                participating_members=titer.participating_members,
-            )
-
-            party_members_predictions = [
-                task.result for task in communicator.gather(update_predict_tasks, recv_results=True)
-            ]
-
-            agg_members_predictions = self.aggregate(titer.participating_members, party_members_predictions)
-
-            # for master model
-            master_predictions = self.update_predict(upd=updates[0], agg_members_output=agg_members_predictions)
-
-            updates = self.compute_updates(
-                titer.participating_members,
-                master_predictions,
-                party_members_predictions,
-                communicator.world_size,
-                titer.subiter_seq_num,
-            )
-
-            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
-                logger.debug(
-                    f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_tasks = communicator.broadcast(
-                    Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids}),
-                    participating_members=titer.participating_members,
-                )
-                party_members_predictions = [
-                    task.result for task in communicator.gather(predict_tasks, recv_results=True)
-                ]
-
-                agg_members_predictions = self.aggregate(communicator.members, party_members_predictions, infer=True)
-                master_predictions = self.predict(x=agg_members_predictions, proba="softmax")
-
-                self.report_metrics(self.target, master_predictions, name="Train")
-
-            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
-                logger.debug(
-                    f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
-                )
-                predict_test_tasks = communicator.broadcast(
-                    Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids, "use_test": True}),
-                    participating_members=titer.participating_members,
-                )
-
-                party_members_predictions = [
-                    task.result for task in communicator.gather(predict_test_tasks, recv_results=True)
-                ]
-
-                agg_members_predictions = self.aggregate(communicator.members, party_members_predictions, infer=True)
-                master_predictions = self.predict(x=agg_members_predictions)
-                master_predictions = torch.softmax(master_predictions, dim=1).detach().numpy()
-                self.report_metrics(self.test_target, master_predictions, name="Test")
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
-
-    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str) -> None:
-        y = y.numpy()
-
-        logger.info(
-            f"Master : reporting metrics. Y dim: {y.size}. Predictions size: {predictions.size}"
-        )
-
-        step = self.iteration_counter
-        for avg in ["macro"]:
-            roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
-            if self.run_mlflow:
-                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-            else:
-                logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
-
-
 class PartyMasterImplSplitNN(PartyMasterImpl):
 
     def predict(self, x: DataTensor, use_test: bool = False, use_activation: bool = False) -> DataTensor:
-        """ Make predictions using the current model.
+        """ Make predictions using the master model.
         :return: Model predictions.
         """
         logger.info("Master: predicting.")
         self._check_if_ready()
         predictions = self._model.predict(x)
-        logger.info("Master: made predictions.")
-        # if proba is not None:
-        #     if proba == "sigmoid":
-        #         predictions = torch.sigmoid(predictions).detach().numpy()
-        #     elif proba == "softmax":
-        #         predictions = torch.softmax(predictions, dim=1).detach().numpy()
-        #     else:
-        #         raise ValueError(f"unsupported proba: {proba}")
         if use_activation:
             predictions = self._activation(predictions)
+        logger.info("Master: made predictions.")
 
         return predictions
 
@@ -636,7 +415,8 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
         self._check_if_ready()
         self.iteration_counter += 1
         y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
-        loss = self._criterion(torch.squeeze(master_predictions), y.type(torch.FloatTensor))
+        targets_type = torch.LongTensor if isinstance(self._criterion, torch.nn.CrossEntropyLoss) else torch.FloatTensor
+        loss = self._criterion(torch.squeeze(master_predictions), y.type(targets_type))
         if self.run_mlflow:
             mlflow.log_metric("loss", loss.item(), step=self.iteration_counter)
 
@@ -659,6 +439,7 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
         """
         logger.info("Master %s: entering training loop" % self.id)
         updates = self.make_init_updates(communicator.world_size)
+
         for titer in batcher:
             logger.debug(
                 f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
@@ -716,7 +497,7 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
                 agg_members_predictions = self.aggregate(communicator.members, party_members_predictions, infer=True)
                 master_predictions = self.predict(x=agg_members_predictions, use_activation=True)
 
-                self.report_metrics(self.target, master_predictions, name="Train")
+                self.report_metrics(self.target.numpy(), master_predictions.detach().numpy(), name="Train")
 
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
                 logger.debug(
@@ -734,13 +515,11 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
                 party_members_predictions = [task.result for task in ordered_gather]
                 agg_members_predictions = self.aggregate(communicator.members, party_members_predictions, infer=True)
                 master_predictions = self.predict(x=agg_members_predictions, use_activation=True)
-                self.report_metrics(self.test_target, master_predictions, name="Test")
+                self.report_metrics(self.test_target.numpy(), master_predictions.detach().numpy(), name="Test")
 
             self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str) -> None:
-        y = y.numpy()
-        predictions = predictions.detach().numpy()
         step = self.iteration_counter
         for avg in ["macro", "micro"]:
             try:
@@ -752,11 +531,33 @@ class PartyMasterImplSplitNN(PartyMasterImpl):
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
 
 
-class PartyMasterImplMLPSplitNN(PartyMasterImplSplitNN):
-    def make_init_updates(self, world_size: int) -> PartyDataTensor:
-        logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
+class PartyMasterImplEfficientNetSplitNN(PartyMasterImplSplitNN):
+
+    def aggregate(
+            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+    ) -> DataTensor:
+        logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
-        return [torch.zeros(self._batch_size, 100) for _ in range(world_size)]
+
+        for member_id, member_prediction in zip(participating_members, party_predictions):
+            self.party_predictions[member_id] = member_prediction
+        party_predictions = list(self.party_predictions.values())
+        predictions = torch.mean(torch.stack(party_predictions, dim=1), dim=1)
+        return predictions
+
+    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str) -> None:
+        logger.info(
+            f"Master : reporting metrics. Y dim: {y.size}. Predictions size: {predictions.size}"
+        )
+        step = self.iteration_counter
+        avg = "macro"
+        roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
+        logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
+        if self.run_mlflow:
+            mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+
+
+class PartyMasterImplMLPSplitNN(PartyMasterImplSplitNN):
 
     def aggregate(
             self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
@@ -770,158 +571,8 @@ class PartyMasterImplMLPSplitNN(PartyMasterImplSplitNN):
         predictions = torch.sum(torch.stack(party_predictions, dim=1), dim=1)
         return predictions
 
-    # def compute_updates(
-    #         self,
-    #         participating_members: List[str],
-    #         predictions: DataTensor,
-    #         agg_predictions: DataTensor,
-    #         world_size: int,
-    #         subiter_seq_num: int,
-    # ) -> List[DataTensor]:
-    #     """ Compute updates for logistic regression.
-    #
-    #     :param participating_members: List of participating party members identifiers.
-    #     :param predictions: Model predictions.
-    #     :param agg_predictions: Aggregated predictions.
-    #     :param world_size: Number of party members.
-    #     :param subiter_seq_num: Sub-iteration sequence number.
-    #
-    #     :return: List of gradients as tensors.
-    #     """
-    #     logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
-    #     self._check_if_ready()
-    #     self.iteration_counter += 1
-    #     y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
-    #     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
-    #     loss = criterion(torch.squeeze(predictions), y.type(torch.FloatTensor))
-    #     if self.run_mlflow:
-    #         mlflow.log_metric("loss", loss.item(), step=self.iteration_counter)
-    #     grads = torch.autograd.grad(outputs=loss, inputs=agg_predictions, retain_graph=True)
-    #
-    #     for i, member_id in enumerate(participating_members):
-    #         self.updates[member_id] = grads[0]
-    #
-    #     return [self.updates[member_id] for member_id in participating_members]
-
-    # def loop(self, batcher: Batcher, communicator: PartyCommunicator) -> None:
-    #
-    #     """ Run main training loop on the VFL master.
-    #
-    #     :param batcher: Batcher for creating training batches.
-    #     :param communicator: Communicator instance used for communication between VFL agents.
-    #     :return: None
-    #     """
-    #     logger.info("Master %s: entering training loop" % self.id)
-    #     updates = self.make_init_updates(communicator.world_size)
-    #     for titer in batcher:
-    #         logger.debug(
-    #             f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-    #             % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
-    #         )
-    #         iter_start_time = time.time()
-    #         if titer.seq_num == 0:
-    #             updates = updates[:len(titer.participating_members)]
-    #         # tasks for members
-    #         update_predict_tasks = communicator.scatter(
-    #             Method.update_predict,
-    #             method_kwargs=[
-    #                 MethodKwargs(
-    #                     tensor_kwargs={"upd": participant_updates},
-    #                     other_kwargs={"previous_batch": titer.previous_batch, "batch": titer.batch},
-    #                 )
-    #                 for participant_updates in updates
-    #             ],
-    #             participating_members=titer.participating_members,
-    #         )
-    #
-    #         party_members_predictions = [
-    #             task.result for task in communicator.gather(update_predict_tasks, recv_results=True)
-    #         ]
-    #
-    #         agg_members_predictions = self.aggregate(titer.participating_members, party_members_predictions)
-    #
-    #         # for master model
-    #         master_predictions = self.update_predict(upd=updates[0], agg_members_output=agg_members_predictions)
-    #
-    #         updates = self.compute_updates(
-    #             titer.participating_members,
-    #             master_predictions,
-    #             agg_members_predictions,
-    #             communicator.world_size,
-    #             titer.subiter_seq_num,
-    #         )
-    #
-    #         if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
-    #             logger.debug(
-    #                 f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
-    #                 % (self.id, titer.seq_num, titer.epoch)
-    #             )
-    #             predict_tasks = communicator.broadcast(
-    #                 Method.predict,
-    #                 method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids}),
-    #                 participating_members=titer.participating_members,
-    #             )
-    #             party_members_predictions = [
-    #                 task.result for task in communicator.gather(predict_tasks, recv_results=True)
-    #             ]
-    #
-    #             agg_members_predictions = self.aggregate(communicator.members, party_members_predictions, infer=True)
-    #             master_predictions = self.predict(x=agg_members_predictions, proba="sigmoid")
-    #
-    #             self.report_metrics(self.target, master_predictions, name="Train")
-    #
-    #         if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
-    #             logger.debug(
-    #                 f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
-    #                 % (self.id, titer.seq_num, titer.epoch)
-    #             )
-    #             predict_test_tasks = communicator.broadcast(
-    #                 Method.predict,
-    #                 method_kwargs=MethodKwargs(other_kwargs={"uids": batcher.uids, "use_test": True}),
-    #                 participating_members=titer.participating_members,
-    #             )
-    #
-    #             party_members_predictions = [
-    #                 task.result for task in communicator.gather(predict_test_tasks, recv_results=True)
-    #             ]
-    #
-    #             agg_members_predictions = self.aggregate(communicator.members, party_members_predictions, infer=True)
-    #             master_predictions = self.predict(x=agg_members_predictions, proba="sigmoid")
-    #             self.report_metrics(self.test_target, master_predictions, name="Test")
-    #
-    #         self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
-
-    # def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str) -> None:
-    #     """Report metrics for logistic regression.
-    #
-    #     Compute main classification metrics, if `use_mlflow` parameter was set to true, log them to MlFLow, log them to
-    #     stdout.
-    #
-    #     :param y: Target values.
-    #     :param predictions: Model predictions.
-    #     :param name: Name of the dataset ("Train" or "Test").
-    #
-    #     :return: None.
-    #     """
-    #
-    #     y = y.numpy()
-    #     step = self.iteration_counter
-    #     for avg in ["macro", "micro"]:
-    #         try:
-    #             roc_auc = roc_auc_score(y, predictions, average=avg)
-    #         except ValueError:
-    #             roc_auc = 0
-    #         logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
-    #         if self.run_mlflow:
-    #             mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-
 
 class PartyMasterImplResNetSplitNN(PartyMasterImplSplitNN):
-
-    def make_init_updates(self, world_size: int) -> PartyDataTensor:
-        logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
-        self._check_if_ready()
-        return [torch.zeros(self._batch_size, 1345), torch.zeros(self._batch_size, 11)]  # todo: get it from processor
 
     def aggregate(
             self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False

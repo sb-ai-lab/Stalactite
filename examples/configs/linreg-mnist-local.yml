@@ -1,5 +1,5 @@
 common:
-  epochs: 5
+  epochs: 2
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
@@ -23,8 +23,8 @@ data:
   label_key: "label"
 
 prerequisites:
-  mlflow_host: node3.bdcl
-  mlflow_port: "5555"
+  mlflow_host: node16.bdcl
+  mlflow_port: "9876"
 #  prometheus_host: 0.0.0.0
 #  prometheus_port: "9090"
 #  grafana_port: "3000"
@@ -39,7 +39,7 @@ prerequisites:
 #  use_arbiter: False
 
 master:
-  run_mlflow: False
+  run_mlflow: True
 #  logging_level: debug
 #  container_host: 0.0.0.0
 #  run_prometheus: False
@@ -47,7 +47,11 @@ master:
 #  time_between_idle_connections_checks: 3
 #  recv_timeout: 360
 
-#member:
+member:
+  member_model_params: {
+    output_dim: 1,
+    reg_lambda: 0.5
+  }
 #  logging_level: debug
 #  recv_timeout: 360
 #  heartbeat_interval: 2

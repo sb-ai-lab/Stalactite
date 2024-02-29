@@ -20,6 +20,18 @@ prerequisites:
 master:
   container_host: 'node16.bdcl'
   run_mlflow: True
+  master_model_params: {
+    input_dim: 1356,
+    output_dim: 19,
+    use_bn: True,
+#    init_weights: 0.005
+  }
+
+member:
+  member_model_params: {
+    hid_factor: [1, 1],
+#    init_weights: 0.005
+  }
 
 data:
   random_seed: 0

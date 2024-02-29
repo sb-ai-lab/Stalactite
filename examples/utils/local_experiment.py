@@ -139,6 +139,7 @@ def run(config_path: Optional[str] = None):
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
             is_consequently=config.common.is_consequently,
             members=member_ids if config.common.is_consequently else None,
+            model_params=config.member.member_model_params
         )
         for member_rank, member_uid in enumerate(member_ids)
     ]

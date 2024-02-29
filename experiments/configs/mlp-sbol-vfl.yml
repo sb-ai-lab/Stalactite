@@ -8,7 +8,7 @@ common:
   reports_export_folder: "../../reports"
   vfl_model_name: mlp
   is_consequently: False
-  learning_rate: 0.01
+  learning_rate: 0.2
   momentum: 0
   use_class_weights: True
 #  random_seed: 0 # TODO
@@ -20,6 +20,19 @@ prerequisites:
 master:
   container_host: 'node16.bdcl'
   run_mlflow: True
+  master_model_params: {
+    input_dim: 100,
+    output_dim: 19,
+    multilabel: True,
+#    init_weights: 0.005
+  }
+
+member:
+  member_model_params: {
+    hidden_channels:[1000, 300, 100],
+#    init_weights: 0.005
+  }
+
 
 data:
   random_seed: 0

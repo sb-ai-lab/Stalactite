@@ -11,11 +11,7 @@ class LogisticRegressionBatch(torch.nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        learning_rate: float = 0.001,
-        momentum: float = 0,
-        class_weights: Optional[torch.Tensor] = None,
         init_weights: float = None,
-        multilabel: bool = True
     ):
         """
         Args:
@@ -26,24 +22,22 @@ class LogisticRegressionBatch(torch.nn.Module):
         self.linear = torch.nn.Linear(input_dim, output_dim, bias=False, device=None, dtype=None)
         if init_weights is not None:
             self.linear.weight.data = torch.full((output_dim, input_dim), init_weights)
-        if multilabel:
-            self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
-        else:
-            self.criterion = torch.nn.CrossEntropyLoss(weight=None)
-        self.optimizer = torch.optim.SGD(self.linear.parameters(), lr=learning_rate, momentum=momentum)
 
     def forward(self, x: torch.Tensor):
         return self.linear(x)
 
-    def update_weights(self, x: torch.Tensor, gradients: torch.Tensor, is_single: bool = False) -> None:
-        self.optimizer.zero_grad()
+    def update_weights(self, x: torch.Tensor, gradients: torch.Tensor, is_single: bool = False, criterion=None,
+                       optimizer: torch.optim.Optimizer = None) -> None:
+        optimizer.zero_grad()
         logit = self.forward(x)
         if is_single:
-            loss = self.criterion(torch.squeeze(logit), gradients.type(torch.FloatTensor)) #todo: LongTensor
+            targets_type = torch.LongTensor if isinstance(self._criterion,
+                                                          torch.nn.CrossEntropyLoss) else torch.FloatTensor
+            loss = criterion(torch.squeeze(logit), gradients.type(targets_type))
             loss.backward()
         else:
             logit.backward(gradient=gradients)
-        self.optimizer.step()
+        optimizer.step()
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)

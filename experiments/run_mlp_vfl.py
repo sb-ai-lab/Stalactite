@@ -86,7 +86,8 @@ def run(config_path: Optional[str] = None):
         batch_size=config.common.batch_size,
         model_update_dim_size=0,
         run_mlflow=config.master.run_mlflow,
-        model_name=config.common.vfl_model_name
+        model_name=config.common.vfl_model_name,
+        model_params=config.master.master_model_params
     )
 
     member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
@@ -103,6 +104,8 @@ def run(config_path: Optional[str] = None):
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
             is_consequently=config.common.is_consequently,
             members=member_ids if config.common.is_consequently else None,
+            model_params=config.member.member_model_params
+
         )
         for member_rank, member_uid in enumerate(member_ids)
     ]

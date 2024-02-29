@@ -67,7 +67,6 @@ class CommonConfig(BaseModel):
     momentum: float = Field(default=0, description='Momentum')
 
 
-
 class DataConfig(BaseModel):
     """Experimental data parameters config."""
 
@@ -179,6 +178,7 @@ class MasterConfig(PartyConfig):
     time_between_idle_connections_checks: float = Field(
         default=3.0, description="Time between checking which clients disconnected"
     )
+    master_model_params: dict = Field(default={}, description="Master model parameters")
 
 
 class MemberConfig(PartyConfig):
@@ -189,6 +189,7 @@ class MemberConfig(PartyConfig):
         default=0.1, description="Interval between new tasks requests from master"
     )  # TODO ?
     sent_task_timout: float = Field(default=3600, description="Timeout of the unary endpoints calls to the gRPC")
+    member_model_params: dict = Field(default={}, description="Member model parameters")
 
 
 class DockerConfig(BaseModel):

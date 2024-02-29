@@ -2,7 +2,6 @@ import logging
 from typing import List, Optional, Tuple
 
 import torch
-from torchsummary import summary
 import scipy as sp
 
 from stalactite.base import Batcher, DataTensor, PartyMember, RecordsBatch
@@ -28,6 +27,8 @@ class PartyMemberImpl(PartyMember):
         processor=None,
         is_consequently: bool = False,
         members: Optional[list[str]] = None,
+        model_params: dict = None
+
     ) -> None:
         """
         Initialize PartyMemberImpl.
@@ -58,6 +59,7 @@ class PartyMemberImpl(PartyMember):
         self._batcher = None
         self.is_consequently = is_consequently
         self.members = members
+        self._model_params = model_params
 
         if self.is_consequently:
             if self.members is None:
@@ -70,7 +72,7 @@ class PartyMemberImpl(PartyMember):
         :param uids: List of unique identifiers for dataset rows.
         :param batch_size: Size of the training batch.
         """
-        logger.info("Member %s: making a batcher for uids" % (self.id))
+        logger.info("Member %s: making a batcher for uids" % self.id)
         self._check_if_ready()
         if not self.is_consequently:
             self._batcher = ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
@@ -91,7 +93,7 @@ class PartyMemberImpl(PartyMember):
                 raise RuntimeError("Cannot create batcher, you must `register_records_uids` first.")
             self._create_batcher(epochs=self.epochs, uids=self._uids_to_use, batch_size=self._batch_size)
         else:
-            logger.info("Member %s: using created batcher" % (self.id))
+            logger.info("Member %s: using created batcher" % self.id)
         return self._batcher
 
     def records_uids(self) -> List[str]:
@@ -112,40 +114,27 @@ class PartyMemberImpl(PartyMember):
         self._uids_to_use = uids
 
     def initialize_model(self) -> None:
-        init_weights = None  # todo: remove
         """ Initialize the model based on the specified model name. """
+        input_dim = self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1]
+
         if self._model_name == "linreg":
-            self._model = LinearRegressionBatch(
-                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                output_dim=1, reg_lambda=0.5
-            )
+            self._model = LinearRegressionBatch(input_dim=input_dim, **self._model_params)
+
         elif self._model_name == "logreg":
             self._model = LogisticRegressionBatch(
-                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1] if self.processor.multilabel else 1,
-                learning_rate=self._common_params.learning_rate,
-                class_weights=None,
-                init_weights=0.005)
+                input_dim=input_dim,
+                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1]
+                if self.processor.multilabel else 1,
+                **self._model_params)
+
         elif self._model_name == "efficientnet":
-            self._model = EfficientNetBottom(
-                width_mult=0.1,
-                depth_mult=0.1,
-                init_weights=None)
-            logger.info(summary(self._model, (1, 28, 28), device="cpu"))
+            self._model = EfficientNetBottom(**self._model_params)
 
         elif self._model_name == "mlp":
-            self._model = MLPBottom(
-                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                hidden_channels=[1000, 300, 100], init_weights=init_weights
-            )
-        elif self._model_name == "resnet":
-            self._model = ResNetBottom(
-                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                hid_factor=[1, 1],
-                init_weights=init_weights)
+            self._model = MLPBottom(input_dim=input_dim, **self._model_params)
 
-            n_features = 1345 if self.id == "member-0" else 11
-            logger.info(summary(self._model, (n_features,), device="cpu", batch_size=5))  # todo: add
+        elif self._model_name == "resnet":
+            self._model = ResNetBottom(input_dim=input_dim, **self._model_params)
         else:
             raise ValueError("unknown model %s" % self._model_name)
 
@@ -195,10 +184,7 @@ class PartyMemberImpl(PartyMember):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self._check_if_ready()
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        if self._model_name in ["efficientnet", "mlp", "resnet"]:
-            self._model.update_weights(X_train, upd, optimizer=self._optimizer) #todo: refactor
-        else:
-            self._model.update_weights(X_train, upd)
+        self._model.update_weights(X_train, upd, optimizer=self._optimizer)
         logger.info("Member %s: successfully updated weights" % self.id)
 
     def predict(self, uids: RecordsBatch, use_test: bool = False) -> DataTensor:
@@ -231,8 +217,8 @@ class PartyMemberImpl(PartyMember):
         """
         logger.info("Member %s: updating and predicting." % self.id)
         self._check_if_ready()
-        uids = previous_batch if previous_batch is not None else batch
-        self.update_weights(uids=uids, upd=upd)
+        if previous_batch is not None:
+            self.update_weights(uids=previous_batch, upd=upd)
         predictions = self.predict(batch)
         self.iterations_counter += 1
         logger.info("Member %s: updated and predicted." % self.id)

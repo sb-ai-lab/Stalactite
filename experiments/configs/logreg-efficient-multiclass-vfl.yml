@@ -20,10 +20,23 @@ prerequisites:
 master:
   container_host: 'node16.bdcl'
   run_mlflow: True
+  master_model_params: {
+    input_dim: 128,
+    dropout: 0.2,
+    num_classes: 10,
+#    init_weights: 0.005
+  }
+
+member:
+  member_model_params: {
+   width_mult: 0.1,
+   depth_mult: 0.1,
+#    init_weights: 0.005
+  }
 
 data:
   random_seed: 0
-  dataset_size: 350
+  dataset_size: 750
   dataset: 'mnist'
   use_smm: False
   host_path_data_dir:  ../../data/sber_ds_vfl/mnist_efficientnet_multiclass
