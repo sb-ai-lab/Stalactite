@@ -19,9 +19,9 @@ poetry --version
 poetry config virtualenvs.in-project true # Create the virtualenv inside the project’s root directory.
 # You can configure poetry using official docs: https://python-poetry.org/docs/configuration/
 # If you use CPU, install torch and torchvision by running
-poetry run pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
+poetry run pip install torch~=2.1 torchvision~=0.16 --index-url https://download.pytorch.org/whl/cpu
 # Otherwise, to use GPU:
-poetry run pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu121
+poetry run pip install torch~=2.1 torchvision~=0.16 --index-url https://download.pytorch.org/whl/cu121
 poetry install # Install stalactite and dependencies
 poetry shell # Start a new shell and activate the virtual environment
 ```
