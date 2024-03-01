@@ -4,7 +4,6 @@ from typing import Optional
 
 import torch
 from torch import nn, Tensor
-from torchsummary import summary
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +76,3 @@ class ResNetTop(nn.Module):
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
-
-
-if __name__ == "__main__":
-    model = ResNetTop(input_dim=200, output_dim=10, use_bn=True, hid_factor=[0.1, 0.1])
-    summary(model, input_size=(200,), device="cpu", batch_size=3)

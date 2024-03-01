@@ -90,7 +90,7 @@ class PartySingle:
             tensor_idx = [int(x) for x in batch]
 
             x = self.x_train[tensor_idx]
-            y = self.target[tensor_idx]#[:, 6] #TODO: REMOVE IT
+            y = self.target[tensor_idx]
 
             self.update_weights(x, y)
 
@@ -173,7 +173,7 @@ class PartySingle:
 
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
-        self.n_labels = 19  # todo: refactor it
+        self.n_labels = 19
         self.initialize_model()
         self.is_initialized = True
         logger.info("Centralized experiment is initialized")
@@ -199,9 +199,7 @@ class PartySingle:
         :return: None
         """
 
-        #y = y[:, 6]  # todo: remove
         acc = ComputeAccuracy_numpy(is_linreg=self.model_name == "linreg", is_multilabel=True)
-
         mae = mean_absolute_error(y.numpy(), predictions)
         acc = acc.compute(true_label=y.numpy(), predictions=predictions)
 
@@ -292,7 +290,7 @@ class PartySingleLogregMulticlass(PartySingleLogreg):
     def initialize_model(self):
         self._model = LogisticRegressionBatch(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-            output_dim=10,  # todo: make it more beautiful
+            output_dim=10,
             learning_rate=self._common_params.learning_rate,
             class_weights=None,
             init_weights=0.005,
@@ -393,7 +391,7 @@ class PartySingleEfficientNet(PartySingleLogregMulticlass):
 class PartySingleEfficientNetSplitNN(PartySingleLogregMulticlass):
     def initialize_model(self):
         self._model_top = EfficientNetTop(
-            input_dim=128,  # todo: determine in somehow
+            input_dim=128,
             dropout=0.2,
             num_classes=10,
             init_weights=None)
@@ -541,7 +539,6 @@ class PartySingleMLPSplitNN(PartySingleLogregMulticlass):
             mlflow.log_param("model_type", "divided")
             mlflow.log_param("init_weights", init_weights)
 
-    # todo: do appropriate inheritance for splitNN networks
     def update_weights(
             self,
             x: DataTensor,
@@ -642,19 +639,16 @@ class PartySingleResNetSplitNN(PartySingleLogregMulticlass):
     def initialize_model(self):
         init_weights = None
         self._model_top = ResNetTop(
-            input_dim=1356, #todo: add
-            output_dim=1, #todo: add,
+            input_dim=1356,
+            output_dim=1,
             init_weights=init_weights,
             use_bn=True,
         )
-        logger.info(summary(self._model_top, (1356,), device="cpu", batch_size=5))  # todo: add
 
         self._model_bottom = ResNetBottom(
             input_dim=1356,
             hid_factor=[1, 1],
             init_weights=init_weights)
-
-        logger.info(summary(self._model_bottom, (1356,), device="cpu", batch_size=5))  # todo: add
 
         self._optimizer = torch.optim.SGD([
             {"params": self._model_top.parameters()},
