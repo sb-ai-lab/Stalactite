@@ -1,13 +1,12 @@
 import copy
-import math
 from functools import partial
-from typing import Callable, List, Optional, Sequence, Union, Tuple, Any
+from typing import Callable, List, Optional, Sequence, Union, Tuple
 
 
 import torch
 from torch import nn, Tensor
 
-from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig, _MBConvConfig
+from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig
 from torchvision.utils import _log_api_usage_once
 from torchvision.ops.misc import Conv2dNormActivation
 
@@ -135,5 +134,3 @@ class EfficientNetBottom(nn.Module):
 
     def get_weights(self) -> torch.Tensor:
         return self.linear.weight.clone()
-
-

@@ -1,20 +1,14 @@
-import copy
 import logging
 import math
-from functools import partial
-from typing import Callable, List, Optional, Sequence, Union, Tuple, Any
-
+from typing import Callable, List, Optional
 
 import torch
 from torch import nn, Tensor
 from torchsummary import summary
 
-from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig, _MBConvConfig
 from torchvision.utils import _log_api_usage_once
-from torchvision.ops.misc import Conv2dNormActivation
 
 logger = logging.getLogger(__name__)
-
 
 
 class MLP(nn.Module):
@@ -82,10 +76,3 @@ class MLP(nn.Module):
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
-
-
-if __name__ == "__main__":
-    model = MLP(input_dim=10, output_dim=5, hidden_channels=[20, 100, 50])
-    summary(model, (1, 10), device="cpu")
-
-

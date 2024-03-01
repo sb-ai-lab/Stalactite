@@ -59,7 +59,6 @@ class LogisticRegressionBatch(torch.nn.Module):
     def get_weights(self) -> torch.Tensor:
         return self.linear.weight.clone()
 
-
     @property
     def init_params(self):
         return {

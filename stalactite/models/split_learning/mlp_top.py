@@ -1,20 +1,13 @@
-import copy
 import logging
 import math
-from functools import partial
-from typing import Callable, List, Optional, Sequence, Union, Tuple, Any
 
 
 import torch
 from torch import nn, Tensor
-from torchsummary import summary
 
-from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig, _MBConvConfig
 from torchvision.utils import _log_api_usage_once
-from torchvision.ops.misc import Conv2dNormActivation
 
 logger = logging.getLogger(__name__)
-
 
 
 class MLPTop(nn.Module):
@@ -58,20 +51,16 @@ class MLPTop(nn.Module):
     def update_weights(self, x: torch.Tensor, gradients: torch.Tensor, is_single: bool = False,
                        optimizer: torch.optim.Optimizer = None) -> Tensor:
         optimizer.zero_grad()
-
         if is_single:
             logit = self.forward(x)
             loss = self.criterion(torch.squeeze(logit), gradients.type(torch.FloatTensor))
             grads = torch.autograd.grad(outputs=loss, inputs=x, retain_graph=True)
-            loss.backward()  # todo: check if it works properly (updates weights only on master model)
+            loss.backward()
             optimizer.step()
             return grads[0]
         else:
-            # x.backward(gradient=gradients)
-            # optimizer.step()
             model_output = self.forward(x)
             model_output.backward(gradient=gradients)
-            # x.backward(gradient=gradients) #todo: rewise
             optimizer.step()
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:

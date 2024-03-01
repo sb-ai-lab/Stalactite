@@ -100,7 +100,3 @@ class ResNetBottom(nn.Module):
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
 
-
-if __name__ == "__main__":
-    model = ResNetBottom(input_dim=200, use_bn=True, hid_factor=[0.1, 0.1])
-    summary(model, input_size=(200,), device="cpu", batch_size=3)

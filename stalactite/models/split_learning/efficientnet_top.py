@@ -1,15 +1,12 @@
-import copy
 import math
 from functools import partial
-from typing import Callable, List, Optional, Sequence, Union, Tuple, Any
-
+from typing import Optional, Sequence, Union, Tuple
 
 import torch
 from torch import nn, Tensor
 
-from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig, _MBConvConfig
+from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig
 from torchvision.utils import _log_api_usage_once
-from torchvision.ops.misc import Conv2dNormActivation
 
 
 def _efficientnet_conf(
@@ -84,7 +81,6 @@ class EfficientNetTop(nn.Module):
     def update_weights(self, x: torch.Tensor, gradients: torch.Tensor, is_single: bool = False,
                        optimizer: torch.optim.Optimizer = None) -> Optional[Tensor]:
         optimizer.zero_grad()
-
         if is_single:
             logit = self.forward(x)
             loss = self.criterion(torch.squeeze(logit), gradients.type(torch.LongTensor))
@@ -93,11 +89,8 @@ class EfficientNetTop(nn.Module):
             optimizer.step()
             return grads[0]
         else:
-            # x.backward(gradient=gradients)
-            # optimizer.step()
             model_output = self.forward(x)
             model_output.backward(gradient=gradients)
-            # x.backward(gradient=gradients) #todo: rewise
             optimizer.step()
             
     def predict(self, x: torch.Tensor) -> torch.Tensor:

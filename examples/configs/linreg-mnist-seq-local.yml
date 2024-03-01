@@ -29,10 +29,15 @@ data:
   features_key: "image_part_"
   label_key: "label"
 
-
 prerequisites:
   mlflow_host: node3.bdcl
   mlflow_port: "5555"
 
 master:
   run_mlflow: False
+
+member:
+  member_model_params: {
+    output_dim: 1,
+    reg_lambda: 0.5
+  }

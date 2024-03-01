@@ -10,6 +10,7 @@ from torchsummary import summary
 
 logger = logging.getLogger(__name__)
 
+
 class GaussianNoise(nn.Module):
     """Adds gaussian noise.
 
@@ -157,7 +158,6 @@ class ResNet(nn.Module):
                 if init_weights:
                     nn.init.constant_(m.weight, init_weights)
                 nn.init.zeros_(m.bias)
-
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward-pass."""

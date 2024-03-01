@@ -1,23 +1,15 @@
-from typing import List, Optional, Any
+from typing import Optional, Any
 import logging
-import time
 from typing import List
-from copy import copy
 
 import mlflow
 import torch
 from sklearn import metrics
-from sklearn.metrics import roc_auc_score
-from torch import nn
-from torchsummary import summary
 
-from stalactite.base import PartyDataTensor, DataTensor
-from stalactite.base import (Batcher, DataTensor, PartyDataTensor, PartyMaster, PartyCommunicator, Method, MethodKwargs)
+from stalactite.base import DataTensor, PartyDataTensor
 from stalactite.batching import ConsecutiveListBatcher, ListBatcher
-from stalactite.metrics import ComputeAccuracy
 from stalactite.ml.honest.base import HonestPartyMaster, Batcher
-from stalactite.metrics import ComputeAccuracy, ComputeAccuracy_numpy
-from stalactite.models.split_learning import EfficientNetTop, MLPTop, ResNetTop
+from stalactite.metrics import ComputeAccuracy
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -85,36 +77,8 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         self.aggregated_output = None
         self._model_params = model_params
 
-    def initialize_model(self):
+    def initialize_model(self, do_load_model: bool = False):
         pass
-    # def initialize_model(self) -> None:
-    #
-    #     """ Initialize the model based on the specified model name. """
-    #     if self._model_name == "efficientnet":
-    #         self._model = EfficientNetTop(**self._model_params)
-    #         logger.info(summary(self._model, (self._model_params["input_dim"], 1, 1), device="cpu"))
-    #     elif self._model_name == "mlp":
-    #         self._model = MLPTop(**self._model_params)
-    #     elif self._model_name == "resnet":
-    #         self._model = ResNetTop(**self._model_params)
-    #         logger.info(
-    #             summary(self._model, (self._model_params["input_dim"],),
-    #                     device="cpu", batch_size=self._batch_size)
-    #         )
-    #     else:
-    #         raise ValueError("unknown model %s" % self._model_name)
-    #
-    #     if self._model_name in ["mlp", "resnet"]:
-    #         self._criterion = nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
-    #         self._activation = nn.Sigmoid()
-    #     elif self._model_name in ["efficientnet"]:
-    #         self._criterion = nn.CrossEntropyLoss(weight=self.class_weights)
-    #         self._activation = nn.Softmax(dim=1)
-    #     else:
-    #         raise ValueError("unknown model %s" % self._model_name)
-    #
-    #     if self.run_mlflow:
-    #         mlflow.log_param("init_weights", self._model_params.get("init_weights", None))
 
     def initialize_optimizer(self) -> None:
         pass

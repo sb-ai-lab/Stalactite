@@ -2,14 +2,13 @@ import copy
 import logging
 import math
 from functools import partial
-from typing import Callable, List, Optional, Sequence, Union, Tuple, Any
+from typing import Callable, List, Optional, Sequence, Union, Tuple
 
 
 import torch
 from torch import nn, Tensor
-from torchsummary import summary
 
-from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig, _MBConvConfig
+from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig
 from torchvision.utils import _log_api_usage_once
 from torchvision.ops.misc import Conv2dNormActivation
 
@@ -73,7 +72,7 @@ class EfficientNet(nn.Module):
             Conv2dNormActivation(
                 1, firstconv_output_channels, kernel_size=3, stride=2, norm_layer=norm_layer,
                 activation_layer=nn.SiLU
-            ) #todo: add in_channels to init params
+            )
         )
 
         # building inverted residual blocks
@@ -164,14 +163,4 @@ class EfficientNet(nn.Module):
 
     def get_weights(self) -> torch.Tensor:
         return self.linear.weight.clone()
-
-
-if __name__ == "__main__":
-    model = EfficientNet(width_mult=0.1, depth_mult=0.1, dropout=0.2)
-    # model2 = torchvision.models.efficientnet_b0()
-    # print(model)
-    # print(model2)
-    summary(model, (1, 28, 28), device="cpu")
-    # summary(model2, (3, 224, 224))
-
 

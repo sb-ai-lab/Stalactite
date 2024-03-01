@@ -2,7 +2,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 import logging
-from typing import List, Optional, Tuple, Any, Iterator, Union, Dict
+from typing import List, Optional, Tuple, Dict
 
 import datasets
 import scipy as sp
@@ -42,7 +42,6 @@ class HonestPartyMaster(PartyMaster, ABC):
         :return: Initial updates as a list of tensors.
         """
         ...
-
 
     @abstractmethod
     def initialize_model(self, do_load_model: bool = False) -> None:
@@ -359,6 +358,7 @@ class HonestPartyMember(PartyMember, ABC):
 
         if do_save_model and model_path is None:
             raise ValueError('You must set the model path to save the model (`do_save_model` is True).')
+
     @abstractmethod
     def initialize_model(self, do_load_model: bool = False) -> None:
         """ Initialize the model based on the specified model name. """
@@ -526,7 +526,7 @@ class HonestPartyMember(PartyMember, ABC):
         :param uids: List of unique identifiers for dataset rows.
         :param batch_size: Size of the training batch.
         """
-        logger.info("Member %s: making a make_batcher for uids" % (self.id))
+        logger.info("Member %s: making a make_batcher for uids" % self.id)
         self.check_if_ready()
         if not self.is_consequently:
             return ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)

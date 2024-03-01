@@ -1,20 +1,15 @@
-import copy
 import logging
 import math
-from functools import partial
-from typing import Callable, List, Optional, Sequence, Union, Tuple, Any
+from typing import Callable, List, Optional
 
 
 import torch
 from torch import nn, Tensor
 from torchsummary import summary
 
-from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig, _MBConvConfig
 from torchvision.utils import _log_api_usage_once
-from torchvision.ops.misc import Conv2dNormActivation
 
 logger = logging.getLogger(__name__)
-
 
 
 class MLPBottom(nn.Module):
@@ -36,9 +31,6 @@ class MLPBottom(nn.Module):
 
         if multilabel:
             self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
-        else:
-            raise ValueError()
-            # self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
         layers = []
         in_dim = input_dim
@@ -78,9 +70,3 @@ class MLPBottom(nn.Module):
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
-
-
-if __name__ == "__main__":
-    model = MLPBottom(input_dim=200, hidden_channels=[1000, 300, 100])
-    summary(model, (200,), device="cpu", batch_size=3)
-

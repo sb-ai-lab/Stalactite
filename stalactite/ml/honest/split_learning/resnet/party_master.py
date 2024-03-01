@@ -3,7 +3,7 @@ from typing import List
 
 import torch
 from torch import nn
-from stalactite.models.split_learning import EfficientNetTop, MLPTop, ResNetTop
+from stalactite.models.split_learning import ResNetTop
 from stalactite.ml.honest.split_learning.base import HonestPartyMasterSplitNN
 from stalactite.base import DataTensor, PartyDataTensor
 

@@ -1,8 +1,6 @@
 import logging
 from collections import OrderedDict
-from typing import List
 from typing import Optional
-from typing import Union
 
 import torch
 from torch import nn, Tensor
@@ -75,7 +73,6 @@ class ResNetTop(nn.Module):
         else:
             model_output = self.forward(x)
             model_output.backward(gradient=gradients)
-            # x.backward(gradient=gradients) #todo: rewise
             optimizer.step()
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
