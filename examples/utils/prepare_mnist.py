@@ -1,6 +1,7 @@
 import numpy as np
 import shutil
 from pathlib import Path
+import argparse
 
 import datasets
 from torchvision import transforms
@@ -167,3 +168,16 @@ def load_data(save_path, parts_num, binary: bool = True):
     # Save the whole dataset:
     # Saving parameters:
     save_splitted_dataset(rr, path=save_dir, clean_dir=False)
+    
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Command line params')
+    
+    parser.add_argument('--save_path', type=str, default='~/stalactite_data', help='Path where the splitted data is saved to')
+    parser.add_argument('--members_no', type=int, default=3, help='Amount of parties (members)')
+    
+    args = parser.parse_args()
+    save_path = Path(args.save_path).absolute() / ('mnist_binary38_parts_' + str(args.members_no))
+    
+    load_data(save_path, args.members_no)
+    
+    print(f"Splitted data is saved to: {save_path}")
