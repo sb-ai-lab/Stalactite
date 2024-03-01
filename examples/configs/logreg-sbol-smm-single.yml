@@ -1,32 +1,33 @@
 common:
-  epochs: 5
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 1
-  batch_size: 2500
   experiment_label: experiment-sbol-smm-centralized
-  reports_export_folder: "../../reports" #
+  reports_export_folder: "../../reports"
+
+vfl_model:
+  epochs: 1
+  batch_size: 2500
   vfl_model_name: logreg
   is_consequently: False
-  learning_rate: 0.2
   use_class_weights: False
+  learning_rate: 0.2
 
 prerequisites:
-  mlflow_host: 'node16.bdcl'
-  mlflow_port: '9876'
+  mlflow_host: 'node3.bdcl'
+  mlflow_port: '5555'
 
 master:
-  container_host: 'node16.bdcl'
-  run_mlflow: True
+  container_host: 'node3.bdcl'
+  run_mlflow: False
 
 data:
   random_seed: 0
   dataset_size: 8500
-  dataset: 'sbol'
-  use_smm: True
-  host_path_data_dir: /home/dmitriy/data/my_test/vfl_multilabel_sber_sample10000_parts1
-  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
-  train_split: "train_train" # name of the train split
-  test_split: "train_val" # name of the test split
+  dataset: 'sbol_smm'
+  host_path_data_dir: ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts1
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
   features_key: "features_part_"
   label_key: "labels"

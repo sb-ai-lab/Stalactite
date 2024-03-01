@@ -17,6 +17,7 @@ stalactite.data_preprocessors.image_preprocessor
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 The data supplied to the ImagePreprocessor input are vertically separated PIL images. Conversion to this form from the MNIST dataset make in prepare_mnist.load_data:
 

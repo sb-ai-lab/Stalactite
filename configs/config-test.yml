@@ -2,18 +2,21 @@
 # Set directories paths before running tests. For experiments, copy the file contents into `config.yml`
 
 common:
-  epochs: 1
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 2
-  batch_size: 1000
   experiment_label: test-experiment-0
   reports_export_folder: "." # todo: Path to export tests logs and reports
+  rendezvous_timeout: 360
+  world_size: 2
+
+vfl_model:
+  epochs: 1
+  batch_size: 1000
   vfl_model_name: linreg
   is_consequently: False
   learning_rate: 0.2
   use_class_weights: False
-  rendezvous_timeout: 360
+
 
 prerequisites:
   mlflow_host: 'node3.bdcl'

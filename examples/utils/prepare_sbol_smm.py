@@ -65,7 +65,3 @@ def load_data(data_dir_path: str, parts_num: int = 2):
         ds.save_to_disk(
             os.path.join(data_dir_path, f"vfl_multilabel_sber_sample{sample}_parts{parts_num}", f"part_{part}")
         )
-
-
-if __name__ == "__main__":
-    load_data("/home/dmitriy/data/my_test")

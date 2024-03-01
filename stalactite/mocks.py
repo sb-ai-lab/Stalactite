@@ -17,17 +17,17 @@ from stalactite.batching import ListBatcher
 logger = logging.getLogger(__name__)
 
 
-class MockPartyMasterImpl(PartyMaster): # TODO
+class MockPartyMasterImpl(PartyMaster):  # TODO
     def __init__(
-        self,
-        uid: str,
-        epochs: int,
-        report_train_metrics_iteration: int,
-        report_test_metrics_iteration: int,
-        target: DataTensor,
-        target_uids: List[str],
-        batch_size: int,
-        model_update_dim_size: int,
+            self,
+            uid: str,
+            epochs: int,
+            report_train_metrics_iteration: int,
+            report_test_metrics_iteration: int,
+            target: DataTensor,
+            target_uids: List[str],
+            batch_size: int,
+            model_update_dim_size: int,
     ):
         self.id = uid
         self.epochs = epochs
@@ -47,7 +47,7 @@ class MockPartyMasterImpl(PartyMaster): # TODO
         self.is_initialized = True
 
     def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
-        logger.info("Master %s: making a batcher for uids %s" % (self.id, uids))
+        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, uids))
         self._check_if_ready()
         return ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
 
@@ -64,26 +64,26 @@ class MockPartyMasterImpl(PartyMaster): # TODO
         logger.info(f"Master %s: mock metrics (MAE): {error}" % error)
 
     def aggregate(
-        self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
+            self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
     ) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
         return torch.mean(torch.stack(party_predictions, dim=1), dim=1)
 
     def compute_updates(
-        self,
-        participating_members: List[str],
-        predictions: DataTensor,
-        party_predictions: PartyDataTensor,
-        world_size: int,
-        subiter_seq_num: int,
+            self,
+            participating_members: List[str],
+            predictions: DataTensor,
+            party_predictions: PartyDataTensor,
+            world_size: int,
+            subiter_seq_num: int,
     ) -> List[DataTensor]:
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
         return [torch.rand(self._weights_dim) for _ in range(world_size)]
 
-    def master_finalize(self):
+    def finalize(self):
         logger.info("Master %s: finalizing" % self.id)
         self._check_if_ready()
         self.is_finalized = True
@@ -94,7 +94,16 @@ class MockPartyMasterImpl(PartyMaster): # TODO
 
 
 class MockPartyMemberImpl(PartyMember):
-    def __init__(self, uid: str, model_update_dim_size: int, member_record_uids: List[str]):
+    def __init__(
+            self,
+            uid: str,
+            model_update_dim_size: int,
+            member_record_uids: List[str],
+            epochs: int,
+            batch_size: int,
+            report_train_metrics_iteration: int,
+            report_test_metrics_iteration: int,
+    ):
         self.id = uid
         self._uids = member_record_uids
         self._uids_to_use: Optional[List[str]] = None
@@ -104,6 +113,11 @@ class MockPartyMemberImpl(PartyMember):
         self._weights_dim = model_update_dim_size
         self._data: Optional[DataTensor] = None
         self.iterations_counter = 0
+        self.epochs = epochs
+        self._batch_size = batch_size
+        self._batcher: Optional[Batcher] = None
+        self.report_train_metrics_iteration = report_train_metrics_iteration
+        self.report_test_metrics_iteration = report_test_metrics_iteration
 
     def records_uids(self) -> List[str]:
         logger.info("Member %s: reporting existing record uids" % self.id)
@@ -112,11 +126,11 @@ class MockPartyMemberImpl(PartyMember):
     def register_records_uids(self, uids: List[str]):
         logger.info("Member %s: registering uids to be used: %s" % (self.id, uids))
         self._uids_to_use = uids
+        self._data = torch.rand(len(self._uids_to_use), self._weights_dim)
 
     def initialize(self):
         logger.info("Member %s: initializing" % self.id)
         self._weights = torch.rand(self._weights_dim)
-        self._data = torch.rand(len(self._uids_to_use), self._weights_dim)
         self.is_initialized = True
         logger.info("Member %s: has been initialized" % self.id)
 
@@ -159,3 +173,18 @@ class MockPartyMemberImpl(PartyMember):
     def _check_if_ready(self):
         if not self.is_initialized and not self.is_finalized:
             raise RuntimeError("The member has not been initialized")
+
+    def _create_batcher(self, epochs: int, uids: List[str], batch_size: int) -> None:
+        logger.info("Member %s: making a make_batcher for uids" % (self.id))
+        self._check_if_ready()
+        self._batcher = ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
+
+    @property
+    def make_batcher(self) -> Batcher:
+        if self._batcher is None:
+            if self._uids_to_use is None:
+                raise RuntimeError("Cannot create make_batcher, you must `register_records_uids` first.")
+            self._create_batcher(epochs=self.epochs, uids=self._uids_to_use, batch_size=self._batch_size)
+        else:
+            logger.info("Member %s: using created make_batcher" % (self.id))
+        return self._batcher

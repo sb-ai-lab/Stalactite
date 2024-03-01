@@ -1,11 +1,13 @@
 common:
-  epochs: 5
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
-  batch_size: 1000
   experiment_label: experiment-vm
   reports_export_folder: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/reports"
+
+vfl_model:
+  epochs: 1
+  vfl_model_name: linreg
 
 prerequisites:
   mlflow_host: 'node3.bdcl'

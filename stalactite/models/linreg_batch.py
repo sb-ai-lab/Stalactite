@@ -22,6 +22,9 @@ class LinearRegressionBatch(torch.nn.Module):
         self.linear = torch.nn.Linear(input_dim, output_dim, bias=False, device=None, dtype=None)
         self.reg_lambda = reg_lambda
         self.requires_grad_(False)  # turn off gradient computation
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.reg_lambda = reg_lambda
 
     def forward(self, x):
         # try:
@@ -50,3 +53,11 @@ class LinearRegressionBatch(torch.nn.Module):
         # import pdb; pdb.set_trace()
         weights = self.linear.weight.clone()
         return weights
+
+    @property
+    def init_params(self):
+        return {
+            'input_dim': self.input_dim,
+            'output_dim': self.output_dim,
+            'reg_lambda': self.reg_lambda,
+        }

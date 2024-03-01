@@ -14,19 +14,31 @@ Common parameters are required in any experiment and define general experimental
 .. code-block:: yaml
 
     common:
-      epochs: # Number of training epochs
       report_train_metrics_iteration: # Number of iteration steps between reporting metrics on train dataset split
       report_test_metrics_iteration: # Number of iteration steps between reporting metrics on test dataset split
       world_size: # Number of members in an experiment
-      batch_size: # Training batch size
       experiment_label: # Label of the experiment
       reports_export_folder: # Path to export tests logs and reports
+      rendezvous_timeout: # If master and members do not finish rendezvous in a given time, TimeoutError is raised
+
+VFL model are training and model specific parameters also used in any experiment.
+
+.. code-block:: yaml
+
+    vfl_model:
       vfl_model_name: # Model name to train
-      # For local experiment with `linreg` model you can choose the consequent batcher, to update on member at a time
-      is_consequently: False # Set True for consequent batcher
+      vfl_model_path: # Directory to save the model for further evaluation
+      do_train: # Whether to do training of the model
+      do_predict: # Whether to do evaluation of the model
+      do_save_model: # Whether to save the model to the `vfl_model_path` after training
+      epochs: # Number of training epochs
+      batch_size: # Training batch size
+      eval_batch_size: # Evaluation batch size
+      # For local experiment with `linreg` model you can choose the consequent make_batcher, to update on member at a time
+      is_consequently: False # Set True for consequent make_batcher
       learning_rate: # Experiment learning rate
       use_class_weights: # Used in `logreg`
-      rendezvous_timeout: # If master and members do not finish rendezvous in a given time, TimeoutError is raised
+
 
 Same applies to data parameters, which are required in each experiment and define main specifics of the dataset
 used for training and validation.

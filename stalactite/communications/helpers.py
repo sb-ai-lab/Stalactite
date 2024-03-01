@@ -30,3 +30,4 @@ METHOD_VALUES = {
 class ParticipantType(enum.Enum):
     master = "master"
     member = "member"
+    arbiter = "arbiter"

@@ -74,6 +74,7 @@ For the full description on the configuration file fields checkout: :ref:`config
 Configuration file contains settings for all the parts of the experiment:
 
 * ``common`` group contains general experimental settings;
+* ``vfl_model`` group training and model specific settings;
 * ``data`` part adjusts custom dataset into the experiment;
 * ``prerequisites`` section manages the MlFlow anf Prometheus usage for logging and monitoring;
 * ``grpc_server`` section used only in distributed experiments and configures the gRPC server used in communication between VFL agents;
@@ -140,7 +141,7 @@ is basically same to the `Linear regression on MNIST`_ example, except for the f
 
 .. code-block:: yaml
 
-    common:
+    vfl_model:
       is_consequently: True
 
 Do not forget to pass all the paths and check the MlFlow server configuration.
@@ -163,7 +164,7 @@ altered:
 
 .. code-block:: yaml
 
-    common:
+    vfl_model:
       vfl_model_name: logreg
       is_consequently: False
       use_class_weights: False
@@ -195,7 +196,7 @@ Logistic regression on SBOL and SMM (MP)
 
 We implemented helper shell script which demonstrates the usage of main Stalactite CLI commands for mutliple process
 experiments (``examples/vfl/distributed/multiprocess/logreg_sbol_smm_multiprocess``)
-The configuration file can be found at: ``examples/configs/logreg-sbol-smm-multiprocess.yml``
+The configuration file can be found at: ``examples/configs/logreg-sbol-smm-vm-yc.yml``
 
 The main difference between distributed launch and `Logistic regression on SBOL and SMM`_ is the communicator. Instead
 of LocalCommunicator we use gRPC server for master and member communications running in the background in the
@@ -275,7 +276,7 @@ Logistic regression on SBOL and SMM (MH)
 For each host e use the same configuration file (in your experiment you might want to get different configs for hosts
 to customize paths). As the experiment example in launched across three virtual machines with the master running on the
 Yandex Cloud (``yc``), the configuration file for the MH experiment can be found at
-``examples/configs/logreg-sbol-smm-vm-yc.yml``.
+``examples/configs/logreg-sbol-smm-vm-yc.yml`` (same config as in MP experiment).
 
 Due to the master and prerequisites (if started) are launched on the same host, the config contain the master host info,
 including:

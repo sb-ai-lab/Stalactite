@@ -23,11 +23,6 @@ from stalactite.data_preprocessors.base_preprocessor import DataPreprocessor
 
 logger = logging.getLogger(__name__)
 
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
-
 
 class PartySingle:
     """ Single-agent (centralized) experiment runner class. """
@@ -82,7 +77,7 @@ class PartySingle:
         self.finalize()
 
     def loop(self, batcher: Batcher) -> None:
-        """ Perform training iterations using the given batcher.
+        """ Perform training iterations using the given make_batcher.
 
         :param batcher: An iterable batch generator used for training.
         :return: None
@@ -119,7 +114,7 @@ class PartySingle:
         return [str(x) for x in self.target_uids]
 
     def make_batcher(self, uids: List[str]) -> Batcher:
-        """ Create a batcher based on the provided UUIDs.
+        """ Create a make_batcher based on the provided UUIDs.
 
         :param uids: List of UUIDs.
         :return: A Batcher object.

@@ -23,24 +23,44 @@ class LogisticRegressionBatch(torch.nn.Module):
         if init_weights is not None:
             self.linear.weight.data = torch.full((output_dim, input_dim), init_weights)
 
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
     def forward(self, x: torch.Tensor):
         return self.linear(x)
 
-    def update_weights(self, x: torch.Tensor, gradients: torch.Tensor, is_single: bool = False, criterion=None,
-                       optimizer: torch.optim.Optimizer = None) -> None:
-        optimizer.zero_grad()
-        logit = self.forward(x)
-        if is_single:
-            targets_type = torch.LongTensor if isinstance(self._criterion,
-                                                          torch.nn.CrossEntropyLoss) else torch.FloatTensor
-            loss = criterion(torch.squeeze(logit), gradients.type(targets_type))
-            loss.backward()
+    def update_weights(
+            self,
+            x: torch.Tensor,
+            gradients: torch.Tensor,
+            is_single: bool = False,
+            collected_from_arbiter: bool = False
+    ) -> None:
+        if collected_from_arbiter:
+            updated_weight = self.linear.weight.data.clone() - gradients.T
+            self.linear.weight.data = updated_weight
         else:
-            logit.backward(gradient=gradients)
-        optimizer.step()
+            optimizer.zero_grad()
+            logit = self.forward(x)
+            if is_single:
+                targets_type = torch.LongTensor if isinstance(self._criterion,
+                                                              torch.nn.CrossEntropyLoss) else torch.FloatTensor
+                loss = criterion(torch.squeeze(logit), gradients.type(targets_type))
+                loss.backward()
+            else:
+                logit.backward(gradient=gradients)
+            optimizer.step()
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
 
     def get_weights(self) -> torch.Tensor:
         return self.linear.weight.clone()
+
+
+    @property
+    def init_params(self):
+        return {
+            'input_dim': self.input_dim,
+            'output_dim': self.output_dim,
+        }

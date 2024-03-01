@@ -17,25 +17,17 @@ used. Import it and load the parameters by running
     def run(config_path: str):
         config = VFLConfig.load_and_validate(config_path)
 
-Then, define the structure of the MlFlow run:
+Then, define the structure of the MlFlow run by calling the context manager:
 
 .. code-block:: python
 
-    import mlflow
+    from stalactite.helpers import reporting
 
     def run(config_path: str):
         ...
-        if config.master.run_mlflow:
-            mlflow.set_tracking_uri(f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}")
-            mlflow.set_experiment(config.common.experiment_label)
-            mlflow.start_run()
-
-        # Experiment goes here
-        ...
-
-        if config.master.run_mlflow:
-                mlflow.end_run()
-
+        with reporting(config):
+            # Experiment goes here
+            ...
 
 For the experiment you will need the preprocessors to pass into the agents. For this purpose, we
 define the ``load_processors`` function
@@ -48,9 +40,7 @@ define the ``load_processors`` function
     from examples.utils.prepare_mnist import load_data as load_mnist
     from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
 
-    def load_processors(config_path: str):
-        config = VFLConfig.load_and_validate(config_path)
-
+    def load_processors(config):
         if config.data.dataset.lower() == "mnist":
 
             if not os.path.exists(config.data.host_path_data_dir):
@@ -88,11 +78,12 @@ define the ``load_processors`` function
     def run(config_path: str):
         ...
         model_name = config.common.vfl_model_name
-        processors = load_processors(config_path)
+        processors = load_processors(config)
         # Processors prepare and contain data for each agent
 
         # We initialize the target uids here because we want to simulate only partially available data
         target_uids = [str(i) for i in range(config.data.dataset_size)]
+        inference_target_uids = [str(i) for i in range(500)]
         # Local communicator requires party information, we initialize it as an empty dictionary as no data is passed for
         # the experiment
         shared_party_info = dict()
@@ -103,27 +94,40 @@ After we can get all required data, let's initialize the master class
 
 .. code-block:: python
 
-    from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
+    from stalactite.ml import (
+        HonestPartyMasterLinRegConsequently,
+        HonestPartyMasterLinReg,
+        HonestPartyMemberLogReg,
+        HonestPartyMemberLinReg,
+        HonestPartyMasterLogReg
+    )
 
     def run(config_path: str):
         ...
-        if 'logreg' in config.common.vfl_model_name:
-            master_class = PartyMasterImplLogreg
+        if 'logreg' in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterLogReg
+            member_class = HonestPartyMemberLogReg
         else:
-            if config.common.is_consequently:
-                master_class = PartyMasterImplConsequently
+            member_class = HonestPartyMemberLinReg
+            if config.vfl_model.is_consequently:
+                master_class = HonestPartyMasterLinRegConsequently
             else:
-                master_class = PartyMasterImpl
+                master_class = HonestPartyMasterLinReg
+
         master = master_class(
             uid="master",
-            epochs=config.common.epochs,
+            epochs=config.vfl_model.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
             processor=processors[0], # For the master we take the first processor
             target_uids=target_uids,
-            batch_size=config.common.batch_size,
+            inference_target_uids=inference_target_uids,
+            batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
             model_update_dim_size=0, # Let us leave this parameter as is, it will be updated later
             run_mlflow=config.master.run_mlflow,
+            do_train=config.vfl_model.do_train,
+            do_predict=config.vfl_model.do_predict,
         )
         ....
 
@@ -135,23 +139,29 @@ After the master is ready, we need to prepare the members:
     def run(config_path: str):
         ...
         # Members ids are required before the initialization only in local sequential linear regression case
-        # for the batcher initialization (it needs to have a list of the participants),
+        # for the make_batcher initialization (it needs to have a list of the participants),
         # and are not applicable or used in other cases
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
 
         members = [
-            PartyMemberImpl(
+            member_class(
                 uid=member_uid,
                 member_record_uids=target_uids,
-                model_name=config.common.vfl_model_name,
+                member_inference_record_uids=inference_target_uids,
+                model_name=config.vfl_model.vfl_model_name,
                 processor=processors[member_rank],
-                batch_size=config.common.batch_size,
-                epochs=config.common.epochs,
+                batch_size=config.vfl_model.batch_size,
+                eval_batch_size=config.vfl_model.eval_batch_size,
+                epochs=config.vfl_model.epochs,
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-                is_consequently=config.common.is_consequently,
-                members=member_ids if config.common.is_consequently else None,
+                is_consequently=config.vfl_model.is_consequently,
+                members=member_ids if config.vfl_model.is_consequently else None,
+                do_train=config.vfl_model.do_train,
+                do_predict=config.vfl_model.do_predict,
+                do_save_model=config.vfl_model.do_save_model,
+                model_path=config.vfl_model.vfl_model_path
             )
             for member_rank, member_uid in enumerate(member_ids)
         ]
@@ -194,33 +204,21 @@ facilitate operations between master and members.
             logger.info("Finishing thread %s" % threading.current_thread().name)
         ...
 
-Now we can finalize the `run` by starting and joining the threads.
+Now we can finalize the `run` by starting and joining the threads using the utility function ``run_local_agents``.
 
 .. code-block:: python
 
-    from threading import Thread
+    from stalactite.helpers import run_local_agents
 
     def run(config_path: str):
         ...
 
-        threads = [
-            Thread(name=f"main_{master.id}", daemon=True, target=local_master_main),
-            *(
-                Thread(
-                    name=f"main_{member.id}",
-                    daemon=True,
-                    target=local_member_main,
-                    args=(member,)
-                )
-                for member in members
-            )
-        ]
-
-        for thread in threads:
-            thread.start()
-
-        for thread in threads:
-            thread.join()
+        run_local_agents(
+            master=master,
+            members=members,
+            target_master_func=local_master_main,
+            target_member_func=local_member_main
+        )
 
 The full example is available in our `github <https://github.com/sb-ai-lab/vfl-benchmark/tree/main>`_ at
 ``examples/utils/local_experiment.py``.

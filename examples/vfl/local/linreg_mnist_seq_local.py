@@ -1,9 +1,7 @@
-import os
-from pathlib import Path
-
 from examples.utils.local_experiment import run
+from examples.utils.helpers import path_from_root
 
-CONFIG_PATH = os.path.join(Path(__file__).parent.parent.parent, 'configs/linreg-mnist-seq-local.yml')
+CONFIG_PATH = path_from_root('examples/configs/linreg-mnist-seq-local.yml')
 
 if __name__ == "__main__":
     run(CONFIG_PATH)

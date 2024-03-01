@@ -37,8 +37,9 @@ def load_yaml_config(yaml_path: Union[str, Path]) -> dict:
 
 class CommonConfig(BaseModel):
     """Common experimental parameters config."""
+    use_grpc: bool = Field(default=False, description="Whether to use local or gRPC-based communicators")
 
-    epochs: int = Field(default=3, description="Number of epochs to train a model")
+    # epochs: int = Field(default=3, description="Number of epochs to train a model")
     world_size: int = Field(default=2, description="Number of the VFL member agents (without the master)")
     report_train_metrics_iteration: int = Field(
         default=1,
@@ -48,7 +49,7 @@ class CommonConfig(BaseModel):
         default=1,
         description="Number of iteration steps between reporting metrics on test dataset split."
     )
-    batch_size: int = Field(default=100, description="Batch size used for training")
+    # batch_size: int = Field(default=100, description="Batch size used for training")
     experiment_label: str = Field(
         default="default-experiment",
         description="Experiment name used in prerequisites, if unset, defaults to `default-experiment`",
@@ -57,6 +58,12 @@ class CommonConfig(BaseModel):
         default=Path(__file__).parent, description="Folder for exporting tests` and experiments` reports"
     )
     rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec")
+
+
+class VFLModelConfig(BaseModel):
+    epochs: int = Field(default=3, description="Number of epochs to train a model")
+    batch_size: int = Field(default=100, description="Batch size used for training")
+    eval_batch_size: int = Field(default=100, description="Batch size used for evaluation")
     vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn', 'efficientnet', 'mlp', 'resnet'] = Field(
         default='linreg',
         description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`, `efficientnet`, `mlp`, `resnet`'
@@ -65,6 +72,13 @@ class CommonConfig(BaseModel):
     use_class_weights: bool = Field(default=False, description='Logistic regression')  # TODO
     learning_rate: float = Field(default=0.01, description='Learning rate')
     momentum: float = Field(default=0, description='Momentum')
+    do_train: bool = Field(default=True, description='Whether to run a training loop.')
+    do_predict: bool = Field(default=True, description='Whether to run an inference loop.')
+    do_save_model: bool = Field(default=True, description='Whether to save the model after training.')
+    vfl_model_path: str = Field(
+        default='.',
+        description="Directory to save the model after the training or load the model for inference"
+    )
 
 
 class DataConfig(BaseModel):
@@ -74,16 +88,13 @@ class DataConfig(BaseModel):
                              description="Experiment data random seed (including random, numpy, torch)")  # TODO use?
     dataset_size: int = Field(default=1000, description="Number of dataset rows to use")
     host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
-    dataset: Literal['mnist', 'sbol', 'smm'] = Field(
+    dataset: Literal['mnist', 'sbol', 'sbol_smm'] = Field(
         default='mnist',
-        description='Dataset type. One of `mnist`, `sbol`'
+        description='Dataset type. One of `mnist`, `sbol`, `sbol_smm`'
     )
-    use_smm: bool = Field(default=False)  # TODO use?
     dataset_part_prefix: str = Field(default='part_')  # TODO use?
     train_split: str = Field(default='train_train')
     test_split: str = Field(default='train_val')
-    features_data_preprocessors: List[str] = Field(default_factory=list)  # TODO use?
-    label_data_preprocessors: List[str] = Field(default_factory=list)  # TODO use?
     features_key: str = Field(default="image_part_")
     label_key: str = Field(default="label")
 
@@ -114,38 +125,18 @@ class GRpcServerConfig(GRpcConfig):
     """gRPC server and servicer parameters config."""
 
 
+class PaillierSPParams(BaseModel):
+    """ Security protocol parameters if the Paillier is used. """
+    precision: float = Field(default=1e-8, description='Precision of the paillier encoding.')
+    n_threads: int = Field(default=None, description='Number of threads to use for computations')
+
+
 class GRpcArbiterConfig(GRpcConfig):
     """gRPC arbiter server and servicer parameters config."""
-
     container_host: str = Field(default="0.0.0.0", description="Host of the container with gRPC arbiter service")
     use_arbiter: bool = Field(default=False, description="Whether to include arbiter for VFL with HE")
     grpc_operations_timeout: float = Field(default=300, description="Timeout of the unary calls to gRPC arbiter server")
-    ts_algorithm: Literal["CKKS", "BFV"] = Field(default="CKKS", description="Tenseal scheme to use")
-    ts_poly_modulus_degree: int = Field(default=8192, description="Tenseal `poly_modulus_degree` param")
-    ts_coeff_mod_bit_sizes: Optional[list[int]] = Field(default=None, description="Tenseal `coeff_mod_bit_sizes` param")
-    ts_global_scale_pow: int = Field(
-        default=20, description="Tenseal `global_scale` parameter will be calculated as 2 ** ts_global_scale_pow"
-    )
-    ts_plain_modulus: Optional[int] = Field(
-        default=None, description="Tenseal `plain_modulus` param. Should not be passed when the scheme is CKKS."
-    )
-    ts_generate_galois_keys: bool = Field(
-        default=True,
-        description="Whether to generate galois keys (galois keys are required to do ciphertext rotations)",
-    )
-    ts_generate_relin_keys: bool = Field(
-        default=True, description="Whether to generate relinearization keys (needed for encrypted multiplications)"
-    )
-    ts_context_path: Optional[str] = Field(default=None, description="Path to saved Tenseal private context file.")
-
-    @field_validator("ts_algorithm")
-    @classmethod
-    def validate_ts_algorithm(cls, v: str):
-        mapping = {
-            "CKKS": ts.SCHEME_TYPE.CKKS,
-            "BFV": ts.SCHEME_TYPE.BFV,
-        }
-        return mapping.get(v, ts.SCHEME_TYPE.CKKS)
+    security_protocol_params: Optional[PaillierSPParams] = Field(default=None)
 
 
 class PartyConfig(BaseModel):
@@ -212,6 +203,7 @@ class VFLConfig(BaseModel):
     """Experimental parameters general config."""
 
     common: CommonConfig = Field(default_factory=CommonConfig)
+    vfl_model: VFLModelConfig = Field(default_factory=VFLModelConfig)
     data: DataConfig = Field(default_factory=DataConfig)
     prerequisites: PrerequisitesConfig = Field(default_factory=PrerequisitesConfig)
     grpc_server: GRpcServerConfig = Field(default_factory=GRpcServerConfig)
@@ -232,7 +224,7 @@ class VFLConfig(BaseModel):
                 f"{self.master.disconnect_idle_client_time}, respectively."
             )
 
-        if self.grpc_arbiter.use_arbiter:
+        if self.grpc_arbiter.use_arbiter and self.common.use_grpc:
             if (
                     f"{self.grpc_arbiter.host}:{self.grpc_arbiter.port}"
                     == f"{self.grpc_server.host}:{self.grpc_server.port}"
@@ -268,8 +260,14 @@ class VFLConfig(BaseModel):
         if not os.path.isabs(reports_dir):
             reports_dir = os.path.normpath(os.path.join(self.config_dir_path, reports_dir))
         os.makedirs(reports_dir, exist_ok=True)
-        return self
 
+        if not os.path.isabs(self.vfl_model.vfl_model_path):
+            self.vfl_model.vfl_model_path = os.path.normpath(
+                os.path.join(self.config_dir_path, self.vfl_model.vfl_model_path)
+            )
+        os.makedirs(self.vfl_model.vfl_model_path, exist_ok=True)
+
+        return self
 
     @classmethod
     def load_and_validate(cls, config_path: str):
