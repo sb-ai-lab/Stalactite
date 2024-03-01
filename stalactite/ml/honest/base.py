@@ -43,6 +43,17 @@ class HonestPartyMaster(PartyMaster, ABC):
         """
         ...
 
+
+    @abstractmethod
+    def initialize_model(self, do_load_model: bool = False) -> None:
+        """ Initialize the model based on the specified model name. """
+        ...
+
+    @abstractmethod
+    def initialize_optimizer(self) -> None:
+        """ Initialize the optimizer."""
+        ...
+
     @abstractmethod
     def aggregate(
             self, participating_members: List[str], party_predictions: PartyDataTensor, infer: bool = False
@@ -303,6 +314,7 @@ class HonestPartyMember(PartyMember, ABC):
             do_train: bool = True,
             do_predict: bool = False,
             do_save_model: bool = False,
+            model_params: dict = None
     ) -> None:
         """
         Initialize PartyMemberImpl.
@@ -329,6 +341,7 @@ class HonestPartyMember(PartyMember, ABC):
         self.is_finalized = False
         self.iterations_counter = 0
         self._model_name = model_name
+        self._model_params = model_params
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
         self.processor = processor
@@ -338,17 +351,22 @@ class HonestPartyMember(PartyMember, ABC):
         self.do_train = do_train
         self.do_predict = do_predict
         self.do_save_model = do_save_model
+        self._optimizer = None
 
         if self.is_consequently:
             if self.members is None:
                 raise ValueError('If consequent algorithm is initialized, the members must be passed.')
-
 
         if do_save_model and model_path is None:
             raise ValueError('You must set the model path to save the model (`do_save_model` is True).')
     @abstractmethod
     def initialize_model(self, do_load_model: bool = False) -> None:
         """ Initialize the model based on the specified model name. """
+        ...
+
+    @abstractmethod
+    def initialize_optimizer(self) -> None:
+        """ Initialize the optimizer."""
         ...
 
     @abstractmethod
@@ -544,6 +562,7 @@ class HonestPartyMember(PartyMember, ABC):
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
         self.initialize_model(do_load_model=is_infer)
+        self.initialize_optimizer()
         self.is_initialized = True
         logger.info("Member %s: has been initialized" % self.id)
 

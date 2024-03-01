@@ -2,21 +2,21 @@ common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
-  experiment_label: experiment-sbol-smm-local
+  experiment_label: experiment-mlp-sbol-smm-local
   reports_export_folder: "../../reports"
 
 vfl_model:
   epochs: 1
   batch_size: 250
   eval_batch_size: 200
-  vfl_model_name: logreg
+  vfl_model_name: mlp
   is_consequently: False
   use_class_weights: False
-  learning_rate: 0.05
+  learning_rate: 0.01
   do_train: True
   do_predict: False
   do_save_model: False
-  vfl_model_path: ../../saved_models/logreg_model
+  vfl_model_path: ../../saved_models/mlp_model
 
 
 prerequisites:
@@ -26,12 +26,18 @@ prerequisites:
 master:
   container_host: 'node16.bdcl'
   run_mlflow: True
+  master_model_params: {
+    input_dim: 100,
+    output_dim: 19,
+    multilabel: True,
+#    init_weights: 0.005
+  }
 
 member:
   member_model_params: {
-    init_weights: 0.005
+    hidden_channels:[1000, 300, 100],
+#    init_weights: 0.005
   }
-
 
 data:
   random_seed: 0

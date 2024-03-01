@@ -6,7 +6,7 @@ common:
   reports_export_folder: ../../reports
 
 vfl_model:
-  epochs: 5
+  epochs: 2
   batch_size: 5000
   eval_batch_size: 200
   vfl_model_name: linreg
@@ -14,8 +14,8 @@ vfl_model:
   use_class_weights: False
   learning_rate: 0.2
   do_train: True
-  do_predict: True
-  do_save_model: True
+  do_predict: False
+  do_save_model: False
   vfl_model_path: ../../saved_models/linreg_model
 
 data:

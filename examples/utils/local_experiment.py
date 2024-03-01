@@ -11,9 +11,15 @@ from stalactite.ml import (
     HonestPartyMasterLinReg,
     HonestPartyMemberLogReg,
     HonestPartyMemberLinReg,
-    HonestPartyMasterLogReg
+    HonestPartyMasterLogReg,
+    HonestPartyMemberResNet,
+    HonestPartyMasterResNetSplitNN,
+    HonestPartyMemberEfficientNet,
+    HonestPartyMasterEfficientNetSplitNN,
+    HonestPartyMasterMLPSplitNN,
+    HonestPartyMemberMLP
 )
-from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor
+from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor, ImagePreprocessorEff
 # from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
@@ -46,8 +52,11 @@ def load_processors(config: VFLConfig):
                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
             )
 
+        image_preprocessor = ImagePreprocessorEff \
+            if config.vfl_model.vfl_model_name == "efficientnet" else ImagePreprocessor
+
         processors = [
-            ImagePreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
+            image_preprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
 
     elif config.data.dataset.lower() == "sbol_smm":
@@ -88,6 +97,15 @@ def run(config_path: Optional[str] = None):
         if 'logreg' in config.vfl_model.vfl_model_name:
             master_class = HonestPartyMasterLogReg
             member_class = HonestPartyMemberLogReg
+        elif "resnet" in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterResNetSplitNN
+            member_class = HonestPartyMemberResNet
+        elif "efficientnet" in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterEfficientNetSplitNN
+            member_class = HonestPartyMemberEfficientNet
+        elif "mlp" in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterMLPSplitNN
+            member_class = HonestPartyMemberMLP
         else:
             member_class = HonestPartyMemberLinReg
             if config.vfl_model.is_consequently:
@@ -108,6 +126,9 @@ def run(config_path: Optional[str] = None):
             run_mlflow=config.master.run_mlflow,
             do_train=config.vfl_model.do_train,
             do_predict=config.vfl_model.do_predict,
+            model_name=config.vfl_model.vfl_model_name if
+            config.vfl_model.vfl_model_name in ["resnet", "mlp", "efficientnet"] else None,
+            model_params=config.master.master_model_params
         )
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]

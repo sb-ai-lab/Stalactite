@@ -3,23 +3,18 @@ from typing import Any
 from torch.optim import SGD
 
 from stalactite.ml.honest.linear_regression.party_member import HonestPartyMemberLinReg
-from stalactite.models import LogisticRegressionBatch
+from stalactite.models.split_learning import ResNetBottom
 
 
-class HonestPartyMemberLogReg(HonestPartyMemberLinReg):
-    def initialize_model_from_params(self, **model_params) -> Any:
-        return LogisticRegressionBatch(**model_params)
+class HonestPartyMemberResNet(HonestPartyMemberLinReg):
 
     def initialize_model(self, do_load_model: bool = False) -> None:
         """ Initialize the model based on the specified model name. """
+        input_dim = self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1]
         if do_load_model:
             self._model = self.load_model()
         else:
-            self._model = LogisticRegressionBatch(
-                input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
-                **self._model_params
-            )
+            self._model = ResNetBottom(input_dim=input_dim, **self._model_params)
 
     def initialize_optimizer(self) -> None:
         self._optimizer = SGD([

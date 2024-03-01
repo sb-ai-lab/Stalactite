@@ -34,7 +34,9 @@ class LogisticRegressionBatch(torch.nn.Module):
             x: torch.Tensor,
             gradients: torch.Tensor,
             is_single: bool = False,
-            collected_from_arbiter: bool = False
+            collected_from_arbiter: bool = False,
+            optimizer: Optional[torch.optim.Optimizer] = None,
+            criterion: Optional[torch.nn.Module] = None
     ) -> None:
         if collected_from_arbiter:
             updated_weight = self.linear.weight.data.clone() - gradients.T
