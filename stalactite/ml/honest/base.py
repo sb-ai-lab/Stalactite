@@ -74,7 +74,7 @@ class HonestPartyMaster(PartyMaster, ABC):
             predictions: DataTensor,
             party_predictions: PartyDataTensor,
             world_size: int,
-            subiter_seq_num: int,
+            uids: list[str],
     ) -> List[DataTensor]:
         """ Compute updates based on members` predictions.
 
@@ -82,7 +82,7 @@ class HonestPartyMaster(PartyMaster, ABC):
         :param predictions: Model predictions.
         :param party_predictions: List of party predictions.
         :param world_size: Number of party members.
-        :param subiter_seq_num: Sub-iteration sequence number.
+        :param subiter_seq_num: Sub-iteration sequence number. #todo: fix
 
         :return: List of updates as tensors.
         """
@@ -211,7 +211,7 @@ class HonestPartyMaster(PartyMaster, ABC):
                 predictions,
                 party_predictions,
                 party.world_size,
-                titer.subiter_seq_num,
+                titer.batch,
             )
 
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
@@ -313,6 +313,7 @@ class HonestPartyMember(PartyMember, ABC):
             do_train: bool = True,
             do_predict: bool = False,
             do_save_model: bool = False,
+            use_inner_join: bool = False,
             model_params: dict = None
     ) -> None:
         """
@@ -351,6 +352,7 @@ class HonestPartyMember(PartyMember, ABC):
         self.do_predict = do_predict
         self.do_save_model = do_save_model
         self._optimizer = None
+        self.use_inner_join = use_inner_join
 
         if self.is_consequently:
             if self.members is None:
@@ -535,15 +537,15 @@ class HonestPartyMember(PartyMember, ABC):
                 epochs=epochs, members=self.members, uids=uids, batch_size=batch_size
             )
 
-    def records_uids(self, is_infer: bool = False) -> List[str]:
+    def records_uids(self, is_infer: bool = False) -> Tuple[List[str], bool]:
         """ Get the list of existing dataset unique identifiers.
 
         :return: List of unique identifiers.
         """
         logger.info("Member %s: reporting existing record uids" % self.id)
         if is_infer:
-            return self._infer_uids
-        return self._uids
+            return self._infer_uids, self.use_inner_join
+        return self._uids, self.use_inner_join
 
     def register_records_uids(self, uids: List[str]) -> None:
         """ Register unique identifiers to be used.
@@ -553,12 +555,39 @@ class HonestPartyMember(PartyMember, ABC):
         """
         logger.info("Member %s: registering %s uids to be used." % (self.id, len(uids)))
         self._uids_to_use = uids
+        self.fillna()
+
+    def fillna(self):
+        """ Fills missing values for member's dataset"""
+        uids_to_fill = set(self._uids_to_use) - set(self._uids)
+        if len(uids_to_fill) == 0:
+            return
+
+        logger.info(f"Member {self.id} has {len(uids_to_fill)} missing values : using fillna...")
+        start_idx = max(self._uid2tensor_idx.values()) + 1
+        idx = start_idx
+        for uid in uids_to_fill:
+            self._uid2tensor_idx[uid] = idx
+            idx += 1
+
+        fill_shape = self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1]
+        self._dataset[self._data_params.train_split][self._data_params.features_key][start_idx:, :]\
+            = torch.zeros((uids_to_fill, fill_shape))
+
+        has_features_column = [1.0 for _ in range(start_idx-1)] + [0.0 for _ in range(len(uids_to_fill))]
+        self._dataset[self._data_params.train_split].add_column("has_features", has_features_column)
+        self._dataset[self._data_params.train_split] = self._dataset[self._data_params.train_split].map(
+            lambda x: torch.cat([x[self._data_params.features_key], x["has_features"]]), remove_columns="has_features"
+        )
+        # todo: add fillna for test split
 
     def initialize(self, is_infer: bool = False):
         """ Initialize the party member. """
 
         logger.info("Member %s: initializing" % self.id)
         self._dataset = self.processor.fit_transform()
+        self._uid2tensor_idx = {uid: i for i, uid in enumerate(self._uids)}
+        #todo: add this dict for test
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
         self.initialize_model(do_load_model=is_infer)

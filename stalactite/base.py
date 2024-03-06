@@ -8,7 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
 from dataclasses import dataclass, field
-from typing import Any, Iterator, List, Optional, Union
+from typing import Any, Iterator, List, Optional, Union, Tuple
 
 import torch
 
@@ -356,7 +356,7 @@ class PartyMaster(PartyAgent, ABC):
         """ Return list of tuples representing iteration timings from the main loop. """
         return self._iter_time
 
-    def synchronize_uids(self, collected_uids: list[list[str]], world_size: int) -> List[str]:
+    def synchronize_uids(self, collected_uids: list[Tuple[list[str], bool]], world_size: int) -> List[str]:
         """ Synchronize unique records identifiers across party members.
 
         :param collected_uids: List of lists containing unique records identifiers collected from party members.
@@ -365,14 +365,22 @@ class PartyMaster(PartyAgent, ABC):
         :return: Common records identifiers among the agents used in training loop.
         """
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, world_size))
-        uids = itertools.chain(self.target_uids, (uid for member_uids in collected_uids for uid in set(member_uids)))
-        shared_uids = sorted([uid for uid, count in collections.Counter(uids).items() if count == world_size + 1])
+        # uids = itertools.chain(self.target_uids, (uid for member_uids in collected_uids for uid in set(member_uids)))
+        inner_collected_uids = [col_uids[0] for col_uids in collected_uids if col_uids[1]]
+        uids = self.target_uids
+        if len(inner_collected_uids) > 0:
+            uids = itertools.chain(
+                self.target_uids, (uid for member_uids in inner_collected_uids for uid in set(member_uids))
+            )
+        shared_uids = sorted(
+            [uid for uid, count in collections.Counter(uids).items() if count == len(inner_collected_uids) + 1]
+        )
         logger.debug("Master %s: registering shared uids f size %s" % (self.id, len(shared_uids)))
-        set_shared_uids = set(shared_uids)
-        uid2idx = {uid: i for i, uid in enumerate(self.target_uids) if uid in set_shared_uids}
-        selected_tensor_idx = [uid2idx[uid] for uid in shared_uids]
-
-        self.target = self.target[selected_tensor_idx]
+        # set_shared_uids = set(shared_uids)
+        # uid2tensor_idx = {uid: i for i, uid in enumerate(self.target_uids)}  # if uid in set_shared_uids}
+        # selected_tensor_idx = [uid2idx[uid] for uid in shared_uids]
+        # self.uid2tensor_idx = uid2tensor_idx
+        # self.target = self.target[selected_tensor_idx]
         self.target_uids = shared_uids
         logger.debug("Master %s: record uids has been successfully synchronized")
         return shared_uids
@@ -399,12 +407,11 @@ class PartyMember(PartyAgent, ABC):
     report_test_metrics_iteration: int
     _iter_time: list[tuple[int, float]] = list()
 
-
     @abstractmethod
-    def records_uids(self, is_infer: bool = False) -> List[str]:
+    def records_uids(self, is_infer: bool = False) -> Tuple[List[str], bool]:
         """ Get the list of existing dataset unique identifiers.
 
-        :return: List of unique identifiers.
+        :return: List of unique identifiers. #todo: fix docstring
         """
         ...
 
