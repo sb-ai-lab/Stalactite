@@ -11,9 +11,6 @@ class LogisticRegressionBatch(torch.nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        learning_rate: float = 0.001,
-        momentum: float = 0,
-        class_weights: Optional[torch.Tensor] = None,
         init_weights: float = None,
     ):
         """
@@ -25,8 +22,6 @@ class LogisticRegressionBatch(torch.nn.Module):
         self.linear = torch.nn.Linear(input_dim, output_dim, bias=False, device=None, dtype=None)
         if init_weights is not None:
             self.linear.weight.data = torch.full((output_dim, input_dim), init_weights)
-        self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
-        self.optimizer = torch.optim.SGD(self.linear.parameters(), lr=learning_rate, momentum=momentum)
 
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -39,28 +34,30 @@ class LogisticRegressionBatch(torch.nn.Module):
             x: torch.Tensor,
             gradients: torch.Tensor,
             is_single: bool = False,
-            collected_from_arbiter: bool = False
+            collected_from_arbiter: bool = False,
+            optimizer: Optional[torch.optim.Optimizer] = None,
+            criterion: Optional[torch.nn.Module] = None
     ) -> None:
         if collected_from_arbiter:
             updated_weight = self.linear.weight.data.clone() - gradients.T
             self.linear.weight.data = updated_weight
-
         else:
-            self.optimizer.zero_grad()
+            optimizer.zero_grad()
             logit = self.forward(x)
             if is_single:
-                loss = self.criterion(torch.squeeze(logit), gradients.float())
+                targets_type = torch.LongTensor if isinstance(self._criterion,
+                                                              torch.nn.CrossEntropyLoss) else torch.FloatTensor
+                loss = criterion(torch.squeeze(logit), gradients.type(targets_type))
                 loss.backward()
             else:
                 logit.backward(gradient=gradients)
-            self.optimizer.step()
+            optimizer.step()
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
 
     def get_weights(self) -> torch.Tensor:
         return self.linear.weight.clone()
-
 
     @property
     def init_params(self):

@@ -1,14 +1,15 @@
-from typing import List, Optional, Any
+from typing import Optional, Any
 import logging
+from typing import List
 
 import mlflow
 import torch
 from sklearn import metrics
 
-from stalactite.base import PartyDataTensor, DataTensor
+from stalactite.base import DataTensor, PartyDataTensor
 from stalactite.batching import ConsecutiveListBatcher, ListBatcher
-from stalactite.metrics import ComputeAccuracy
 from stalactite.ml.honest.base import HonestPartyMaster, Batcher
+from stalactite.metrics import ComputeAccuracy
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -37,6 +38,8 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             run_mlflow: bool = False,
             do_train: bool = True,
             do_predict: bool = False,
+            model_name: str = None,
+            model_params: dict = None
     ) -> None:
         """ Initialize PartyMaster.
 
@@ -69,7 +72,16 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         self.do_predict = do_predict
         self.iteration_counter = 0
         self.party_predictions = dict()
-        self.updates = dict()
+        self.updates = {"master": torch.tensor([])}
+        self._model_name = model_name
+        self.aggregated_output = None
+        self._model_params = model_params
+
+    def initialize_model(self, do_load_model: bool = False):
+        pass
+
+    def initialize_optimizer(self) -> None:
+        pass
 
     def initialize(self, is_infer: bool = False) -> None:
         """ Initialize the party master. """
@@ -80,6 +92,11 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
 
         self.class_weights = self.processor.get_class_weights() \
             if self.processor.common_params.use_class_weights else None
+        self._data_params = self.processor.data_params
+        self._common_params = self.processor.common_params
+        if self._model_name is not None:
+            self.initialize_model()
+            self.initialize_optimizer()
         self.is_initialized = True
 
     def make_batcher(
@@ -113,7 +130,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         """
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        return [torch.rand(self._batch_size) for _ in range(world_size)]
+        return [torch.zeros(self._batch_size) for _ in range(world_size)]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
         """ Report metrics based on target values and predictions.

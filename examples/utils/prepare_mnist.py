@@ -128,7 +128,7 @@ def save_splitted_dataset(ds_list, path, part_dir_name='part_', clean_dir=False)
         ds.save_to_disk(part_path)
 
 
-def load_data(save_path, parts_num):
+def load_data(save_path, parts_num, binary: bool = True):
     """
 
     The input is the original MNIST dataset.
@@ -136,9 +136,6 @@ def load_data(save_path, parts_num):
 
     """
 
-    # Filter on labels and substitute labels (make the problem binary):
-    use_labels = [3, 8]
-    new_labels = [-1, 1]
 
     make_validation = True
     test_size = 0.15
@@ -149,9 +146,14 @@ def load_data(save_path, parts_num):
     save_dir = Path(f'{save_path}')
 
     mnist = datasets.load_dataset('mnist')
-    mnist = mnist.filter(lambda sample: sample['label'] in use_labels, load_from_cache_file=False)
-    # Map lables to new labels:
-    mnist = mnist.map(partial(substitute, new_labels = new_labels,use_labels = use_labels))
+
+    if binary:
+        # Filter on labels and substitute labels (make the problem binary):
+        use_labels = [3, 8]
+        new_labels = [-1, 1]
+        mnist = mnist.filter(lambda sample: sample['label'] in use_labels, load_from_cache_file=False)
+        # Map lables to new labels:
+        mnist = mnist.map(partial(substitute, new_labels=new_labels, use_labels=use_labels))
 
     # Split train part into val and train parts:
     # divide onto train and val

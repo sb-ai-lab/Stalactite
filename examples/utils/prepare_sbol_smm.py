@@ -44,14 +44,15 @@ def load_data(data_dir_path: str, parts_num: int = 2):
                                                                   axis=0), axis=1)
 
     sbol = sbol[["user_id", "labels", "features_part_0", "features_part_1"]]
-    sbol_train = users_train.merge(sbol, on="user_id", how="left")
-    sbol_test = users_test.merge(sbol, on="user_id", how="left")
 
     if parts_num == 1:
         sbol["features_part_0"] = sbol.apply(
             lambda x: np.concatenate(
                 (x["features_part_0"], x["features_part_1"]), axis=0
             ), axis=1)
+
+    sbol_train = users_train.merge(sbol, on="user_id", how="left")
+    sbol_test = users_test.merge(sbol, on="user_id", how="left")
 
     for part in range(parts_num):
 

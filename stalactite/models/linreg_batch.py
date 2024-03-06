@@ -35,7 +35,7 @@ class LinearRegressionBatch(torch.nn.Module):
         #     pdb.set_trace()
         return outputs
 
-    def update_weights(self, X_train, rhs) -> None:
+    def update_weights(self, X_train, rhs, optimizer=None) -> None:
         # todo: add docs
         U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
         logger.debug("updating weights inside model")

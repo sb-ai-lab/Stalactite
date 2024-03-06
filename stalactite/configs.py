@@ -64,13 +64,14 @@ class VFLModelConfig(BaseModel):
     epochs: int = Field(default=3, description="Number of epochs to train a model")
     batch_size: int = Field(default=100, description="Batch size used for training")
     eval_batch_size: int = Field(default=100, description="Batch size used for evaluation")
-    vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn'] = Field(
+    vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn', 'efficientnet', 'mlp', 'resnet'] = Field(
         default='linreg',
-        description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`'
+        description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`, `efficientnet`, `mlp`, `resnet`'
     )
     is_consequently: bool = Field(default=False, description='Run linear regression updates in sequential mode')
     use_class_weights: bool = Field(default=False, description='Logistic regression')  # TODO
     learning_rate: float = Field(default=0.01, description='Learning rate')
+    momentum: float = Field(default=0, description='Momentum')
     do_train: bool = Field(default=True, description='Whether to run a training loop.')
     do_predict: bool = Field(default=True, description='Whether to run an inference loop.')
     do_save_model: bool = Field(default=True, description='Whether to save the model after training.')
@@ -168,6 +169,7 @@ class MasterConfig(PartyConfig):
     time_between_idle_connections_checks: float = Field(
         default=3.0, description="Time between checking which clients disconnected"
     )
+    master_model_params: dict = Field(default={}, description="Master model parameters")
 
 
 class MemberConfig(PartyConfig):
@@ -178,6 +180,7 @@ class MemberConfig(PartyConfig):
         default=0.1, description="Interval between new tasks requests from master"
     )  # TODO ?
     sent_task_timout: float = Field(default=3600, description="Timeout of the unary endpoints calls to the gRPC")
+    member_model_params: dict = Field(default={}, description="Member model parameters")
 
 
 class DockerConfig(BaseModel):

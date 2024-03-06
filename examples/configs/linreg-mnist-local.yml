@@ -6,7 +6,7 @@ common:
   reports_export_folder: ../../reports
 
 vfl_model:
-  epochs: 5
+  epochs: 2
   batch_size: 5000
   eval_batch_size: 200
   vfl_model_name: linreg
@@ -14,25 +14,25 @@ vfl_model:
   use_class_weights: False
   learning_rate: 0.2
   do_train: True
-  do_predict: True
-  do_save_model: True
+  do_predict: False
+  do_save_model: False
   vfl_model_path: ../../saved_models/linreg_model
 
 data:
   random_seed: 0
   dataset_size: 5000
   dataset: 'mnist'
-#  host_path_data_dir:  ../../data/sber_ds_vfl/mnist_binary38_parts2
-  host_path_data_dir:  ../../data/sber_ds_vfl/mnist_test
-  dataset_part_prefix: 'part_'
-  train_split: "train_train"
-  test_split: "train_val"
+  use_smm: False
+  host_path_data_dir:  ../../data/sber_ds_vfl/mnist_binary38_parts2
+  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
+  train_split: "train_train" # name of the train split
+  test_split: "train_val" # name of the test split
   features_key: "image_part_"
   label_key: "label"
 
 prerequisites:
-  mlflow_host: node3.bdcl
-  mlflow_port: "5555"
+  mlflow_host: node16.bdcl
+  mlflow_port: "9876"
 #  prometheus_host: 0.0.0.0
 #  prometheus_port: "9090"
 #  grafana_port: "3000"
@@ -47,7 +47,7 @@ prerequisites:
 #  use_arbiter: False
 
 master:
-  run_mlflow: False
+  run_mlflow: True
 #  logging_level: debug
 #  container_host: 0.0.0.0
 #  run_prometheus: False
@@ -55,7 +55,11 @@ master:
 #  time_between_idle_connections_checks: 3
 #  recv_timeout: 360
 
-#member:
+member:
+  member_model_params: {
+    output_dim: 1,
+    reg_lambda: 0.5
+  }
 #  logging_level: debug
 #  recv_timeout: 360
 #  heartbeat_interval: 2
