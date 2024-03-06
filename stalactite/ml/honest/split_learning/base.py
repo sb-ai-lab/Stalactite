@@ -1,4 +1,3 @@
-from typing import List, Optional, Any
 import logging
 import time
 from typing import List
@@ -6,26 +5,14 @@ from copy import copy
 
 import mlflow
 import torch
-from sklearn import metrics
 from sklearn.metrics import roc_auc_score
-from torch import nn
-from torchsummary import summary
 
-from stalactite.base import PartyDataTensor, DataTensor
-from stalactite.base import (Batcher, DataTensor, PartyDataTensor, PartyMaster, PartyCommunicator, Method, MethodKwargs)
-from stalactite.batching import ConsecutiveListBatcher, ListBatcher
-from stalactite.metrics import ComputeAccuracy
-from stalactite.ml.honest.base import HonestPartyMaster, Batcher
-from stalactite.ml.honest.base import HonestPartyMember, HonestPartyMaster
+from stalactite.base import (DataTensor, PartyCommunicator, Method, MethodKwargs)
+
+from stalactite.ml.honest.base import Batcher
 from stalactite.ml.honest.linear_regression.party_master import HonestPartyMasterLinReg
-from stalactite.metrics import ComputeAccuracy, ComputeAccuracy_numpy
-from stalactite.models.split_learning import EfficientNetTop, MLPTop, ResNetTop
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
 
 
 class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
@@ -198,49 +185,3 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
         logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
         if self.run_mlflow:
             mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-
-
-# class PartyMasterImplEfficientNetSplitNN(PartyMasterImplSplitNN):
-#
-#     def aggregate(
-#             self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
-#     ) -> DataTensor:
-#         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
-#         self._check_if_ready()
-#
-#         for member_id, member_prediction in zip(participating_members, party_predictions):
-#             self.party_predictions[member_id] = member_prediction
-#         party_predictions = list(self.party_predictions.values())
-#         predictions = torch.mean(torch.stack(party_predictions, dim=1), dim=1)
-#         return predictions
-#
-#     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str) -> None:
-#         logger.info(
-#             f"Master : reporting metrics. Y dim: {y.size}. Predictions size: {predictions.size}"
-#         )
-#         step = self.iteration_counter
-#         avg = "macro"
-#         roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
-#         logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
-#         if self.run_mlflow:
-#             mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-
-
-# class PartyMasterImplMLPSplitNN(PartyMasterImplSplitNN):
-#
-#     def aggregate(
-#             self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
-#     ) -> DataTensor:
-#         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
-#         self._check_if_ready()
-#
-#         for member_id, member_prediction in zip(participating_members, party_predictions):
-#             self.party_predictions[member_id] = member_prediction
-#         party_predictions = list(self.party_predictions.values())
-#         predictions = torch.sum(torch.stack(party_predictions, dim=1), dim=1)
-#         return predictions
-
-
-
-
-

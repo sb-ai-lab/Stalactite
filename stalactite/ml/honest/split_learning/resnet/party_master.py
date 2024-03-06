@@ -8,10 +8,6 @@ from stalactite.ml.honest.split_learning.base import HonestPartyMasterSplitNN
 from stalactite.base import DataTensor, PartyDataTensor
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
 
 
 class HonestPartyMasterResNetSplitNN(HonestPartyMasterSplitNN):
