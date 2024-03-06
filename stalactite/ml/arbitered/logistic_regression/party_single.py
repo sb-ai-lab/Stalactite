@@ -76,14 +76,7 @@ class ArbiteredPartySingle(PartyAgent):
         self._prev_model_parameter = self._model_parameter.weight.data.clone()
         self._model_parameter.weight.grad = gradient.T
         self._optimizer.step()
-        print(
-            'PARAM',
-            torch.sum(self._model_parameter.weight.data),
-            torch.sum(self._prev_model_parameter),
-            torch.sum(gradient.T),
-            torch.sum(torch.where(gradient.T < 0, 0, 1)),
-            torch.sum(torch.where(gradient.T > 0, 0, 1))
-        )
+
 
     def _get_delta_gradients(self) -> torch.Tensor:
         if self._prev_model_parameter is not None:
@@ -179,7 +172,7 @@ class ArbiteredPartySingle(PartyAgent):
 
     def compute_gradient(self, aggregated_predictions_diff: DataTensor, uids: List[str]) -> DataTensor:
         X = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
-        g = 1 / X.shape[0] * torch.matmul(X.T, aggregated_predictions_diff)
+        g = torch.matmul(X.T / X.shape[0], aggregated_predictions_diff)
         # g = g + self.alpha * self._model_parameter.weight.data.T
 
         return g

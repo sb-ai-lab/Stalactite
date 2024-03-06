@@ -70,4 +70,8 @@ class TabularPreprocessor:
 
         return torch.tensor(pos_weights_list)
 
+    @property
+    def num_target_classes(self) -> int:
+        return self._ds[self.data_params.train_split][self.data_params.label_key].shape[1]
+
 

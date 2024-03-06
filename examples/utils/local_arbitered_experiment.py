@@ -80,19 +80,33 @@ def run(config_path: Optional[str] = None):
 
     with reporting(config):
         target_uids = [str(i) for i in range(config.data.dataset_size)]
+        test_target_uids = [str(i) for i in range(1500)]
+        num_classes = 2 # TODO !
 
         shared_party_info = dict()
         master_class = ArbiteredPartyMasterLogReg
         member_class = ArbiteredPartyMemberLogReg
         arbiter_class = PartyArbiterLogReg
+        if config.grpc_arbiter.security_protocol_params is not None:
+            if config.grpc_arbiter.security_protocol_params.he_type == 'paillier':
+                sp_arbiter = SecurityProtocolArbiterPaillier(**config.grpc_arbiter.security_protocol_params.init_params)
+                sp_agent = SecurityProtocolPaillier(**config.grpc_arbiter.security_protocol_params.init_params)
+            else:
+                raise ValueError('Only paillier HE implementation is available')
+        else:
+            sp_arbiter, sp_agent = None, None
 
         arbiter = arbiter_class(
             uid="arbiter",
             epochs=config.vfl_model.epochs,
             batch_size=config.vfl_model.batch_size,
-            security_protocol=SecurityProtocolArbiterPaillier(**config.grpc_arbiter.security_protocol_params.init_params),
+            eval_batch_size=config.vfl_model.eval_batch_size,
+            security_protocol=sp_arbiter,
             learning_rate=config.vfl_model.learning_rate,
             momentum=0.0,
+            num_classes=num_classes,
+            do_predict=config.vfl_model.do_predict,
+            do_train=config.vfl_model.do_train,
         )
 
         master = master_class(
@@ -102,10 +116,17 @@ def run(config_path: Optional[str] = None):
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
             processor=processors[0],
             target_uids=target_uids,
+            inference_target_uids=test_target_uids,
             batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
             model_update_dim_size=0,
             run_mlflow=config.master.run_mlflow,
-            security_protocol=SecurityProtocolPaillier(**config.grpc_arbiter.security_protocol_params.init_params),
+            num_classes=num_classes,
+            security_protocol=sp_agent,
+            do_predict=config.vfl_model.do_predict,
+            do_train=config.vfl_model.do_train,
+            do_save_model=config.vfl_model.do_save_model,
+            model_path=config.vfl_model.vfl_model_path,
         )
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
@@ -114,11 +135,19 @@ def run(config_path: Optional[str] = None):
             member_class(
                 uid=member_uid,
                 member_record_uids=target_uids,
+                member_inference_record_uids=test_target_uids,
                 processor=processors[member_rank + 1],
                 batch_size=config.vfl_model.batch_size,
                 eval_batch_size=config.vfl_model.eval_batch_size,
                 epochs=config.vfl_model.epochs,
-                security_protocol=SecurityProtocolPaillier(**config.grpc_arbiter.security_protocol_params.init_params),
+                report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+                report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+                num_classes=num_classes,
+                security_protocol=sp_agent,
+                do_predict=config.vfl_model.do_predict,
+                do_train=config.vfl_model.do_train,
+                do_save_model=config.vfl_model.do_save_model,
+                model_path=config.vfl_model.vfl_model_path,
             )
             for member_rank, member_uid in enumerate(member_ids)
         ]

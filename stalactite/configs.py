@@ -71,7 +71,7 @@ class VFLModelConfig(BaseModel):
     is_consequently: bool = Field(default=False, description='Run linear regression updates in sequential mode')
     use_class_weights: bool = Field(default=False, description='Logistic regression')  # TODO
     learning_rate: float = Field(default=0.01, description='Learning rate')
-    momentum: float = Field(default=0, description='Momentum')
+    l2_alpha: Optional[float] = Field(default=None, description='Alpha used for L2 regularization')
     do_train: bool = Field(default=True, description='Whether to run a training loop.')
     do_predict: bool = Field(default=True, description='Whether to run an inference loop.')
     do_save_model: bool = Field(default=True, description='Whether to save the model after training.')
@@ -125,17 +125,20 @@ class GRpcConfig(BaseModel):
 class GRpcServerConfig(GRpcConfig):
     """gRPC server and servicer parameters config."""
 
+
 class PaillierSPParams(BaseModel):
     """ Security protocol parameters if the Paillier is used. """
     he_type: Literal['paillier']
-    precision: float = Field(default=1e-8, description='Precision of the paillier encoding.')
-    key_length: int = Field(default=2048, description='Length of the paillier cryptokey.')
+    encryption_precision: float = Field(default=1e-8, description='Precision of the Paillier encryption.')
+    encoding_precision: float = Field(default=1e-8, description='Precision of the Paillier encoding.')
+    key_length: int = Field(default=2048, description='Length of the Paillier cryptokey.')
     n_threads: int = Field(default=None, description='Number of threads to use for computations')
 
     @property
     def init_params(self):
         return {
-            "precision": self.precision,
+            "encryption_precision": self.encryption_precision,
+            "encoding_precision": self.encoding_precision,
             "key_length": self.key_length,
             "n_threads": self.n_threads,
         }

@@ -11,10 +11,6 @@ from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.ml.honest.linear_regression.party_master import HonestPartyMasterLinReg
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
 
 
 class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
