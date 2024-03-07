@@ -4,6 +4,7 @@ from typing import List
 
 import mlflow
 import torch
+import torch.nn as nn
 from sklearn import metrics
 
 from stalactite.base import DataTensor, PartyDataTensor
@@ -96,6 +97,14 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             if self.processor.common_params.use_class_weights else None
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
+
+        if torch.equal(torch.unique(self.target), torch.tensor([0, 1])) or torch.max(self.target).item() <= 1:
+            self.activation = nn.Sigmoid()
+            self.binary = True
+        else:
+            self.activation = nn.Softmax(dim=1)
+            self.binary = False
+
         if self._model_name is not None:
             self.initialize_model()
             self.initialize_optimizer()

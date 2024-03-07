@@ -46,7 +46,7 @@ class LogisticRegressionBatch(torch.nn.Module):
             optimizer.zero_grad()
             logit = self.forward(x)
             if is_single:
-                targets_type = torch.LongTensor if isinstance(self._criterion,
+                targets_type = torch.LongTensor if isinstance(criterion,
                                                               torch.nn.CrossEntropyLoss) else torch.FloatTensor
                 loss = criterion(torch.squeeze(logit), gradients.type(targets_type))
                 loss.backward()
