@@ -408,9 +408,9 @@ class PartyMember(PartyAgent, ABC):
 
     @abstractmethod
     def records_uids(self, is_infer: bool = False) -> Tuple[List[str], bool]:
-        """ Get the list of existing dataset unique identifiers.
+        """ Get the list of existing dataset unique identifiers and either to use inner join for it
 
-        :return: List of unique identifiers. #todo: fix docstring
+        :return: Tuple of unique identifiers and use_inner_join.
         """
         ...
 
