@@ -4,7 +4,6 @@ import warnings
 from pathlib import Path
 from typing import Literal, Optional, Union, List
 
-import tenseal as ts
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -98,6 +97,7 @@ class DataConfig(BaseModel):
     features_key: str = Field(default="image_part_")
     label_key: str = Field(default="label")
     uids_key: str = Field(default="user_id")
+    num_classes: int = Field(default=1)
 
 
 class PrerequisitesConfig(BaseModel):

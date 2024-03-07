@@ -2199,14 +2199,6 @@ python-versions = ">=3.7"
 widechars = ["wcwidth"]
 
 [[package]]
-name = "tenseal"
-version = "0.3.14"
-description = "A Library for Homomorphic Encryption Operations on Tensors"
-category = "main"
-optional = false
-python-versions = "*"
-
-[[package]]
 name = "terminado"
 version = "0.18.0"
 description = "Tornado websocket backend for the Xterm.js Javascript terminal emulator library."
@@ -2254,6 +2246,14 @@ description = "A lil' TOML parser"
 category = "main"
 optional = false
 python-versions = ">=3.7"
+
+[[package]]
+name = "torchsummary"
+version = "1.5.1"
+description = "Model summary in PyTorch similar to `model.summary()` in Keras"
+category = "main"
+optional = false
+python-versions = "*"
 
 [[package]]
 name = "tornado"
@@ -2491,7 +2491,7 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9,<3.13"
-content-hash = "a9fd0142553d8d14a9189b6488f29c816c1705af0e962358306f7009f540d595"
+content-hash = "b38bbfc92df43fb53c773bc89ad458ec753941fb87e3c0e154a63c4aa8944728"
 
 [metadata.files]
 aiohttp = [
@@ -4689,24 +4689,6 @@ tabulate = [
     {file = "tabulate-0.9.0-py3-none-any.whl", hash = "sha256:024ca478df22e9340661486f85298cff5f6dcdba14f3813e8830015b9ed1948f"},
     {file = "tabulate-0.9.0.tar.gz", hash = "sha256:0095b12bf5966de529c0feb1fa08671671b3368eec77d7ef7ab114be2c068b3c"},
 ]
-tenseal = [
-    {file = "tenseal-0.3.14-cp310-cp310-macosx_11_0_x86_64.whl", hash = "sha256:6b15073f162cfd9a13e3a3b4be5db6770ef9d6a501c88876a50f76c751d221f8"},
-    {file = "tenseal-0.3.14-cp310-cp310-macosx_12_0_x86_64.whl", hash = "sha256:1d2eb19af56401fc4a6361098cfd8b3118ee7b4a306b945ce4ba972d5b32bf72"},
-    {file = "tenseal-0.3.14-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:dc60a47dc5f8530aca86d6069fbac55d42d5771a7ff774ce44eed57e0168f591"},
-    {file = "tenseal-0.3.14-cp310-cp310-win_amd64.whl", hash = "sha256:6cd5c1813f579b14195b384fb76cc68d9cb87c16266c389217a48e549b4757e0"},
-    {file = "tenseal-0.3.14-cp37-cp37m-macosx_11_0_x86_64.whl", hash = "sha256:2f01008a298489b4668c22347054805fb3cd12ed47ae159cc6a48db20d368b6d"},
-    {file = "tenseal-0.3.14-cp37-cp37m-macosx_12_0_x86_64.whl", hash = "sha256:5df3300ed2070fa0579b974053bca429029a4c52983bc69255d4b83fc134d766"},
-    {file = "tenseal-0.3.14-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:eac5c4ee2ac589c168d98ca9046b5924e90ac33d396ddda9b0519b8398f42fd7"},
-    {file = "tenseal-0.3.14-cp37-cp37m-win_amd64.whl", hash = "sha256:b85fe571b2ad9b86a22cd52748a75547654eeecbece0b943fd68723ef76f69a7"},
-    {file = "tenseal-0.3.14-cp38-cp38-macosx_11_0_x86_64.whl", hash = "sha256:c763d45dd7b994d87efd242146fd9e40766b1ccfd823fff0e1ae5ecc4642c541"},
-    {file = "tenseal-0.3.14-cp38-cp38-macosx_12_0_x86_64.whl", hash = "sha256:a4d38f5bbe2c06ee922b3c96ed6ddd6cdd1992065a9c0994b55858500a2cc6f5"},
-    {file = "tenseal-0.3.14-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f4b29990e2be1e39ccf1889e9e8571e441ffa38b17cd611daa3e86ad941db912"},
-    {file = "tenseal-0.3.14-cp38-cp38-win_amd64.whl", hash = "sha256:8fe78c0f1e7e1f54467c2713703c9d538e181ef59cd85a637fd69bdda65c1298"},
-    {file = "tenseal-0.3.14-cp39-cp39-macosx_11_0_x86_64.whl", hash = "sha256:ef9d7a702e8fe621c643ad4b8aa1263fb02e9d7e3e1dc00e89f53354e830e2f2"},
-    {file = "tenseal-0.3.14-cp39-cp39-macosx_12_0_x86_64.whl", hash = "sha256:0f68618a9afeb1ce9387b401caf466283f0742f0bf01c654765668802236d765"},
-    {file = "tenseal-0.3.14-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15992141e0c4627838a99601165a4b3d1726d8d5bc8706ee72e860211b44d4f6"},
-    {file = "tenseal-0.3.14-cp39-cp39-win_amd64.whl", hash = "sha256:29d0df0aba3122686756052446f7d2b4852d91aee1aed5fb378300759173a39c"},
-]
 terminado = [
     {file = "terminado-0.18.0-py3-none-any.whl", hash = "sha256:87b0d96642d0fe5f5abd7783857b9cab167f221a39ff98e3b9619a788a3c0f2e"},
     {file = "terminado-0.18.0.tar.gz", hash = "sha256:1ea08a89b835dd1b8c0c900d92848147cef2537243361b2e3f4dc15df9b6fded"},
@@ -4722,6 +4704,10 @@ tinycss2 = [
 tomli = [
     {file = "tomli-2.0.1-py3-none-any.whl", hash = "sha256:939de3e7a6161af0c887ef91b7d41a53e7c5a1ca976325f429cb46ea9bc30ecc"},
     {file = "tomli-2.0.1.tar.gz", hash = "sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f"},
+]
+torchsummary = [
+    {file = "torchsummary-1.5.1-py3-none-any.whl", hash = "sha256:10f41d1743fb918f83293f13183f532ab1bb8f6639a1b89e5f8592ec1919a976"},
+    {file = "torchsummary-1.5.1.tar.gz", hash = "sha256:981bf689e22e0cf7f95c746002f20a24ad26aa6b9d861134a14bc6ce92230590"},
 ]
 tornado = [
     {file = "tornado-6.4-cp38-abi3-macosx_10_9_universal2.whl", hash = "sha256:02ccefc7d8211e5a7f9e8bc3f9e5b0ad6262ba2fbb683a6443ecc804e5224ce0"},

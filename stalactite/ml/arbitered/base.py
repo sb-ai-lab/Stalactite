@@ -8,7 +8,6 @@ from typing import Any, List, Optional, Union, TypeVar
 
 import numpy as np
 import torch
-import tenseal as ts
 
 from stalactite.base import (
     PartyMember,
@@ -26,7 +25,7 @@ from stalactite.batching import ListBatcher
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T', np.ndarray, ts.CKKSTensor)
+T = TypeVar('T', np.ndarray, torch.Tensor)
 
 
 @dataclass

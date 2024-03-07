@@ -93,15 +93,18 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
             members_predictions: List[T],
             uids: RecordsBatch,
     ) -> T:
-        preds = []
-        for class_idx in range(len(members_predictions)):
-            for member_pred in members_predictions[class_idx]:
+        class_predictions = []
+        for class_idx in range(self.num_classes):
+            prediction = master_prediction[class_idx]
+            for member_preds in members_predictions:
                 if self.security_protocol is not None:
-                    preds.append(self.security_protocol.add_matrices(master_prediction[class_idx], member_pred))
+                    prediction = self.security_protocol.add_matrices(prediction, member_preds[class_idx])
                 else:
-                    preds.append(master_prediction[class_idx] + member_pred)
+                    prediction += member_preds[class_idx]
+            class_predictions.append(prediction)
         stacking_func = np.stack if self.security_protocol is not None else torch.stack
-        master_prediction = stacking_func(preds)
+        master_prediction = stacking_func(class_predictions)
+
         return master_prediction
 
     def initialize(self, is_infer: bool = False):
@@ -112,8 +115,8 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
 
-        self.target = dataset[self._data_params.train_split][self._data_params.label_key][:, :2] #.unsqueeze(1)
-        self.test_target = dataset[self._data_params.test_split][self._data_params.label_key][:, :2] #.unsqueeze(1)
+        self.target = dataset[self._data_params.train_split][self._data_params.label_key]
+        self.test_target = dataset[self._data_params.test_split][self._data_params.label_key]
 
         assert self.target.shape[1] == self.num_classes, f'Inconsistent target shape with number of classes: ' \
                                                          f'`num_classes`: {self.num_classes}, `target`: ' \
@@ -174,6 +177,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
         return predictions
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
+        # TODO different metric for the inference
         y = torch.where(y == -1., -0., 1.)  # After a sigmoid function we calculate metrics on the {0, 1} labels
         y = y.numpy()
 

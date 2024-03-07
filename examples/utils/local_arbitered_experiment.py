@@ -81,7 +81,6 @@ def run(config_path: Optional[str] = None):
     with reporting(config):
         target_uids = [str(i) for i in range(config.data.dataset_size)]
         test_target_uids = [str(i) for i in range(1500)]
-        num_classes = 2 # TODO !
 
         shared_party_info = dict()
         master_class = ArbiteredPartyMasterLogReg
@@ -104,7 +103,7 @@ def run(config_path: Optional[str] = None):
             security_protocol=sp_arbiter,
             learning_rate=config.vfl_model.learning_rate,
             momentum=0.0,
-            num_classes=num_classes,
+            num_classes=config.data.num_classes,
             do_predict=config.vfl_model.do_predict,
             do_train=config.vfl_model.do_train,
         )
@@ -121,7 +120,7 @@ def run(config_path: Optional[str] = None):
             eval_batch_size=config.vfl_model.eval_batch_size,
             model_update_dim_size=0,
             run_mlflow=config.master.run_mlflow,
-            num_classes=num_classes,
+            num_classes=config.data.num_classes,
             security_protocol=sp_agent,
             do_predict=config.vfl_model.do_predict,
             do_train=config.vfl_model.do_train,
@@ -142,7 +141,7 @@ def run(config_path: Optional[str] = None):
                 epochs=config.vfl_model.epochs,
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-                num_classes=num_classes,
+                num_classes=config.data.num_classes,
                 security_protocol=sp_agent,
                 do_predict=config.vfl_model.do_predict,
                 do_train=config.vfl_model.do_train,
