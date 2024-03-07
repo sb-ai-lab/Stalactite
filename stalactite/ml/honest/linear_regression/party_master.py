@@ -195,7 +195,6 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        # y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
         tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
         for member_id in participating_members:
