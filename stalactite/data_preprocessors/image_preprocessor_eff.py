@@ -41,7 +41,6 @@ class ImagePreprocessorEff:
 
         image2tensor = PILImageToTensor(feature_name, flatten=False)
 
-
         train_split_data, test_split_data = {}, {}
 
         for split_dict, split_data in zip([train_split_data, test_split_data], [data_train, data_test]):

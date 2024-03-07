@@ -4,7 +4,6 @@ from typing import Callable, List, Optional
 
 import torch
 from torch import nn, Tensor
-from torchsummary import summary
 
 from torchvision.utils import _log_api_usage_once
 
@@ -21,18 +20,11 @@ class MLP(nn.Module):
         activation_layer: Optional[Callable[..., torch.nn.Module]] = torch.nn.ReLU,
         bias: bool = True,
         dropout: float = 0.0,
-        multilabel: bool = True,
         init_weights: float = None,
-        class_weights: torch.Tensor = None
     ) -> None:
 
         super().__init__()
         _log_api_usage_once(self)
-
-        if multilabel:
-            self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
-        else:
-            self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
         layers = []
         in_dim = input_dim
@@ -66,10 +58,12 @@ class MLP(nn.Module):
         return self._forward_impl(x)
 
     def update_weights(self, x: torch.Tensor, y: torch.Tensor, is_single: bool = False,
-                       optimizer: torch.optim.Optimizer = None) -> None:
+                       optimizer: torch.optim.Optimizer = None, criterion: torch.nn.Module = None) -> None:
         optimizer.zero_grad()
         logit = self.forward(x)
-        loss = self.criterion(torch.squeeze(logit), y.type(torch.FloatTensor))
+        targets_type = torch.LongTensor if isinstance(criterion,
+                                                      torch.nn.CrossEntropyLoss) else torch.FloatTensor
+        loss = criterion(torch.squeeze(logit), y.type(targets_type))
         logger.info(f"loss: {loss.item()}")
         loss.backward()
         optimizer.step()

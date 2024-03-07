@@ -136,7 +136,7 @@ def save_splitted_dataset(ds_list, path, part_dir_name='part_', clean_dir=False)
         ds.save_to_disk(part_path)
 
 
-def load_data(save_path, parts_num, binary: bool = True):
+def load_data(save_path, parts_num, binary: bool = True, is_single: bool = False):
     """
 
     The input is the original MNIST dataset.
@@ -170,15 +170,17 @@ def load_data(save_path, parts_num, binary: bool = True):
     if make_validation:
         train_train, train_val = make_train_val_split(mnist['train'], test_size=test_size,
                                                       stratify_by_column=stratify_by_column, shuffle=shuffle, seed=seed)
+        if not is_single:
 
-        train_train_labels = train_train.select_columns(["image_idx", "label"])
-        train_val_labels = train_val.select_columns(["image_idx", "label"])
+            train_train_labels = train_train.select_columns(["image_idx", "label"])
+            train_val_labels = train_val.select_columns(["image_idx", "label"])
 
-        train_train = train_train.remove_columns("label")
-        train_val = train_val.remove_columns("label")
+            train_train = train_train.remove_columns("label")
+            train_val = train_val.remove_columns("label")
+            master_dataset = datasets.DatasetDict({'train_train': train_train_labels, 'train_val': train_val_labels})
+            save_master_dataset(master_dataset, path=os.path.join(save_dir, "master_part"))
 
         mnist = datasets.DatasetDict({'train_train': train_train, 'train_val': train_val})
-        master_dataset = datasets.DatasetDict({'train_train': train_train_labels, 'train_val': train_val_labels})
 
     # Split the whole dataset:
     rr = split_dataset_dict(mnist, parts=parts_num, split_feature='image', part_prefix='image_part')
