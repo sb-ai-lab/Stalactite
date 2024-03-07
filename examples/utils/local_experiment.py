@@ -41,6 +41,7 @@ def load_processors(config: VFLConfig):
     If there is no data to run the experiment, downloads data after preprocessing.
 
     """
+    master_processor = None
     if config.data.dataset.lower() == "mnist":
 
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
@@ -72,11 +73,14 @@ def load_processors(config: VFLConfig):
         processors = [
             TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
+        master_processor = TabularPreprocessor(dataset=datasets.load_from_disk(
+                os.path.join(f"{config.data.host_path_data_dir}/master_part")
+            ), member_id=-1, params=config, is_master=True)
 
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return processors
+    return master_processor, processors
 
 
 def run(config_path: Optional[str] = None):
@@ -87,11 +91,11 @@ def run(config_path: Optional[str] = None):
         )
 
     config = VFLConfig.load_and_validate(config_path)
-    processors = load_processors(config)
+    master_processor, processors = load_processors(config)
 
     with reporting(config):
-        target_uids = [str(i) for i in range(config.data.dataset_size)]
-        inference_target_uids = [str(i) for i in range(500)]
+        # target_uids = [str(i) for i in range(config.data.dataset_size)]
+        # inference_target_uids = [str(i) for i in range(500)]
 
         shared_party_info = dict()
         if 'logreg' in config.vfl_model.vfl_model_name:
@@ -112,14 +116,15 @@ def run(config_path: Optional[str] = None):
                 master_class = HonestPartyMasterLinRegConsequently
             else:
                 master_class = HonestPartyMasterLinReg
+        master_processor = master_processor if config.data.dataset.lower() == "sbol_smm" else processors[0]
         master = master_class(
             uid="master",
             epochs=config.vfl_model.epochs,
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-            processor=processors[0],
-            target_uids=target_uids,
-            inference_target_uids=inference_target_uids,
+            processor=master_processor,
+            target_uids=master_processor.dataset[config.data.train_split][config.data.uids_key][:config.data.dataset_size],
+            inference_target_uids=master_processor.dataset[config.data.test_split][config.data.uids_key],
             batch_size=config.vfl_model.batch_size,
             eval_batch_size=config.vfl_model.eval_batch_size,
             model_update_dim_size=0,
@@ -136,8 +141,8 @@ def run(config_path: Optional[str] = None):
         members = [
             member_class(
                 uid=member_uid,
-                member_record_uids=target_uids,
-                member_inference_record_uids=inference_target_uids,
+                member_record_uids=processors[member_rank].dataset[config.data.train_split][config.data.uids_key],
+                member_inference_record_uids=processors[member_rank].dataset[config.data.test_split][config.data.uids_key],
                 model_name=config.vfl_model.vfl_model_name,
                 processor=processors[member_rank],
                 batch_size=config.vfl_model.batch_size,
@@ -151,7 +156,8 @@ def run(config_path: Optional[str] = None):
                 do_predict=config.vfl_model.do_predict,
                 do_save_model=config.vfl_model.do_save_model,
                 model_path=config.vfl_model.vfl_model_path,
-                model_params=config.member.member_model_params
+                model_params=config.member.member_model_params,
+                use_inner_join=True if member_rank == 0 else False
 
             )
             for member_rank, member_uid in enumerate(member_ids)

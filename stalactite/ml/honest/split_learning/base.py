@@ -55,7 +55,7 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
             master_predictions: DataTensor,
             agg_predictions: DataTensor,
             world_size: int,
-            subiter_seq_num: int,
+            uids: List[str],
     ) -> List[DataTensor]:
         """ Compute updates for SplitNN.
 
@@ -63,14 +63,15 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
         :param master_predictions: Master predictions.
         :param agg_predictions: Aggregated predictions.
         :param world_size: Number of party members.
-        :param subiter_seq_num: Sub-iteration sequence number.
+        :param uids: Sub-iteration sequence number.
 
         :return: List of gradients as tensors.
         """
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
+        tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
+        y = self.target[tensor_idx]
         targets_type = torch.LongTensor if isinstance(self._criterion, torch.nn.CrossEntropyLoss) else torch.FloatTensor
         loss = self._criterion(torch.squeeze(master_predictions), y.type(targets_type))
         if self.run_mlflow:
@@ -132,7 +133,7 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
                 master_predictions,
                 agg_members_predictions,
                 party.world_size,
-                titer.subiter_seq_num,
+                titer.batch,
             )
 
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
@@ -153,8 +154,10 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
                 agg_members_predictions = self.aggregate(party.members, party_members_predictions, infer=True)
                 master_predictions = self.predict(x=agg_members_predictions, use_activation=True)
 
+                target = self.target[[self._uid2tensor_idx[uid] for uid in batcher.uids]]
+
                 self.report_metrics(
-                    self.target.numpy(), master_predictions.detach().numpy(), name="Train", step=titer.seq_num
+                    target.numpy(), master_predictions.detach().numpy(), name="Train", step=titer.seq_num
                 )
 
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:

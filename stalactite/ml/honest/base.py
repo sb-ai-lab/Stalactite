@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 import logging
 from typing import List, Optional, Tuple, Dict
+from copy import copy
 
 import datasets
 import scipy as sp
@@ -74,7 +75,7 @@ class HonestPartyMaster(PartyMaster, ABC):
             predictions: DataTensor,
             party_predictions: PartyDataTensor,
             world_size: int,
-            subiter_seq_num: int,
+            uids: list[str],
     ) -> List[DataTensor]:
         """ Compute updates based on members` predictions.
 
@@ -82,7 +83,7 @@ class HonestPartyMaster(PartyMaster, ABC):
         :param predictions: Model predictions.
         :param party_predictions: List of party predictions.
         :param world_size: Number of party members.
-        :param subiter_seq_num: Sub-iteration sequence number.
+        :param uids: uids of record to use
 
         :return: List of updates as tensors.
         """
@@ -105,6 +106,7 @@ class HonestPartyMaster(PartyMaster, ABC):
             self.inference(party)
 
     def fit(self, party: PartyCommunicator) -> None:
+        # sync train part
         records_uids_tasks = party.broadcast(
             Method.records_uids,
             participating_members=party.members,
@@ -126,6 +128,22 @@ class HonestPartyMaster(PartyMaster, ABC):
             method_kwargs=MethodKwargs(other_kwargs={"uids": uids}),
             participating_members=party.members,
         )
+
+        # sync test part
+        records_uids_tasks = party.broadcast(
+            Method.records_uids,
+            participating_members=party.members,
+            method_kwargs=MethodKwargs(other_kwargs={'is_infer': True})
+        )
+        records_uids_results = party.gather(records_uids_tasks, recv_results=True)
+        collected_uids_results = [task.result for task in records_uids_results]
+        uids_test = self.synchronize_uids(collected_uids_results, world_size=party.world_size, is_test=True)
+        party.broadcast(
+            Method.register_records_uids,
+            method_kwargs=MethodKwargs(other_kwargs={"uids": uids_test, "is_test": True}),
+            participating_members=party.members,
+        )
+
         self.loop(batcher=self.make_batcher(uids=uids, party_members=party.members), party=party)
 
         party.broadcast(
@@ -211,7 +229,7 @@ class HonestPartyMaster(PartyMaster, ABC):
                 predictions,
                 party_predictions,
                 party.world_size,
-                titer.subiter_seq_num,
+                titer.batch,
             )
 
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
@@ -227,7 +245,8 @@ class HonestPartyMaster(PartyMaster, ABC):
                 party_predictions = [task.result for task in party.gather(predict_tasks, recv_results=True)]
 
                 predictions = self.aggregate(party.members, party_predictions, infer=True)
-                self.report_metrics(self.target, predictions, name="Train", step=titer.seq_num)
+                target = self.target[[self._uid2tensor_idx[uid] for uid in batcher.uids]]
+                self.report_metrics(target, predictions, name="Train", step=titer.seq_num)
 
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
                 logger.debug(
@@ -236,7 +255,7 @@ class HonestPartyMaster(PartyMaster, ABC):
                 )
                 predict_test_tasks = party.broadcast(
                     Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={"uids": None, "use_test": True}),
+                    method_kwargs=MethodKwargs(other_kwargs={"uids": self.inference_target_uids, "use_test": True}),
                     participating_members=titer.participating_members,
                 )
 
@@ -245,7 +264,9 @@ class HonestPartyMaster(PartyMaster, ABC):
                 ]
 
                 predictions = self.aggregate(party.members, party_predictions_test, infer=True)
-                self.report_metrics(self.test_target, predictions, name="Test", step=titer.seq_num)
+                test_target = self.test_target[[self._uid2tensor_idx_test[uid] for uid in self.inference_target_uids]]
+
+                self.report_metrics(test_target, predictions, name="Test", step=titer.seq_num)
 
             self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
@@ -313,6 +334,7 @@ class HonestPartyMember(PartyMember, ABC):
             do_train: bool = True,
             do_predict: bool = False,
             do_save_model: bool = False,
+            use_inner_join: bool = False,
             model_params: dict = None
     ) -> None:
         """
@@ -336,6 +358,7 @@ class HonestPartyMember(PartyMember, ABC):
         self._uids = member_record_uids
         self._infer_uids = member_inference_record_uids
         self._uids_to_use: Optional[List[str]] = None
+        self._uids_to_use_test: Optional[List[str]] = None
         self.is_initialized = False
         self.is_finalized = False
         self.iterations_counter = 0
@@ -351,6 +374,7 @@ class HonestPartyMember(PartyMember, ABC):
         self.do_predict = do_predict
         self.do_save_model = do_save_model
         self._optimizer = None
+        self.use_inner_join = use_inner_join
 
         if self.is_consequently:
             if self.members is None:
@@ -409,6 +433,7 @@ class HonestPartyMember(PartyMember, ABC):
             self._run(party, is_infer=True)
 
     def _run(self, party: PartyCommunicator, is_infer: bool = False):
+        # sync train
         synchronize_uids_task = party.recv(
             Task(method_name=Method.records_uids, from_id=self.master_id, to_id=self.id)
         )
@@ -422,6 +447,18 @@ class HonestPartyMember(PartyMember, ABC):
             Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
         )
         self.execute_received_task(register_records_uids_task)
+
+        # sync test
+        synchronize_uids_task = party.recv(
+            Task(method_name=Method.records_uids, from_id=self.master_id, to_id=self.id)
+        )
+        uids = self.execute_received_task(synchronize_uids_task)
+        party.send(self.master_id, Method.records_uids, result=uids)
+        register_records_uids_task = party.recv(
+            Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
+        )
+        self.execute_received_task(register_records_uids_task)
+
 
         if not is_infer:
             self.loop(batcher=self.make_batcher(), party=party)
@@ -478,9 +515,6 @@ class HonestPartyMember(PartyMember, ABC):
                     % (self.id, titer.seq_num, titer.epoch)
                 )
                 self._predict_metrics_loop(party)
-            #     predict_task = party.recv(Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id))
-            #     predictions = self.execute_received_task(predict_task)
-            #     party.send(self.master_id, Method.predict, result=predictions)
 
             self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
@@ -535,30 +569,75 @@ class HonestPartyMember(PartyMember, ABC):
                 epochs=epochs, members=self.members, uids=uids, batch_size=batch_size
             )
 
-    def records_uids(self, is_infer: bool = False) -> List[str]:
+    def records_uids(self, is_infer: bool = False) -> Tuple[List[str], bool]:
         """ Get the list of existing dataset unique identifiers.
 
         :return: List of unique identifiers.
         """
         logger.info("Member %s: reporting existing record uids" % self.id)
         if is_infer:
-            return self._infer_uids
-        return self._uids
+            return self._infer_uids, self.use_inner_join
+        return self._uids, self.use_inner_join
 
-    def register_records_uids(self, uids: List[str]) -> None:
+    def register_records_uids(self, uids: List[str], is_test: bool = False) -> None:
         """ Register unique identifiers to be used.
 
         :param uids: List of unique identifiers.
         :return: None
         """
         logger.info("Member %s: registering %s uids to be used." % (self.id, len(uids)))
-        self._uids_to_use = uids
+
+        if is_test:
+            self._uids_to_use_test = uids
+        else:
+            self._uids_to_use = uids
+        self.fillna(is_test=is_test)
+
+    def fillna(self, is_test: bool = False) -> None:
+        """ Fills missing values for member's dataset"""
+        uids_to_use = self._uids_to_use_test if is_test else self._uids_to_use
+        _uids = self._infer_uids if is_test else self._uids
+        _uid2tensor_idx = self._uid2tensor_idx_test if is_test else self._uid2tensor_idx
+        split = self._data_params.test_split if is_test else self._data_params.train_split
+
+        uids_to_fill = list(set(uids_to_use) - set(_uids))
+        if len(uids_to_fill) == 0:
+            return
+
+        logger.info(f"Member {self.id} has {len(uids_to_fill)} missing values : using fillna...")
+        start_idx = max(_uid2tensor_idx.values()) + 1
+        idx = start_idx
+        for uid in uids_to_fill:
+            _uid2tensor_idx[uid] = idx
+            idx += 1
+
+        fill_shape = self._dataset[split][self._data_params.features_key].shape[1]
+        member_id = self.id.split("-")[-1]
+        features = copy(self._dataset[split][self._data_params.features_key])
+        features = torch.cat([features, torch.zeros((len(uids_to_fill), fill_shape))])
+        has_features_column = torch.tensor([1.0 for _ in range(start_idx)] + [0.0 for _ in range(len(uids_to_fill))])
+        features = torch.cat([features, torch.unsqueeze(has_features_column, 1)], dim=1)
+
+        ds = datasets.Dataset.from_dict(
+            {
+                "user_id": list(_uid2tensor_idx.keys()),
+                f"features_part_{member_id}": features,
+            }
+        )
+
+        ds = ds.with_format("torch")
+        self._dataset[split] = ds
+        if not is_test:
+            self.initialize_model()
+            self.initialize_optimizer()
 
     def initialize(self, is_infer: bool = False):
         """ Initialize the party member. """
 
         logger.info("Member %s: initializing" % self.id)
         self._dataset = self.processor.fit_transform()
+        self._uid2tensor_idx = {uid: i for i, uid in enumerate(self._uids)}
+        self._uid2tensor_idx_test = {uid: i for i, uid in enumerate(self._infer_uids)}
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
         self.initialize_model(do_load_model=is_infer)

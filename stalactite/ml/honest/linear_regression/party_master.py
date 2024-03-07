@@ -89,7 +89,8 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         ds = self.processor.fit_transform()
         self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
         self.test_target = ds[self.processor.data_params.test_split][self.processor.data_params.label_key]
-
+        self._uid2tensor_idx = {uid: i for i, uid in enumerate(self.target_uids)}
+        self._uid2tensor_idx_test = {uid: i for i, uid in enumerate(self.inference_target_uids)}
         self.class_weights = self.processor.get_class_weights() \
             if self.processor.common_params.use_class_weights else None
         self._data_params = self.processor.data_params
@@ -179,7 +180,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             predictions: DataTensor,
             party_predictions: PartyDataTensor,
             world_size: int,
-            subiter_seq_num: int,
+            uids: list[str],
     ) -> List[DataTensor]:
         """ Compute updates based on members` predictions.
 
@@ -187,15 +188,15 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         :param predictions: Model predictions.
         :param party_predictions: List of party predictions.
         :param world_size: Number of party members.
-        :param subiter_seq_num: Sub-iteration sequence number.
+        :param uids: uids of record to use
 
         :return: List of updates as tensors.
         """
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
-
+        tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
+        y = self.target[tensor_idx]
         for member_id in participating_members:
             party_predictions_for_upd = [v for k, v in self.party_predictions.items() if k != member_id]
             if len(party_predictions_for_upd) == 0:
@@ -203,7 +204,6 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             pred_for_member_upd = torch.mean(torch.stack(party_predictions_for_upd), dim=0)
             member_update = y - torch.reshape(pred_for_member_upd, (-1,))
             self.updates[member_id] = member_update
-
         return [self.updates[member_id] for member_id in participating_members]
 
     def finalize(self, is_infer: bool = False) -> None:
