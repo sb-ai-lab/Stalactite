@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import shutil
 from pathlib import Path
@@ -106,6 +108,14 @@ def split_dataset_dict(ds_dict, parts, split_feature='image', part_prefix='image
     return parts
 
 
+def save_master_dataset(dataset, path):
+    path = Path(path)
+    if not path.exists():
+        path.mkdir()
+
+    dataset.save_to_disk(path)
+
+
 def save_splitted_dataset(ds_list, path, part_dir_name='part_', clean_dir=False):
     path = Path(path)
     if not path.exists():
@@ -155,12 +165,23 @@ def load_data(save_path, parts_num, binary: bool = True):
         # Map lables to new labels:
         mnist = mnist.map(partial(substitute, new_labels=new_labels, use_labels=use_labels))
 
+    mnist["train"] = mnist["train"].add_column(name="image_idx", column=[idx for idx in range(len(mnist["train"]))])
+    master_dataset = mnist.select_columns(["label"])
+
     # Split train part into val and train parts:
     # divide onto train and val
     if make_validation:
         train_train, train_val = make_train_val_split(mnist['train'], test_size=test_size,
                                                       stratify_by_column=stratify_by_column, shuffle=shuffle, seed=seed)
-        mnist = datasets.DatasetDict({'train_train': train_train, 'train_val': train_val, 'test': mnist['test']})
+
+        train_train_labels = train_train.select_columns(["image_idx", "label"])
+        train_val_labels = train_val.select_columns(["image_idx", "label"])
+
+        train_train = train_train.remove_columns("label")
+        train_val = train_val.remove_columns("label")
+
+        mnist = datasets.DatasetDict({'train_train': train_train, 'train_val': train_val})
+        master_dataset = datasets.DatasetDict({'train_train': train_train_labels, 'train_val': train_val_labels})
 
     # Split the whole dataset:
     rr = split_dataset_dict(mnist, parts=parts_num, split_feature='image', part_prefix='image_part')
@@ -168,7 +189,9 @@ def load_data(save_path, parts_num, binary: bool = True):
     # Save the whole dataset:
     # Saving parameters:
     save_splitted_dataset(rr, path=save_dir, clean_dir=False)
-    
+    save_master_dataset(master_dataset, path=os.path.join(save_dir, "master_part"))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Command line params')
     

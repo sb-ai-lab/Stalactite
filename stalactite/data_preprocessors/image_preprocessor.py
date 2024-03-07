@@ -9,12 +9,15 @@ class ImagePreprocessor:
     """
     Make data preprocessing on data after downloading.
     """
-    def __init__(self, dataset: datasets.DatasetDict,  member_id, params=None):
+    def __init__(self, dataset: datasets.DatasetDict,  member_id, params=None, is_master: bool = False,
+                 master_has_features: bool = False):
         self.dataset = dataset
         self.common_params = params.vfl_model
         self.data_params = params.data.copy()
         self.data_params.features_key = self.data_params.features_key + str(member_id)
         self.member_id = member_id
+        self.is_master = is_master
+        self.master_has_features = master_has_features
 
     def fit_transform(self) -> datasets.DatasetDict:
         """
@@ -34,6 +37,7 @@ class ImagePreprocessor:
 
         feature_name = self.data_params.features_key
         label_name = self.data_params.label_key
+        uids_name = self.data_params.uids_key
 
         image2tensor = PILImageToTensor(feature_name)
         full_data_tensor = FullDataTensor(feature_name)
@@ -42,11 +46,16 @@ class ImagePreprocessor:
         train_split_data, test_split_data = {}, {}
 
         for split_dict, split_data in zip([train_split_data, test_split_data], [data_train, data_test]):
-            split_dict[feature_name] = image2tensor.fit_transform(split_data)
-            for preprocessors in [full_data_tensor, standard_scaler]:
-                split_dict[feature_name] = preprocessors.fit_transform(split_dict[feature_name])
 
-            split_dict[label_name] = split_data[label_name]
+            if self.is_master:
+                split_dict[label_name] = split_data[label_name]
+
+            if self.master_has_features or not self.is_master:
+                split_dict[feature_name] = image2tensor.fit_transform(split_data)
+                for preprocessors in [full_data_tensor, standard_scaler]:
+                    split_dict[feature_name] = preprocessors.fit_transform(split_dict[feature_name])
+
+            split_dict[uids_name] = split_data[uids_name]
 
         ds_train = datasets.Dataset.from_dict(train_split_data, split=train_split_key)
         ds_test = datasets.Dataset.from_dict(test_split_data, split=test_split_key)
