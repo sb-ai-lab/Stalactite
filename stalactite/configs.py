@@ -97,6 +97,7 @@ class DataConfig(BaseModel):
     test_split: str = Field(default='train_val')
     features_key: str = Field(default="image_part_")
     label_key: str = Field(default="label")
+    uids_key: str = Field(default="user_id")
 
 
 class PrerequisitesConfig(BaseModel):

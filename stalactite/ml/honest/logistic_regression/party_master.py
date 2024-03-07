@@ -58,7 +58,7 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
             predictions: DataTensor,
             party_predictions: PartyDataTensor,
             world_size: int,
-            subiter_seq_num: int,
+            uids: list[str],
     ) -> List[DataTensor]:
         """ Compute updates for logistic regression.
 
@@ -73,7 +73,9 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
+        # y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
+        tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
+        y = self.target[tensor_idx]
 
         criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
         loss = criterion(torch.squeeze(predictions), y.float())

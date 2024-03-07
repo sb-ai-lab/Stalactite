@@ -90,6 +90,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
         self.test_target = ds[self.processor.data_params.test_split][self.processor.data_params.label_key]
         self._uid2tensor_idx = {uid: i for i, uid in enumerate(self.target_uids)}
+        self._uid2tensor_idx_test = {uid: i for i, uid in enumerate(self.inference_target_uids)}
         self.class_weights = self.processor.get_class_weights() \
             if self.processor.common_params.use_class_weights else None
         self._data_params = self.processor.data_params
@@ -187,7 +188,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         :param predictions: Model predictions.
         :param party_predictions: List of party predictions.
         :param world_size: Number of party members.
-        :param subiter_seq_num: Sub-iteration sequence number. #todo: remove
+        :param uids: uids of record to use
 
         :return: List of updates as tensors.
         """

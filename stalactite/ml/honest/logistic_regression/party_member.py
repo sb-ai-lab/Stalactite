@@ -17,7 +17,6 @@ class HonestPartyMemberLogReg(HonestPartyMemberLinReg):
         else:
             self._model = LogisticRegressionBatch(
                 input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-                output_dim=self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
                 **self._model_params
             )
 

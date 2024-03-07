@@ -6,12 +6,12 @@ common:
   reports_export_folder: "../../reports"
 
 vfl_model:
-  epochs: 1
+  epochs: 5
   batch_size: 250
   eval_batch_size: 200
   vfl_model_name: logreg
   is_consequently: False
-  use_class_weights: False
+  use_class_weights: True
   learning_rate: 0.05
   do_train: True
   do_predict: False
@@ -29,7 +29,8 @@ master:
 
 member:
   member_model_params: {
-    init_weights: 0.005
+    init_weights: 0.005,
+    output_dim: 19,
   }
 
 
@@ -37,9 +38,10 @@ data:
   random_seed: 0
   dataset_size: 850
   dataset: 'sbol_smm'
-  host_path_data_dir:  /home/dmitriy/data/my_test/vfl_multilabel_sber_sample10000_parts2
+  host_path_data_dir:  /home/dmitriy/data/examples/sber/vfl_multilabel_sber_sample10000_parts2
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"
   features_key: "features_part_"
   label_key: "labels"
+  uids_key: "user_id"

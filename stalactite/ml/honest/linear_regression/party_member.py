@@ -47,7 +47,7 @@ class HonestPartyMemberLinReg(HonestPartyMember):
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self.check_if_ready()
         tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
-        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx, :]  #[[int(x) for x in uids]] #todo:
+        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx, :]
         self._model.update_weights(X_train, upd, optimizer=self._optimizer)
         logger.info("Member %s: successfully updated weights" % self.id)
 
@@ -61,15 +61,16 @@ class HonestPartyMemberLinReg(HonestPartyMember):
         """
         logger.info("Member %s: predicting." % (self.id))
         self.check_if_ready()
-        tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
+        _uid2tensor_idx = self._uid2tensor_idx_test if use_test else self._uid2tensor_idx
+        tensor_idx = [_uid2tensor_idx[uid] for uid in uids] if uids else None
         if use_test:
             logger.info("Member %s: using test data" % self.id)
             if uids is None:
                 X = self._dataset[self._data_params.test_split][self._data_params.features_key]
             else:
-                X = self._dataset[self._data_params.test_split][self._data_params.features_key][tensor_idx, :]#[[int(x) for x in uids]] #todo:
+                X = self._dataset[self._data_params.test_split][self._data_params.features_key][tensor_idx, :]
         else:
-            X = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx, :]#[[int(x) for x in uids]] #todo:
+            X = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx, :]
         predictions = self._model.predict(X)
         logger.info("Member %s: made predictions." % self.id)
         return predictions
