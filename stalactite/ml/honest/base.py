@@ -171,10 +171,10 @@ class HonestPartyMaster(PartyMaster, ABC):
         )
         self.initialize(is_infer=True)
 
-        uids = self.synchronize_uids(collected_uids_results, world_size=party.world_size)
+        uids = self.synchronize_uids(collected_uids_results, world_size=party.world_size, is_test=True)
         party.broadcast(
             Method.register_records_uids,
-            method_kwargs=MethodKwargs(other_kwargs={"uids": uids}),
+            method_kwargs=MethodKwargs(other_kwargs={"uids": uids, "is_test": True}),
             participating_members=party.members,
         )
         self.inference_loop(
@@ -280,7 +280,6 @@ class HonestPartyMaster(PartyMaster, ABC):
         """
         logger.info("Master %s: entering inference loop" % self.id)
         party_predictions_test = defaultdict(list)
-        test_targets_uids = []
         for titer in batcher:
             if titer.last_batch:
                 break
@@ -296,12 +295,13 @@ class HonestPartyMaster(PartyMaster, ABC):
             )
             for task in party.gather(predict_test_tasks, recv_results=True):
                 party_predictions_test[task.from_id].append(task.result)
-            test_targets_uids.extend([int(uid) for uid in titer.batch])
             self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
         party_predictions_test = self._aggregate_batched_predictions(party.members, party_predictions_test)
         predictions = self.aggregate(party.members, party_predictions_test, infer=True)
-        self.report_metrics(self.test_target[test_targets_uids], predictions, name="Test", step=0)
+
+        target = self.test_target[[self._uid2tensor_idx_test[uid] for uid in batcher.uids]]
+        self.report_metrics(target, predictions, name="Test", step=0)
 
     def _aggregate_batched_predictions(
             self, party_members: List[str], batched_party_predictions: Dict[str, List[DataTensor]]
@@ -448,19 +448,17 @@ class HonestPartyMember(PartyMember, ABC):
         )
         self.execute_received_task(register_records_uids_task)
 
-        # sync test
-        synchronize_uids_task = party.recv(
-            Task(method_name=Method.records_uids, from_id=self.master_id, to_id=self.id)
-        )
-        uids = self.execute_received_task(synchronize_uids_task)
-        party.send(self.master_id, Method.records_uids, result=uids)
-        register_records_uids_task = party.recv(
-            Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
-        )
-        self.execute_received_task(register_records_uids_task)
-
-
         if not is_infer:
+            # sync test
+            synchronize_uids_task = party.recv(
+                Task(method_name=Method.records_uids, from_id=self.master_id, to_id=self.id)
+            )
+            uids = self.execute_received_task(synchronize_uids_task)
+            party.send(self.master_id, Method.records_uids, result=uids)
+            register_records_uids_task = party.recv(
+                Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
+            )
+            self.execute_received_task(register_records_uids_task)
             self.loop(batcher=self.make_batcher(), party=party)
         else:
             self.inference_loop(batcher=self.make_batcher(is_infer=True), party=party)
@@ -548,10 +546,10 @@ class HonestPartyMember(PartyMember, ABC):
     ) -> Batcher:
         epochs = 1 if is_infer else self.epochs
         batch_size = self._eval_batch_size if is_infer else self._batch_size
-
-        if self._uids_to_use is None:
+        uids_to_use = self._uids_to_use_test if is_infer else self._uids_to_use
+        if uids_to_use is None:
             raise RuntimeError("Cannot create make_batcher, you must `register_records_uids` first.")
-        return self._create_batcher(epochs=epochs, uids=self._uids_to_use, batch_size=batch_size)
+        return self._create_batcher(epochs=epochs, uids=uids_to_use, batch_size=batch_size)
 
     def _create_batcher(self, epochs: int, uids: List[str], batch_size: int) -> Batcher:
         """Create a make_batcher for training.
