@@ -11,7 +11,7 @@ vfl_model:
   eval_batch_size: 200
   vfl_model_name: efficientnet
   is_consequently: False
-  use_class_weights: False
+  use_class_weights: True
   learning_rate: 0.01
   do_train: True
   do_predict: False
@@ -45,9 +45,10 @@ data:
   dataset_size: 750
   dataset: 'mnist'
   use_smm: False
-  host_path_data_dir:  ../../data/sber_ds_vfl/mnist_efficientnet_multiclass
+  host_path_data_dir:  ../../data/sber_ds_vfl/mnist_efficientnet_multiclass2
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
   features_key: "image_part_"
   label_key: "label"
+  uids_key: "image_idx"

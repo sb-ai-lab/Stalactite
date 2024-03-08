@@ -5,7 +5,6 @@ import threading
 from typing import Optional
 import datasets
 
-# from stalactite.party_member_impl import PartyMemberImpl
 from stalactite.ml import (
     HonestPartyMasterLinRegConsequently,
     HonestPartyMasterLinReg,
@@ -20,7 +19,6 @@ from stalactite.ml import (
     HonestPartyMemberMLP
 )
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor, ImagePreprocessorEff
-# from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
@@ -43,8 +41,10 @@ def load_processors(config: VFLConfig):
     """
     if config.data.dataset.lower() == "mnist":
 
+        binary = False if config.vfl_model.vfl_model_name == "efficientnet" else True
+
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_mnist(config.data.host_path_data_dir, config.common.world_size)
+            load_mnist(config.data.host_path_data_dir, config.common.world_size, binary=binary)
 
         dataset = {}
         for m in range(config.common.world_size):
