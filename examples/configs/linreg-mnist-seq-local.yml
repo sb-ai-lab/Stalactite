@@ -28,6 +28,7 @@ data:
   test_split: "train_val"
   features_key: "image_part_"
   label_key: "label"
+  uids_key: "image_idx"
 
 prerequisites:
   mlflow_host: node3.bdcl

@@ -9,7 +9,6 @@ from sklearn.metrics import roc_auc_score
 
 from stalactite.base import Batcher, RecordsBatch, DataTensor, PartyDataTensor
 from stalactite.batching import ListBatcher
-from stalactite.helpers import log_timing
 from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.ml.arbitered.base import ArbiteredPartyMaster, SecurityProtocol, T, Role
 from stalactite.ml.arbitered.logistic_regression.party_agent import ArbiteredPartyAgentLogReg
@@ -80,10 +79,13 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
         self.do_save_model = do_save_model
         self.model_path = model_path
 
-    def predict_partial(self, uids: RecordsBatch, batch: Any = None) -> DataTensor:
+        self.uid2tensor_idx = None
+        self.uid2tensor_idx_test = None
+
+    def predict_partial(self, uids: RecordsBatch) -> DataTensor:
         logger.info("Master %s: predicting. Batch size: %s" % (self.id, len(uids)))
         self.check_if_ready()
-        Xw, y = self.predict(uids, is_test=False, batch=batch)
+        Xw, y = self.predict(uids, is_infer=False)
         d = 0.25 * Xw - 0.5 * y.T.unsqueeze(2)
         return d
 
@@ -126,27 +128,25 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
         self.target = torch.where(self.target == 0., -1., 1.)
         self.test_target = torch.where(self.test_target == 0., -1., 1.)
 
-        self.initialize_model()
+        if self.uid2tensor_idx is None:
+            self.uid2tensor_idx = {uid: i for i, uid in enumerate(self.target_uids)}
+        if self.uid2tensor_idx_test is None:
+            self.uid2tensor_idx_test = {uid: i for i, uid in enumerate(self.inference_target_uids)}
+
+        self.initialize_model(do_load_model=is_infer)
         self.is_initialized = True
         logger.info("Master %s: is initialized" % self.id)
 
-    def predict(self, uids: Optional[List[str]], is_test: bool = False, batch: Any = None):
-        split = self._data_params.train_split if not is_test else self._data_params.test_split
-        target = self.target if not is_test else self.test_target
-        batch_size = self._batch_size if not is_test else self._eval_batch_size
-        if is_test and uids is None:
-            X = self._dataset[split][self._data_params.features_key]
-        else:
-            if uids is None:
-                uids = self._uids_to_use
-            X = self._dataset[split][self._data_params.features_key][[int(x) for x in uids]]
-
-        if batch is not None:
-            # TODO: bugfix target double shuffle (remove dependency from batch number)
-            y = target[batch_size * batch.subiter_seq_num: batch_size * (batch.subiter_seq_num + 1)]
-        else:
-            y = target
-
+    def predict(self, uids: Optional[List[str]], is_infer: bool = False):
+        logger.info(f'{self.id} makes predictions')
+        split = self._data_params.train_split if not is_infer else self._data_params.test_split
+        target = self.target if not is_infer else self.test_target
+        if uids is None:
+            uids = self.inference_target_uids if is_infer else self.target_uids
+        _uid2tensor_idx = self.uid2tensor_idx_test if is_infer else self.uid2tensor_idx
+        tensor_idx = [_uid2tensor_idx[uid] for uid in uids]
+        X = self._dataset[split][self._data_params.features_key][tensor_idx]
+        y = target[tensor_idx]
         return torch.stack([model.predict(X) for model in self._model]), y
 
     def aggregate_predictions(self, master_predictions: DataTensor, members_predictions: PartyDataTensor) -> DataTensor:
@@ -177,7 +177,9 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
         return predictions
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
-        # TODO different metric for the inference
+        postfix = "-infer" if step == -1 else ""
+        step = step if step != -1 else None
+
         y = torch.where(y == -1., -0., 1.)  # After a sigmoid function we calculate metrics on the {0, 1} labels
         y = y.numpy()
 
@@ -194,7 +196,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
                 roc_auc = 0
             logger.info(f'{name} ROC AUC {avg}: {roc_auc}')
             if self.run_mlflow:
-                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}{postfix}", roc_auc, step=step)
 
     def make_batcher(
             self,
@@ -202,10 +204,14 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
             party_members: Optional[List[str]] = None,
             is_infer: bool = False
     ) -> Batcher:
+        if uids is None:
+            if is_infer:
+                uids = self._uids_to_use_test
+            else:
+                raise RuntimeError('Master must initialize batcher with collected uids.')
         logger.info("Master %s: making a make_batcher for uids %s" % (self.id, len(uids)))
         self.check_if_ready()
         batch_size = self._eval_batch_size if is_infer else self._batch_size
         epochs = 1 if is_infer else self.epochs
-        if uids is None:
-            raise RuntimeError('Master must initialize batcher with collected uids.')
+
         return ListBatcher(epochs=epochs, members=party_members, uids=uids, batch_size=batch_size)

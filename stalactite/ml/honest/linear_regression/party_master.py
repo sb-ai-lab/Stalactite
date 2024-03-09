@@ -73,6 +73,9 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         self.aggregated_output = None
         self._model_params = model_params
 
+        self.uid2tensor_idx = None
+        self.uid2tensor_idx_test = None
+
     def initialize_model(self, do_load_model: bool = False):
         pass
 
@@ -85,8 +88,10 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         ds = self.processor.fit_transform()
         self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
         self.test_target = ds[self.processor.data_params.test_split][self.processor.data_params.label_key]
-        self._uid2tensor_idx = {uid: i for i, uid in enumerate(self.target_uids)}
-        self._uid2tensor_idx_test = {uid: i for i, uid in enumerate(self.inference_target_uids)}
+        if self.uid2tensor_idx is None:
+            self.uid2tensor_idx = {uid: i for i, uid in enumerate(self.target_uids)}
+        if self.uid2tensor_idx_test is None:
+            self.uid2tensor_idx_test = {uid: i for i, uid in enumerate(self.inference_target_uids)}
         self.class_weights = self.processor.get_class_weights() \
             if self.processor.common_params.use_class_weights else None
         self._data_params = self.processor.data_params
@@ -141,17 +146,20 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         logger.info(
             f"Master %s: reporting metrics. Y dim: {y.size()}. " f"Predictions size: {predictions.size()}" % self.id
         )
+        postfix = '-infer' if step == -1 else ""
+        step = step if step != -1 else None
+
         mae = metrics.mean_absolute_error(y, predictions.detach())
         acc = ComputeAccuracy().compute(y, predictions.detach())
         logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
         logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
 
         if self.run_mlflow:
-            mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
-            mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
+            mlflow.log_metric(f"{name.lower()}_mae{postfix}", mae, step=step)
+            mlflow.log_metric(f"{name.lower()}_acc{postfix}", acc, step=step)
 
     def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+            self, participating_members: List[str], party_predictions: PartyDataTensor, is_infer: bool = False
     ) -> DataTensor:
         """ Aggregate members` predictions.
 
@@ -163,7 +171,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         """
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
-        if not infer:
+        if not is_infer:
             for member_id, member_prediction in zip(participating_members, party_predictions):
                 self.party_predictions[member_id] = member_prediction
             party_predictions = list(self.party_predictions.values())
@@ -191,7 +199,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
+        tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
         for member_id in participating_members:
             party_predictions_for_upd = [v for k, v in self.party_predictions.items() if k != member_id]

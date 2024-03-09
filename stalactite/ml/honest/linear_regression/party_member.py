@@ -38,24 +38,24 @@ class HonestPartyMemberLinReg(HonestPartyMember):
         """
         logger.info("Member %s: updating weights. Incoming tensor: %s" % (self.id, tuple(upd.size())))
         self.check_if_ready()
-        tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
+        tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
         X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][tensor_idx, :]
         self._model.update_weights(X_train, upd, optimizer=self._optimizer)
         logger.info("Member %s: successfully updated weights" % self.id)
 
-    def predict(self, uids: Optional[RecordsBatch], use_test: bool = False) -> DataTensor:
+    def predict(self, uids: Optional[RecordsBatch], is_infer: bool = False) -> DataTensor:
         """ Make predictions using the current model.
 
         :param uids: Batch of record unique identifiers.
-        :param use_test: Flag indicating whether to use the test data.
+        :param is_infer: Flag indicating whether to use the test data.
 
         :return: Model predictions.
         """
         logger.info("Member %s: predicting." % (self.id))
         self.check_if_ready()
-        _uid2tensor_idx = self._uid2tensor_idx_test if use_test else self._uid2tensor_idx
+        _uid2tensor_idx = self.uid2tensor_idx_test if is_infer else self.uid2tensor_idx
         tensor_idx = [_uid2tensor_idx[uid] for uid in uids] if uids else None
-        if use_test:
+        if is_infer:
             logger.info("Member %s: using test data" % self.id)
             if uids is None:
                 X = self._dataset[self._data_params.test_split][self._data_params.features_key]

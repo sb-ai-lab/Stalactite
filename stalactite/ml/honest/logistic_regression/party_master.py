@@ -27,19 +27,19 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         return [torch.zeros(self._batch_size, self.target.shape[1]) for _ in range(world_size)]
 
     def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+            self, participating_members: List[str], party_predictions: PartyDataTensor, is_infer: bool = False
     ) -> DataTensor:
         """ Aggregate party predictions for logistic regression.
 
         :param participating_members: List of participating party member identifiers.
         :param party_predictions: List of party predictions.
-        :param infer: Flag indicating whether to perform inference.
+        :param is_infer: Flag indicating whether to perform inference.
 
         :return: Aggregated predictions after applying sigmoid function.
         """
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
-        if not infer:
+        if not is_infer:
             for member_id, member_prediction in zip(participating_members, party_predictions):
                 self.party_predictions[member_id] = member_prediction
             party_predictions = list(self.party_predictions.values())
@@ -70,7 +70,7 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         self._check_if_ready()
         self.iteration_counter += 1
         # y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
-        tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
+        tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
 
         criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
@@ -100,14 +100,16 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
 
         y = y.numpy()
         predictions = predictions.detach().numpy()
+        postfix = '-infer' if step == -1 else ""
+        step = step if step != -1 else None
 
         mae = metrics.mean_absolute_error(y, predictions)
         acc = ComputeAccuracy_numpy(is_linreg=False).compute(y, predictions)
         logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
         logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
         if self.run_mlflow:
-            mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
-            mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
+            mlflow.log_metric(f"{name.lower()}_mae{postfix}", mae, step=step)
+            mlflow.log_metric(f"{name.lower()}_acc{postfix}", acc, step=step)
 
         for avg in ["macro", "micro"]:
             try:
@@ -116,4 +118,4 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
                 roc_auc = 0
             logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
             if self.run_mlflow:
-                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}{postfix}", roc_auc, step=step)

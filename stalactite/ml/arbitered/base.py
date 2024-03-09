@@ -204,6 +204,11 @@ class PartyArbiter(PartyAgent, ABC):
         )
         self.execute_received_task(register_records_uids_task)
 
+        register_test_records_uids_task = party.recv(
+            Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
+        )
+        self.execute_received_task(register_test_records_uids_task)
+
         public_keys_tasks = [
             Task(ArbiteredMethod.get_public_key, from_id=agent, to_id=self.id)
             for agent in party.members + [party.master]
@@ -269,9 +274,10 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
     _eval_batch_size: int
     _batcher: Batcher
 
-
     @abstractmethod
-    def predict(self, uids: Optional[List[str]], is_test: bool = False, batch: Any = None) -> tuple[DataTensor, DataTensor]:
+    def predict(
+            self, uids: Optional[List[str]], is_infer: bool = False  # , batch: Any = None
+    ) -> tuple[DataTensor, DataTensor]:
         """ Calculate predictions on current model.
 
         :param uids: Batch of record unique identifiers.
@@ -281,11 +287,10 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
         ...
 
     @abstractmethod
-    def predict_partial(self, uids: RecordsBatch, batch: Any) -> DataTensor:
+    def predict_partial(self, uids: RecordsBatch) -> DataTensor:  # , batch: Any
         """ Calculate error using the current model.
 
         :param uids: Batch of record unique identifiers.
-        :param batch: Batch information yielded by Batcher.
 
         :return: Difference between the master predictions and the target.
         """
@@ -351,18 +356,30 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
             ArbiteredMethod.records_uids,
             participating_members=party.members,
         )
-
         records_uids_results = party.gather(records_uids_tasks, recv_results=True)
 
         collected_uids_results = [task.result for task in records_uids_results]
+
+        test_records_uids_tasks = party.broadcast(
+            ArbiteredMethod.records_uids,
+            participating_members=party.members,
+            method_kwargs=MethodKwargs(other_kwargs={'is_infer': True}),
+        )
+
+        test_records_uids_results = party.gather(test_records_uids_tasks, recv_results=True)
+
+        test_collected_uids_results = [task.result for task in test_records_uids_results]
 
         party.broadcast(
             ArbiteredMethod.initialize,
             participating_members=party.members + [party.arbiter],
         )
-        self.initialize()
+
+        self.initialize(is_infer=False)
 
         uids = self.synchronize_uids(collected_uids_results, world_size=party.world_size)
+        test_uids = self.synchronize_uids(test_collected_uids_results, world_size=party.world_size, is_infer=True)
+
         party.broadcast(
             ArbiteredMethod.register_records_uids,
             method_kwargs=MethodKwargs(other_kwargs={"uids": uids}),
@@ -372,7 +389,20 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
         register_records_uids_task = party.recv(
             Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
         )
+
         self.execute_received_task(register_records_uids_task)
+
+        party.broadcast(
+            ArbiteredMethod.register_records_uids,
+            method_kwargs=MethodKwargs(other_kwargs={"uids": test_uids, "is_infer": True}),
+            participating_members=party.members + [party.master] + [party.arbiter],
+        )
+
+        register_test_records_uids_task = party.recv(
+            Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
+        )
+
+        self.execute_received_task(register_test_records_uids_task)
 
         pk_task = party.send(method_name=ArbiteredMethod.get_public_key, send_to_id=party.arbiter)
         pk = party.recv(pk_task, recv_results=True).result
@@ -409,7 +439,7 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                     other_kwargs={'uids': titer.batch}
                 )
             )
-            master_partial_preds = self.predict_partial(uids=titer.batch, batch=titer)  # d
+            master_partial_preds = self.predict_partial(uids=titer.batch)  # d
 
             participant_partial_predictions_tasks = party.gather(participant_partial_pred_tasks, recv_results=True)
             partial_predictions = [task.result for task in participant_partial_predictions_tasks]
@@ -444,7 +474,7 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                 predict_tasks = party.broadcast(
                     ArbiteredMethod.predict,
                     method_kwargs=MethodKwargs(
-                        other_kwargs={'uids': None, 'is_test': False}
+                        other_kwargs={'uids': None, 'is_infer': False}
                     ),
                     participating_members=titer.participating_members
                 )
@@ -463,12 +493,12 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                 predict_tasks = party.broadcast(
                     ArbiteredMethod.predict,
                     method_kwargs=MethodKwargs(
-                        other_kwargs={'uids': None, 'is_test': True}
+                        other_kwargs={'uids': None, 'is_infer': True}
                     ),
                     participating_members=titer.participating_members
                 )
 
-                master_predictions, targets = self.predict(uids=None, is_test=True)
+                master_predictions, targets = self.predict(uids=None, is_infer=True)
                 participant_partial_predictions_tasks = party.gather(predict_tasks, recv_results=True)
                 aggr_predictions = self.aggregate_predictions(
                     master_predictions=master_predictions,
@@ -481,14 +511,15 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
 
     def inference(self, party: PartyCommunicator):
         """ Run VFL inference on master. """
-        records_uids_tasks = party.broadcast(
-            Method.records_uids,
-            participating_members=party.members,
-            method_kwargs=MethodKwargs(other_kwargs={'is_infer': True})
-        )
-        records_uids_results = party.gather(records_uids_tasks, recv_results=True)
+        if not self.do_train:
+            records_uids_tasks = party.broadcast(
+                Method.records_uids,
+                participating_members=party.members,
+                method_kwargs=MethodKwargs(other_kwargs={'is_infer': True})
+            )
+            records_uids_results = party.gather(records_uids_tasks, recv_results=True)
 
-        collected_uids_results = [task.result for task in records_uids_results]
+            collected_uids_results = [task.result for task in records_uids_results]
 
         party.broadcast(
             Method.initialize,
@@ -497,13 +528,15 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
 
         )
         self.initialize(is_infer=True)
-
-        uids = self.synchronize_uids(collected_uids_results, world_size=party.world_size, is_infer=True)
-        party.broadcast(
-            Method.register_records_uids,
-            method_kwargs=MethodKwargs(other_kwargs={"uids": uids}),
-            participating_members=party.members,
-        )
+        if not self.do_train:
+            uids = self.synchronize_uids(collected_uids_results, world_size=party.world_size, is_infer=True)
+            party.broadcast(
+                Method.register_records_uids,
+                method_kwargs=MethodKwargs(other_kwargs={"uids": uids, 'is_infer': True}),
+                participating_members=party.members,
+            )
+        else:
+            uids = None
         self.inference_loop(
             batcher=self.make_batcher(uids=uids, party_members=party.members, is_infer=True),
             party=party
@@ -531,10 +564,10 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
             iter_start_time = time.time()
             predict_test_tasks = party.broadcast(
                 Method.predict,
-                method_kwargs=MethodKwargs(other_kwargs={"uids": titer.batch, "is_test": True}),
+                method_kwargs=MethodKwargs(other_kwargs={"uids": titer.batch, "is_infer": True}),
                 participating_members=titer.participating_members,
             )
-            predictions_master, target = self.predict(uids=titer.batch, is_test=True, batch=titer)
+            predictions_master, target = self.predict(uids=titer.batch, is_infer=True)
             party_predictions_test[self.id].append(predictions_master)
             for task in party.gather(predict_test_tasks, recv_results=True):
                 party_predictions_test[task.from_id].append(task.result)
@@ -545,7 +578,7 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
             torch.cat(party_predictions_test[self.id], dim=1),
             aggr_party_predictions
         )
-        self.report_metrics(test_targets, predictions, name="Test", step=0)
+        self.report_metrics(test_targets, predictions, name="Test", step=-1)
 
     def _aggregate_batched_predictions(
             self,
@@ -560,10 +593,11 @@ class ArbiteredPartyMember(PartyMember, ABC):
     master: str
 
     @abstractmethod
-    def predict(self, uids: Optional[List[str]], is_test: bool = False) -> DataTensor:
+    def predict(self, uids: Optional[List[str]], is_infer: bool = False) -> DataTensor:
         """ Calculate predictions on current model.
 
         :param uids: Batch of record unique identifiers.
+        :param is_infer: Whether to use test split.
 
         :return: Predictions.
         """
@@ -607,19 +641,20 @@ class ArbiteredPartyMember(PartyMember, ABC):
 
     def inference(self, party: PartyCommunicator):
         """ Run VFL inference on member. """
-        synchronize_uids_task = party.recv(
-            Task(method_name=Method.records_uids, from_id=self.master, to_id=self.id)
-        )
-        uids = self.execute_received_task(synchronize_uids_task)
-        party.send(self.master, Method.records_uids, result=uids)
+        if not self.do_train:
+            synchronize_uids_task = party.recv(
+                Task(method_name=Method.records_uids, from_id=self.master, to_id=self.id)
+            )
+            uids = self.execute_received_task(synchronize_uids_task)
+            party.send(self.master, Method.records_uids, result=uids)
 
         initialize_task = party.recv(Task(method_name=Method.initialize, from_id=self.master, to_id=self.id))
         self.execute_received_task(initialize_task)
-
-        register_records_uids_task = party.recv(
-            Task(method_name=Method.register_records_uids, from_id=self.master, to_id=self.id)
-        )
-        self.execute_received_task(register_records_uids_task)
+        if not self.do_train:
+            register_records_uids_task = party.recv(
+                Task(method_name=Method.register_records_uids, from_id=self.master, to_id=self.id)
+            )
+            self.execute_received_task(register_records_uids_task)
 
         self.inference_loop(batcher=self.make_batcher(is_infer=True), party=party)
 
@@ -651,6 +686,12 @@ class ArbiteredPartyMember(PartyMember, ABC):
         uids = self.execute_received_task(synchronize_uids_task)
         party.send(party.master, Method.records_uids, result=uids)
 
+        synchronize_test_uids_task = party.recv(
+            Task(method_name=Method.records_uids, from_id=self.master, to_id=self.id)
+        )
+        test_uids = self.execute_received_task(synchronize_test_uids_task)
+        party.send(self.master, Method.records_uids, result=test_uids)
+
         initialize_task = party.recv(Task(method_name=Method.initialize, from_id=party.master, to_id=self.id))
         self.execute_received_task(initialize_task)
 
@@ -659,6 +700,11 @@ class ArbiteredPartyMember(PartyMember, ABC):
         )
 
         self.execute_received_task(register_records_uids_task)
+
+        register_test_records_uids_task = party.recv(
+            Task(method_name=Method.register_records_uids, from_id=self.master, to_id=self.id)
+        )
+        self.execute_received_task(register_test_records_uids_task)
 
         pk_task = party.send(method_name=ArbiteredMethod.get_public_key, send_to_id=party.arbiter)
         pk = party.recv(pk_task, recv_results=True).result

@@ -5,12 +5,14 @@ import torch.nn.parameter
 
 from stalactite.base import DataTensor, Batcher
 from stalactite.batching import ListBatcher
-from stalactite.ml.arbitered.base import PartyArbiter, SecurityProtocolArbiter
+from stalactite.ml.arbitered.base import PartyArbiter, SecurityProtocolArbiter, Role
 
 logger = logging.getLogger(__name__)
 
 
 class PartyArbiterLogReg(PartyArbiter):
+    role = Role.arbiter
+
     def __init__(
             self,
             uid: str,
@@ -48,6 +50,7 @@ class PartyArbiterLogReg(PartyArbiter):
         self.members: Optional[List[str]] = None
         self.master: Optional[str] = None
         self._uids_to_use: Optional[List[str]] = None
+        self._uids_to_use_test: Optional[List[str]] = None
 
     def make_batcher(
             self,
@@ -56,7 +59,7 @@ class PartyArbiterLogReg(PartyArbiter):
             is_infer: bool = False
     ) -> Batcher:
         if uids is None:
-            uids = self._uids_to_use
+            uids = self._uids_to_use_test if is_infer else self._uids_to_use
 
         epochs = 1 if is_infer else self.epochs
         batch_size = self._eval_batch_size if is_infer else self._batch_size
@@ -140,11 +143,14 @@ class PartyArbiterLogReg(PartyArbiter):
     def finalize(self, is_infer: bool = False):
         self.is_finalized = True
 
-    def register_records_uids(self, uids: List[str]):
+    def register_records_uids(self, uids: List[str], is_infer: bool = False):
         """ Register unique identifiers to be used.
 
         :param uids: List of unique identifiers.
         :return: None
         """
-        logger.info("Member %s: registering %s uids to be used." % (self.id, len(uids)))
-        self._uids_to_use = uids
+        logger.info("Agent %s: registering %s uids to be used." % (self.id, len(uids)))
+        if is_infer:
+            self._uids_to_use_test = uids
+        else:
+            self._uids_to_use = uids
