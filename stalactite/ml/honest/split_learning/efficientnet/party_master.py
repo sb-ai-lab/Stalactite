@@ -47,8 +47,11 @@ class HonestPartyMasterEfficientNetSplitNN(HonestPartyMasterSplitNN):
         return predictions
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
+        postfix = "-infer" if step == -1 else ""
+        step = step if step != -1 else None
+
         avg = "macro"
         roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
         logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
         if self.run_mlflow:
-            mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+            mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}{postfix}", roc_auc, step=step)

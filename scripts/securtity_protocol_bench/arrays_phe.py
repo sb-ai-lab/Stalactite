@@ -21,7 +21,7 @@ def is_encrypted(arr):
 
 class ArrayEncryptor():
 
-    def __init__(self, public_key, n_jobs=2, precision=1e-12):
+    def __init__(self, public_key, n_jobs=2, precision=1e-12, encoding_precision=1e-12):
         assert public_key is not None, "public_key can not be None"
         assert precision is not None, "precision can not be None"
 
@@ -31,11 +31,15 @@ class ArrayEncryptor():
 
         self.enc_partial_function = partial(self.public_key.encrypt, precision=precision)
         self.enc_encoded_partial_function = lambda xx: self.public_key.encrypt_encoded(xx, 1)
+        self.encode_partial_function = lambda scalar: paillier.EncodedNumber.encode(public_key, scalar, precision=encoding_precision)
         # numpy.vectorize(pyfunc, otypes=None, doc=None, excluded=None, cache=False, signature=None)
         self.vec_encrypt = np.vectorize(self.enc_partial_function, otypes=None, doc=None, excluded=None,
                                         cache=False, signature=None)
 
         self.vec_encrypt_encoded = np.vectorize(self.enc_encoded_partial_function, otypes=None, doc=None, excluded=None,
+                                                cache=False, signature=None)
+
+        self.vec_encode = np.vectorize(self.encode_partial_function, otypes=None, doc=None, excluded=None,
                                                 cache=False, signature=None)
 
     def encrypt(self, arr, which='float'):
@@ -69,6 +73,24 @@ class ArrayEncryptor():
                 # res = Parallel(n_jobs=6)(delayed(self.enc_partial_function)(i ** 2) for i in range(10))
         else:
             raise ValueError(f"Unsupported type {type(arr)}")
+
+    def encode(self, arr):
+        n_jobs_eff = min((arr.size // 3) + 1, self.n_jobs)
+
+        if (arr.size < 10) or (self.n_jobs == 0) or (self.n_jobs == 1) or \
+                (n_jobs_eff == 0) or (n_jobs_eff == 1):
+            return self.vec_encode(arr)
+        else:
+            # import pdb; pdb.set_trace()
+            orig_shape = arr.shape
+
+            with Parallel(n_jobs_eff) as p:
+                res = np.concatenate(
+                    p(delayed(self.vec_encode)(x) for x in np.array_split(arr.reshape(-1), n_jobs_eff))
+                )
+            res = res.reshape(orig_shape)
+            return res
+            # res = Parallel(n_jobs=6)(delayed(self.enc_partial_function)(i ** 2) for i in range(10))
 
 
 class ArrayDecryptor():

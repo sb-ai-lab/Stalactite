@@ -6,7 +6,14 @@ from stalactite.data_preprocessors import FullDataTensor, SkLearnStandardScaler
 
 
 class TabularPreprocessor:
-    def __init__(self, dataset: datasets.DatasetDict,  member_id, params=None, is_master: bool = False):
+    def __init__(
+            self,
+            dataset: datasets.DatasetDict,
+            member_id,
+            params=None,
+            is_master: bool = False,
+            master_has_features: bool = False
+    ):
         self.dataset = dataset
         self.common_params = params.vfl_model
         self.data_params = params.data.copy()
@@ -14,6 +21,7 @@ class TabularPreprocessor:
         self.member_id = member_id
         self.multilabel = False
         self.is_master = is_master
+        self.master_has_features = master_has_features
     def fit_transform(self):
 
         train_split_key = self.data_params.train_split
@@ -35,7 +43,7 @@ class TabularPreprocessor:
             if self.is_master:
                 split_dict[label_name] = split_data[label_name]
 
-            else:
+            if self.master_has_features or not self.is_master:
                 split_dict[feature_name] = full_data_tensor.fit_transform(split_data)
                 split_dict[feature_name] = standard_scaler.fit_transform(split_dict[feature_name])
 
@@ -69,5 +77,9 @@ class TabularPreprocessor:
             pos_weights_list.append(counts[0] / counts[1])
 
         return torch.tensor(pos_weights_list)
+
+    @property
+    def num_target_classes(self) -> int:
+        return self._ds[self.data_params.train_split][self.data_params.label_key].shape[1]
 
 

@@ -24,7 +24,7 @@ METHOD_VALUES = {
     _Method.update_weights: "other_kwargs",
     _Method.predict: "tensor_kwargs",
     _Method.update_predict: "tensor_kwargs",
-}
+} # TODO add arbitered method results
 
 
 class ParticipantType(enum.Enum):

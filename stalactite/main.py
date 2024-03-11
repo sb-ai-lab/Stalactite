@@ -47,6 +47,8 @@ logger.addHandler(sh)
 logger.propagate = False
 logging.getLogger('docker').setLevel(logging.ERROR)
 
+# TODO: add arbitered experiments launch
+
 
 @click.group()
 def cli():

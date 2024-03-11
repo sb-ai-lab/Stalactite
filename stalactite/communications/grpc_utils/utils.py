@@ -39,7 +39,6 @@ class PrometheusMetric(enum.Enum):
         "master_iteration_time", "Time of iterations in the training loop", ["experiment_label", "iteration"]
     )
 
-
 class ArbiterServerError(Exception):
     """Custom exception class for errors related to the Arbiter server."""
 
@@ -128,7 +127,7 @@ def save_data(tensor: torch.Tensor):
 
 
 def prepare_kwargs(
-        kwargs: Optional[MethodKwargs], prometheus_metrics: Optional[dict] = None
+    kwargs: Optional[MethodKwargs], prometheus_metrics: Optional[dict] = None
 ) -> SerializedMethodMessage:
     """
     Serialize data fields for protobuf message.
@@ -165,7 +164,7 @@ def prepare_kwargs(
 
 
 def collect_kwargs(
-        message_kwargs: SerializedMethodMessage, prometheus_metrics: Optional[dict[str, bytes]] = None
+    message_kwargs: SerializedMethodMessage, prometheus_metrics: Optional[dict[str, bytes]] = None
 ) -> Tuple[MethodKwargs, dict, Any]:
     """
     Collect and deserialize protobuf message data fields.

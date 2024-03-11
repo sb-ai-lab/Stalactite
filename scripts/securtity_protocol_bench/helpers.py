@@ -3,8 +3,7 @@ import numpy as np
 import tenseal as ts
 from phe import paillier
 
-from stalactite.ml.arbitered.security_protocols.arrays_phe import catchtime, ArrayEncryptor, ArrayDecryptor, \
-    matr_right_prod
+from arrays_phe import catchtime, ArrayEncryptor, ArrayDecryptor, matr_right_prod
 
 
 def max_abs_diff(arr1: np.ndarray, arr2: np.ndarray):
@@ -73,8 +72,9 @@ class TensealSP:
 
 
 class PailierSP:
-    def __init__(self, precision: float, n_jobs: int, key_n_length: int = 512):
+    def __init__(self, precision: float, encoding_precision: float, n_jobs: int, key_n_length: int = 512):
         self.precision = precision
+        self.encoding_precision = encoding_precision
         self.n_jobs = n_jobs
         self.key_n_length = key_n_length
 
@@ -83,7 +83,7 @@ class PailierSP:
 
     def initialize(self):
         public_key, private_key = paillier.generate_paillier_keypair(n_length=self.key_n_length)
-        array_encryptor = ArrayEncryptor(public_key, n_jobs=self.n_jobs, precision=self.precision)
+        array_encryptor = ArrayEncryptor(public_key, n_jobs=self.n_jobs, precision=self.precision, encoding_precision=self.encoding_precision)
         array_decryptor = ArrayDecryptor(private_key, n_jobs=self.n_jobs)
 
         self.array_encryptor = array_encryptor
@@ -112,9 +112,11 @@ class PailierSP:
 
     def multiply_plain_cypher(self, plain: np.ndarray, cypher: np.ndarray) -> np.ndarray:
         desired_shape = (plain.shape[0], cypher.shape[1])
+        print('Encoding array for multiplication:', self.encoding_precision, plain.shape)
+        plain_encoded = self.array_encryptor.encode(plain)
 
         with catchtime() as time_multiplication:
-            mult = matr_right_prod(plain, cypher, n_jobs=self.n_jobs)
+            mult = matr_right_prod(plain_encoded, cypher, n_jobs=self.n_jobs)
 
         assert mult.shape == desired_shape, f'Something went wrong, {mult.shape}, {desired_shape}'
         mlflow.log_metric(f'time_multiplication_{plain.shape[0]}', time_multiplication.time)

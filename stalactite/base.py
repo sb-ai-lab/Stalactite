@@ -8,7 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
 from dataclasses import dataclass, field
-from typing import Any, Iterator, List, Optional, Union, Tuple
+from typing import Any, Iterator, List, Optional, Union, Tuple, Dict
 
 import torch
 
@@ -39,6 +39,26 @@ class Method(str, enum.Enum):  # TODO _Method the same - unify
     update_weights = "update_weights"
     predict = "predict"
     update_predict = "update_predict"
+
+
+class ArbiteredMethod(str, enum.Enum):
+    service_return_answer = "service_return_answer"
+    service_heartbeat = "service_heartbeat"
+
+    records_uids = "records_uids"
+    register_records_uids = "register_records_uids"
+
+    initialize = "initialize"
+    finalize = "finalize"
+
+    update_weights = "update_weights"
+    predict = "predict"
+    update_predict = "update_predict"
+
+    get_public_key = "get_public_key"
+    predict_partial = "predict_partial"
+    compute_gradient = "compute_gradient"
+    calculate_updates = "calculate_updates"
 
 
 @dataclass(frozen=True)
@@ -123,7 +143,7 @@ class PartyCommunicator(ABC):
     def send(
             self,
             send_to_id: str,
-            method_name: Method,
+            method_name: Union[Method, ArbiteredMethod],
             method_kwargs: Optional[MethodKwargs] = None,
             result: Optional[Any] = None,
             **kwargs,
@@ -156,7 +176,7 @@ class PartyCommunicator(ABC):
     @abstractmethod
     def broadcast(
             self,
-            method_name: Method,
+            method_name: Union[Method, ArbiteredMethod],
             method_kwargs: Optional[MethodKwargs] = None,
             result: Optional[Any] = None,
             participating_members: Optional[List[str]] = None,
@@ -179,7 +199,7 @@ class PartyCommunicator(ABC):
     @abstractmethod
     def scatter(
             self,
-            method_name: Method,
+            method_name: Union[Method, ArbiteredMethod],
             method_kwargs: Optional[List[MethodKwargs]] = None,
             result: Optional[Union[Any, List[Any]]] = None,
             participating_members: Optional[List[str]] = None,
@@ -233,6 +253,9 @@ class PartyAgent(ABC):
     do_save_model: bool
     _model: torch.nn.Module
     model_path: str
+    uid2tensor_idx: Dict[Any, int]
+    uid2tensor_idx_test: Dict[Any, int]
+
     @abstractmethod
     def make_batcher(
             self,
@@ -319,23 +342,45 @@ class PartyAgent(ABC):
             if self.model_path is None:
                 raise RuntimeError('If `do_save_model` is True, the `model_path` must be not None.')
             os.makedirs(os.path.join(self.model_path, f'agent_{self.id}'), exist_ok=True)
-            torch.save(self._model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', 'model.pt'))
+            if isinstance(self._model, list):
+                for idx, model in enumerate(self._model):
+                    torch.save(model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', f'model-{idx}.pt'))
+            else:
+                torch.save(self._model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', 'model.pt'))
             with open(os.path.join(self.model_path, f'agent_{self.id}', 'model_init_params.json'), 'w') as f:
-                json.dump(getattr(self._model, 'init_params', {}), f)
+                if isinstance(self._model, list):
+                    init_params = {}
+                    for idx, model in enumerate(self._model):
+                        init_params[idx] = getattr(model, 'init_params', {})
+                    json.dump(init_params, f)
+                else:
+                    json.dump(getattr(self._model, 'init_params', {}), f)
 
     def load_model(self) -> Any:
         """ Load model saved for inference. """
+        logger.info(f'{self.id} is loading model from {self.model_path}')
         if self.model_path is None:
             raise RuntimeError('If `do_load_model` is True, the `model_path` must be not None.')
-        if not os.path.exists(os.path.join(self.model_path, f'agent_{self.id}')):
+        agent_model_path = os.path.join(self.model_path, f'agent_{self.id}')
+        if not os.path.exists(agent_model_path):
             raise FileNotFoundError(
                 f'You should train the model before launching the inference, however, {self.id} cannot find the model '
                 f'at {os.path.join(self.model_path)}.'
             )
-        with open(os.path.join(self.model_path, f'agent_{self.id}', 'model_init_params.json')) as f:
+
+        with open(os.path.join(agent_model_path, 'model_init_params.json')) as f:
             init_model_params = json.load(f)
-        model = self.initialize_model_from_params(**init_model_params)
-        model.load_state_dict(torch.load(os.path.join(self.model_path, f'agent_{self.id}', 'model.pt')))
+
+        if not set(range(len(os.listdir(agent_model_path)) - 1)) - set([int(key) for key in init_model_params.keys()]):
+            logger.info(f'Loading OVR models from {agent_model_path}')
+            model = []
+            for idx in sorted([int(key) for key in init_model_params.keys()]):
+                m = self.initialize_model_from_params(**init_model_params[str(idx)])
+                m.load_state_dict(torch.load(os.path.join(agent_model_path, f'model-{idx}.pt')))
+                model.append(m)
+        else:
+            model = self.initialize_model_from_params(**init_model_params)
+            model.load_state_dict(torch.load(os.path.join(self.model_path, f'agent_{self.id}', 'model.pt')))
         return model
 
 
@@ -357,7 +402,7 @@ class PartyMaster(PartyAgent, ABC):
         return self._iter_time
 
     def synchronize_uids(
-            self, collected_uids: list[Tuple[list[str], bool]], world_size: int, is_test: bool = False
+            self, collected_uids: list[Tuple[list[str], bool]], world_size: int, is_infer: bool = False
     ) -> List[str]:
         """ Synchronize unique records identifiers across party members.
 
@@ -368,7 +413,7 @@ class PartyMaster(PartyAgent, ABC):
         """
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, world_size))
         inner_collected_uids = [col_uids[0] for col_uids in collected_uids if col_uids[1]]
-        uids = self.inference_target_uids if is_test else self.target_uids
+        uids = self.inference_target_uids if is_infer else self.target_uids
         if len(inner_collected_uids) > 0:
             uids = itertools.chain(
                 uids, (uid for member_uids in inner_collected_uids for uid in set(member_uids))
@@ -377,7 +422,7 @@ class PartyMaster(PartyAgent, ABC):
             [uid for uid, count in collections.Counter(uids).items() if count == len(inner_collected_uids) + 1]
         )
         logger.debug("Master %s: registering shared uids f size %s" % (self.id, len(shared_uids)))
-        if is_test:
+        if is_infer:
             self.inference_target_uids = shared_uids
         else:
             self.target_uids = shared_uids
