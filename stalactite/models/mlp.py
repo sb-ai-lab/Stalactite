@@ -4,7 +4,6 @@ from typing import Callable, List, Optional
 
 import torch
 from torch import nn, Tensor
-from torchsummary import summary
 
 from torchvision.utils import _log_api_usage_once
 
