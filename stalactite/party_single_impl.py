@@ -11,7 +11,8 @@ import logging
 import mlflow
 import torch
 
-from torchsummary import summary
+from torch.optim import SGD
+from torch import nn
 from sklearn.metrics import mean_absolute_error, roc_auc_score
 
 from stalactite.base import DataTensor
@@ -38,8 +39,8 @@ class PartySingle:
             use_mlflow: bool = False,
             report_train_metrics_iteration: int = 1,
             report_test_metrics_iteration: int = 1,
-            learning_rate: float = 0.01,
-            target_uids: list = None
+            target_uids: list = None,
+            model_params: dict = None
 
     ) -> None:
         """Initialize PartySingle instance.
@@ -59,13 +60,14 @@ class PartySingle:
         self.use_mlflow = use_mlflow
         self.report_train_metrics_iteration = report_train_metrics_iteration
         self.report_test_metrics_iteration = report_test_metrics_iteration
-        self.learning_rate = learning_rate
         self.processor = processor
         self._model = None
         self.is_initialized = False
         self.is_finalized = False
         self.target_uids = target_uids
-
+        self._model_params = model_params
+        self._optimizer = None
+        self._criterion = None
     def run(self) -> None:
         """ Run centralized experiment.
 
@@ -92,10 +94,10 @@ class PartySingle:
             x = self.x_train[tensor_idx]
             y = self.target[tensor_idx]
 
-            self.update_weights(x, y)
+            self.update_weights(x=x, y=y, optimizer=self._optimizer, criterion=self._criterion)
 
-            predictions = self.compute_predictions(is_test=False)
-            predictions_test = self.compute_predictions(is_test=True)
+            predictions = self.compute_predictions(is_test=False, use_activation=True).detach().numpy()
+            predictions_test = self.compute_predictions(is_test=True, use_activation=True).detach().numpy()
 
             if (titer.previous_batch is None) and (step > 0):
                 break
@@ -128,7 +130,13 @@ class PartySingle:
         )
 
     @abstractmethod
-    def update_weights(self, x: DataTensor, y: DataTensor):
+    def update_weights(
+            self,
+            x: DataTensor,
+            y: DataTensor,
+            optimizer: torch.optim.Optimizer = None,
+            criterion: Optional[torch.nn.Module] = None
+    ) -> None:
         """Update the model weights based on the input features and target values.
 
         :param x: Input features.
@@ -138,7 +146,7 @@ class PartySingle:
         ...
 
     @abstractmethod
-    def compute_predictions(self, is_test: bool = False) -> DataTensor:
+    def compute_predictions(self, is_test: bool = False, use_activation: bool = False) -> DataTensor:
         """Compute predictions using the current model.
 
         :param is_test: Flag indicating whether to compute predictions for the test set.
@@ -173,7 +181,6 @@ class PartySingle:
 
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
-        self.n_labels = 19
         self.initialize_model()
         self.is_initialized = True
         logger.info("Centralized experiment is initialized")
@@ -210,26 +217,15 @@ class PartySingle:
             logger.info(f'{name} MAE on step {step}: {mae}')
             logger.info(f'{name} Accuracy on step {step}: {acc}')
 
-        if self.n_labels > 1:
-            for avg in ["macro", "micro"]:
-                try:
-                    roc_auc = roc_auc_score(y.numpy(), predictions, average=avg)
-                except ValueError:
-                    roc_auc = 0
-                if self.use_mlflow:
-                    mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-                else:
-                    logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
-
-        else:
+        for avg in ["macro", "micro"]:
             try:
-                roc_auc = roc_auc_score(y.numpy(), predictions)
+                roc_auc = roc_auc_score(y.numpy(), predictions, average=avg)
             except ValueError:
                 roc_auc = 0
             if self.use_mlflow:
-                mlflow.log_metric(f"{name.lower()}_roc_auc", roc_auc, step=step)
+                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
             else:
-                logger.info(f"{name} ROC AUC on step {step}: {roc_auc}")
+                logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
 
 
 class PartySingleLinreg(PartySingle):
@@ -241,6 +237,8 @@ class PartySingleLinreg(PartySingle):
             self,
             x: DataTensor,
             y: DataTensor,
+            optimizer: torch.optim.Optimizer = None,
+            criterion: Optional[torch.nn.Module] = None
     ) -> None:
         self._model.update_weights(x, rhs=y)
 
@@ -253,6 +251,7 @@ class PartySingleLinreg(PartySingle):
     def compute_predictions(
             self,
             is_test: bool = False,
+            use_activation: bool = False
     ) -> DataTensor:
         features = self.x_test if is_test else self.x_train
         return self._model.predict(features).detach().numpy()
@@ -267,41 +266,54 @@ class PartySingleLogreg(PartySingle):
             self,
             x: DataTensor,
             y: DataTensor,
+            optimizer: torch.optim.Optimizer = None,
+            criterion: Optional[torch.nn.Module] = None
     ):
-        self._model.update_weights(x, y, is_single=True)
+        self._model.update_weights(x, y, is_single=True, optimizer=optimizer, criterion=criterion)
 
     def initialize_model(self):
         self._model = LogisticRegressionBatch(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-            output_dim=1 , #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1],
-            learning_rate=self._common_params.learning_rate,
-            class_weights=None,#self.class_weights[6],
-            init_weights=0.005)
+            **self._model_params
+        )
+
+        self._optimizer = torch.optim.SGD(
+            self._model.parameters(),
+            lr=self._common_params.learning_rate,
+            momentum=self._common_params.momentum
+        )
+
+        self._criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
+        self._activation = nn.Sigmoid()
 
     def compute_predictions(
             self,
             is_test: bool = False,
+            use_activation: bool = False
     ) -> DataTensor:
         features = self.x_test if is_test else self.x_train
-        return torch.sigmoid(self._model.predict(features)).detach().numpy()
+        predictions = self._model.predict(features)
+        if use_activation:
+            predictions = self._activation(predictions)
+        return predictions
 
 
 class PartySingleLogregMulticlass(PartySingleLogreg):
+
     def initialize_model(self):
         self._model = LogisticRegressionBatch(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-            output_dim=10,
-            learning_rate=self._common_params.learning_rate,
-            class_weights=None,
-            init_weights=0.005,
-            multilabel=False)
+            **self._model_params
+        )
 
-    def compute_predictions(
-            self,
-            is_test: bool = False,
-    ) -> DataTensor:
-        features = self.x_test if is_test else self.x_train
-        return torch.softmax(self._model.predict(features), dim=1).detach().numpy()
+        self._optimizer = torch.optim.SGD(
+            self._model.parameters(),
+            lr=self._common_params.learning_rate,
+            momentum=self._common_params.momentum
+        )
+
+        self._criterion = torch.nn.CrossEntropyLoss(weight=self.class_weights)
+        self._activation = nn.Softmax(dim=1)
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
         """Report metrics based on target values, predictions, and name.
@@ -315,15 +327,12 @@ class PartySingleLogregMulticlass(PartySingleLogreg):
         :param step: Current step or iteration.
         :return: None
         """
-        for avg in ["macro"]: #, "micro"]:
-            # try:
-            roc_auc = roc_auc_score(y.numpy(), predictions, average=avg, multi_class="ovr")
-            # except ValueError:
-            #     roc_auc = 0
-            if self.use_mlflow:
-                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-            else:
-                logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
+        avg = "macro"
+        roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
+        if self.use_mlflow:
+            mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+        else:
+            logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
 
 
 class PartySingleEfficientNet(PartySingleLogregMulticlass):
@@ -334,7 +343,6 @@ class PartySingleEfficientNet(PartySingleLogregMulticlass):
             dropout=0.2,
             num_classes=10,
             init_weights=None)
-        logger.info(summary(self._model, (1, 28, 28), device="cpu"))
         self._optimizer = torch.optim.SGD(
             self._model.parameters(),
             lr=self._common_params.learning_rate,
@@ -395,14 +403,12 @@ class PartySingleEfficientNetSplitNN(PartySingleLogregMulticlass):
             dropout=0.2,
             num_classes=10,
             init_weights=None)
-        logger.info(summary(self._model_top, (128, 1, 1) , device="cpu"))
 
         self._model_bottom = EfficientNetBottom(
              width_mult=0.1,
              depth_mult=0.1,
              init_weights=None)
 
-        logger.info(summary(self._model_bottom, (1, 28, 28), device="cpu"))
 
         self._optimizer = torch.optim.SGD([
             {"params": self._model_top.parameters()},
@@ -518,14 +524,12 @@ class PartySingleMLPSplitNN(PartySingleLogregMulticlass):
             output_dim=1,
             init_weights=init_weights,
             class_weights=self.class_weights)
-        logger.info(summary(self._model_top, (2, 100), device="cpu"))
 
         self._model_bottom = MLPBottom(
             input_dim=1356,
             hidden_channels=[1000, 300, 100],
             init_weights=init_weights)
 
-        logger.info(summary(self._model_bottom, (2, 1356), device="cpu"))
 
         self._optimizer = torch.optim.SGD([
             {"params": self._model_top.parameters()},

@@ -28,7 +28,8 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         """
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        return [torch.zeros(self._batch_size, self.target.shape[1]) for _ in range(world_size)]
+        # return [torch.zeros(self._batch_size, self.target.shape[1]) for _ in range(world_size)]
+        return [torch.zeros(self._batch_size) for _ in range(world_size)]
 
     def aggregate(
             self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
@@ -49,7 +50,7 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
             party_predictions = list(self.party_predictions.values())
             predictions = torch.sum(torch.stack(party_predictions, dim=1), dim=1)
         else:
-            predictions = torch.sigmoid(torch.sum(torch.stack(party_predictions, dim=1), dim=1))
+            predictions = self.activation(torch.sum(torch.stack(party_predictions, dim=1), dim=1))
         return predictions
 
     def compute_updates(
@@ -73,12 +74,12 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        # y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
         tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
-
-        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
-        loss = criterion(torch.squeeze(predictions), y.float())
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if len(y.shape) == 2 else torch.nn.CrossEntropyLoss(weight=self.class_weights)
+        targets_type = torch.LongTensor if isinstance(criterion,
+                                                      torch.nn.CrossEntropyLoss) else torch.FloatTensor
+        loss = criterion(torch.squeeze(predictions), y.type(targets_type))
         grads = torch.autograd.grad(outputs=loss, inputs=predictions)
 
         for i, member_id in enumerate(participating_members):
@@ -105,19 +106,20 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         y = y.numpy()
         predictions = predictions.detach().numpy()
 
-        mae = metrics.mean_absolute_error(y, predictions)
-        acc = ComputeAccuracy_numpy(is_linreg=False).compute(y, predictions)
-        logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
-        logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
-        if self.run_mlflow:
-            mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
-            mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
+        if self.binary:
 
-        for avg in ["macro", "micro"]:
-            try:
-                roc_auc = roc_auc_score(y, predictions, average=avg)
-            except ValueError:
-                roc_auc = 0
+            for avg in ["macro", "micro"]:
+                try:
+                    roc_auc = roc_auc_score(y, predictions, average=avg)
+                except ValueError:
+                    roc_auc = 0
+                logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
+                if self.run_mlflow:
+                    mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+        else:
+
+            avg = "macro"
+            roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
             logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
             if self.run_mlflow:
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)

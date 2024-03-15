@@ -251,7 +251,12 @@ services:
         mkdir -p /sources/logs /sources/dags /sources/plugins /sources/data
         chown -R "${AIRFLOW_UID}:0" /sources/{logs,dags,plugins,data}
         chmod -R 776 /sources/{logs,dags,plugins,data}
+        mkdir -p /home/airflow/.cache/huggingface
+        
+        chmod -R 777 /home/airflow/.cache/huggingface
         exec /entrypoint airflow version
+#    chmod -R 777 /home/airflow/.cache/
+
     # yamllint enable rule:line-length
     environment:
       <<: *airflow-common-env

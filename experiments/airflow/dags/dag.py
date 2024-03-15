@@ -8,7 +8,10 @@ import logging
 
 import pendulum
 from datetime import timedelta
+import pickle
 
+from stalactite.party_single_impl import PartySingleLogregMulticlass
+from stalactite.configs import VFLConfig
 import threading
 from typing import Optional
 import datasets
@@ -31,7 +34,6 @@ from stalactite.communications.local import LocalMasterPartyCommunicator, LocalM
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
 from stalactite.helpers import reporting, run_local_agents
-
 
 from airflow.decorators import task
 from airflow import DAG
@@ -61,8 +63,17 @@ def make_data_preparation(config: VFLConfig):
     :return:
     """
     logger.info(f"make data preparation...")
+    is_single = config.common.world_size == 1
+
+    if not os.path.exists(config.data.host_path_data_dir):
+        logger.info(f"making directory for data preparation: {config.data.host_path_data_dir}")
+        os.mkdir(config.data.host_path_data_dir)
+
+    if len(os.listdir(config.data.host_path_data_dir)) > 0:
+        logger.info(f"data preparation: nothing to do. Exiting...")
+        return
     if config.data.dataset.lower() == "mnist":
-        load_mnist(config.data.host_path_data_dir, config.common.world_size, binary=True)
+        load_mnist(config.data.host_path_data_dir, config.common.world_size, binary=False, is_single=is_single)
     elif config.data.dataset.lower() == "sbol":
         load_sbol(config.data.host_path_data_dir, config.common.world_size)
     else:
@@ -71,7 +82,7 @@ def make_data_preparation(config: VFLConfig):
 
 
 @task
-def get_processor(config: VFLConfig):
+def get_processor(config: VFLConfig, processors_dict_path: str):
     dataset = {}
     for m in range(config.common.world_size):
         dataset[m] = datasets.load_from_disk(
@@ -81,25 +92,26 @@ def get_processor(config: VFLConfig):
     image_preprocessor = ImagePreprocessorEff \
         if config.vfl_model.vfl_model_name == "efficientnet" else ImagePreprocessor
 
+    is_single = config.common.world_size == 1
     processors = [
-        image_preprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
+        image_preprocessor(dataset=dataset[i], member_id=i,
+                           params=config, is_master=is_single, master_has_features=is_single) for i, v in dataset.items()
     ]
 
-    master_processor = image_preprocessor(dataset=datasets.load_from_disk(
-        os.path.join(f"{config.data.host_path_data_dir}/master_part")
-    ), member_id=-1, params=config, is_master=True)
+    master_processor = None
 
-    with open("/opt/airflow/data/processors_dict.pkl", 'wb') as f:
+    if not is_single:
+        master_processor = image_preprocessor(dataset=datasets.load_from_disk(
+            os.path.join(f"{config.data.host_path_data_dir}/master_part")
+        ), member_id=-1, params=config, is_master=True)
+
+    with open(processors_dict_path, 'wb') as f:
         pickle.dump({"processors": processors, "master_processor": master_processor}, f)
 
 
-def run(config: VFLConfig, inference=False):
-    with open("/opt/airflow/data/processors_dict.pkl", 'rb') as f:
-        loaded_preprocessors = pickle.load(f)
-    processors = loaded_preprocessors["processors"]
-    master_processor = loaded_preprocessors["master_processor"]
-    if inference:
-        config.vfl_model.do_train = False
+def run(config: VFLConfig):
+    processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
+    processors, master_processor = do_load_processors(processors_path)
     with reporting(config):
         shared_party_info = dict()
         if 'logreg' in config.vfl_model.vfl_model_name:
@@ -196,23 +208,96 @@ def run(config: VFLConfig, inference=False):
 
 
 @task
+def train_infer_single(config: VFLConfig, processors_dict_path: str):
+    logger.info(f"train and infer SINGLE for {config.vfl_model.vfl_model_name}")
+    do_run_single(config=config, processors_dict_path=processors_dict_path)
+    logger.info(f"train and infer SINGLE for: {config.vfl_model.vfl_model_name} SUCCESS")
+
+
+def do_load_processors(processors_dict_path: str):
+    with open(processors_dict_path, 'rb') as f:
+        loaded_preprocessors = pickle.load(f)
+    processors = loaded_preprocessors["processors"]
+    master_processor = loaded_preprocessors["master_processor"]
+    return processors, master_processor
+
+
+def do_run_single(config: VFLConfig, processors_dict_path: str):
+    processors, master_processor = do_load_processors(processors_dict_path)
+    target_uids = [str(i) for i in range(config.data.dataset_size)]
+
+    with reporting(config):
+        if 'logreg' in config.vfl_model.vfl_model_name:
+
+            party = PartySingleLogregMulticlass(
+                processor=processors[0],
+                batch_size=config.vfl_model.batch_size,
+                epochs=config.vfl_model.epochs,
+                report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+                report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+                use_mlflow=config.master.run_mlflow,
+                target_uids=target_uids,
+                model_params=config.member.member_model_params
+            )
+        else:
+            raise ("Unknown vfl model %s" % config.vfl_model.vfl_model_name)
+
+        party.run()
+
+
+@task
 def train(config: VFLConfig):
     logger.info(f"train for {config.vfl_model.vfl_model_name}")
-    run(config=config, inference=False)
+    run(config=config)
     logger.info(f"train for model: {config.vfl_model.vfl_model_name} SUCCESS")
 
 
 @task
 def infer(config: VFLConfig):
     logger.info(f"inference for {config.vfl_model.vfl_model_name}")
-    run(config=config, inference=True)
+    run(config=config)
     logger.info(f"inference for model: {config.vfl_model.vfl_model_name} SUCCESS")
+
+
+def get_single_config(dataset_name: str) -> VFLConfig:
+    if dataset_name == "mnist":
+        config = VFLConfig.load_and_validate("/opt/airflow/dags/configs/logreg-mnist-single.yml")
+    elif dataset_name == "sbol":
+        config = VFLConfig.load_and_validate("/opt/airflow/dags/configs/logreg-sbol-local.yml")
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}")
+    return config
+
+
+def get_vfl_config(dataset_name: str, model_name: str, members: int) -> VFLConfig:
+
+    config = VFLConfig.load_and_validate(f"/opt/airflow/dags/configs/{model_name}-{dataset_name}-vfl.yml")
+    config.common.world_size = members
+    config.data.host_path_data_dir = config.data.host_path_data_dir + str(members)
+
+    return config
+
+
+# def get_train_config(config: VFLConfig) -> VFLConfig:
+#     config.vfl_model.do_train = True
+#     config.vfl_model.do_save_model = True
+#     config.vfl_model.do_predict = False
+#     logger.info(f"DO PREDICT!!!!!!!!!!!!!: {config.vfl_model.do_predict}")
+#     return config
+#
+#
+# def get_infer_config(config: VFLConfig) -> VFLConfig:
+#     config.vfl_model.do_train = False
+#     config.vfl_model.do_save_model = False
+#     config.vfl_model.do_predict = True
+#     return config
 
 
 def build_dag(
         dag_id: str,
         model_names: List[str],
-        dataset_name: str
+        dataset_name: str,
+        world_sizes: List[int]
 ):
     with DAG(
             dag_id=dag_id,
@@ -221,30 +306,70 @@ def build_dag(
             catchup=False,
     ) as dag:
 
-        if dataset_name == "mnist":
-            config = VFLConfig.load_and_validate("/opt/airflow/dags/configs/linreg-mnist-local.yml")
-        elif dataset_name == "sbol":
-            config = VFLConfig.load_and_validate("/opt/airflow/dags/configs/logreg-sbol-local.yml")
-        else:
-            raise ValueError(f"Unknown dataset: {dataset_name}")
+        processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
 
-        data_preparation = make_data_preparation(config=config)
-        processor = get_processor(config=config)
+        data_preparators, tasks = [], []
 
-        train_infer_list = []
         for model_name in model_names:
-            config.vfl_model.vfl_model_name = model_name
-            train_infer_list.append(train(config=config))
-            train_infer_list.append(infer(config=config))
+            for world_size in world_sizes:
+                config = get_vfl_config(dataset_name=dataset_name, model_name=model_name, members=world_size)
+                data_preparators.append(make_data_preparation(config=config))
+                tasks.append(get_processor(config=config, processors_dict_path=processors_path))
+                tasks.append(train(config=config))
+                # tasks.append(infer(config=get_infer_config(config)))
 
-        chain(*train_infer_list)
+        chain(*data_preparators)
+        chain(*tasks)
 
-        data_preparation >> processor >> train_infer_list[0]
+        data_preparators[-1] >> tasks[0]
 
     return dag
 
 
-mnist_dag = build_dag(dag_id="mnist_dag", model_names=["linreg", "efficientnet"], dataset_name="mnist")
-sbol_dag = build_dag(dag_id="sbol_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="mnist")
+def build_single_mode_dag(dag_id: str,
+                          models_datasets_dict: dict):
+    with DAG(
+            dag_id=dag_id,
+            schedule=timedelta(days=10086),
+            start_date=pendulum.datetime(2021, 1, 1, tz="UTC"),
+            catchup=False,
+    ) as dag:
+
+        processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
+        data_preparators = []
+
+        # make data preparation for each dataset, saving preprocessed dataset
+        for dataset_name in models_datasets_dict.values():
+            data_preparators.append(make_data_preparation(config=get_single_config(dataset_name)))
+
+        # add processor and train-infer for each model
+        tasks = []
+        for model_name, dataset_name in models_datasets_dict.items():
+            config = get_single_config(dataset_name)
+            # save processor
+            tasks.append(get_processor(
+                config=config,
+                processors_dict_path=processors_path))
+            # load processor and do train-infer
+            tasks.append(train_infer_single(
+                config=config,
+                processors_dict_path=processors_path))
+
+        chain(*data_preparators)
+        chain(*tasks)
+
+        data_preparators[-1] >> tasks[0]
+
+    return dag
+
+
+single_dag = build_single_mode_dag(
+    dag_id="single_dag",
+    models_datasets_dict={
+        "logreg": "mnist"
+    }
+)
+mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg"], dataset_name="mnist", world_sizes=[2])
+# sbol_dag = build_dag(dag_id="sbol_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="mnist")
 #todo: homecredit dag
 #todo: avito dag

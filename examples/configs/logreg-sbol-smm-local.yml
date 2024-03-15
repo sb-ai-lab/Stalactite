@@ -13,9 +13,9 @@ vfl_model:
   is_consequently: False
   use_class_weights: True
   learning_rate: 0.05
-  do_train: False
-  do_predict: True
-  do_save_model: True
+  do_train: True
+  do_predict: False
+  do_save_model: False
   vfl_model_path: ../../saved_models/logreg_model
 
 

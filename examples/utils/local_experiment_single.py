@@ -22,16 +22,16 @@ def load_processors(config_path: str):
 
     if config.data.dataset.lower() == "mnist":
 
-        if not os.path.exists(config.data.host_path_data_dir):
-            load_mnist(config.data.host_path_data_dir, parts_num=1)
+        if len(os.listdir(config.data.host_path_data_dir)) == 0:
+            load_mnist(config.data.host_path_data_dir, parts_num=1, is_single=True, binary=True)
 
         dataset = {0: datasets.load_from_disk(
             os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
         )}
 
-        processors = [
-            ImagePreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
-        ]
+        processor = ImagePreprocessor(
+            dataset=dataset[0], member_id=0, params=config, is_master=True, master_has_features=True
+        )
 
     elif config.data.dataset.lower() == "sbol_smm":
 
@@ -42,14 +42,14 @@ def load_processors(config_path: str):
             os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
         )}
 
-        processors = [
+        processor = [
             TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
 
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
-    return processors
+    return processor
 
 
 def run(config_path: Optional[str] = None):
@@ -63,26 +63,29 @@ def run(config_path: Optional[str] = None):
 
     with reporting(config):
 
-        processors = load_processors(config_path)
+        processor = load_processors(config_path)
+        target_uids = [x for x in range(config.data.dataset_size)]
 
         if model_name == "linreg":
             party = PartySingleLinreg(
-                processor=processors[0],
+                processor=processor,
                 batch_size=config.vfl_model.batch_size,
                 epochs=config.vfl_model.epochs,
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-                use_mlflow=config.master.run_mlflow
+                use_mlflow=config.master.run_mlflow,
+                target_uids=target_uids
             )
 
-        elif model_name == "logreg":
+        elif model_name == "logreg":  # todo: fix
             party = PartySingleLogreg(
-                processor=processors[0],
+                processor=processor,
                 batch_size=config.vfl_model.batch_size,
                 epochs=config.vfl_model.epochs,
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-                use_mlflow=config.master.run_mlflow
+                use_mlflow=config.master.run_mlflow,
+                target_uids=target_uids
             )
         else:
             raise ValueError(f"unknown model name: {model_name}")
