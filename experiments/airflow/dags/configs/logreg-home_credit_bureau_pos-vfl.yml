@@ -6,7 +6,7 @@ common:
   reports_export_folder: ../../reports
 
 vfl_model:
-  epochs: 1
+  epochs: 10
   batch_size: 2500
   eval_batch_size: 200
   vfl_model_name: logreg

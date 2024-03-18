@@ -43,7 +43,7 @@ data:
   random_seed: 0
   dataset_size: 8500
   dataset: 'sbol_smm'
-  host_path_data_dir: /home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/multilabel_sber_sample10000_parts2
+  host_path_data_dir: /opt/airflow/data/multilabel_sber_sample10000_parts
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"

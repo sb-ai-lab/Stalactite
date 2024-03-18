@@ -374,27 +374,19 @@ def build_single_mode_dag(dag_id: str,
     return dag
 
 
-# single_dag = build_single_mode_dag(
-#     dag_id="single_dag",
-#     models_names_list=["logreg", "logreg", "logreg", "logreg", "logreg"],
-#     dataset_names_list=["mnist", "sbol_smm", "sbol", "home_credit_bureau_pos", "home_credit"]
-# )
-
-# single_dag = build_single_mode_dag(
-#     dag_id="single_dag",
-#     models_names_list=["mlp"],
-#     dataset_names_list=["mnist"]
-# )
+single_dag = build_single_mode_dag(
+    dag_id="single_dag",
+    models_names_list=["logreg", "logreg", "logreg", "logreg", "logreg"],
+    dataset_names_list=["mnist", "sbol_smm", "sbol", "home_credit_bureau_pos", "home_credit"]
+)
 
 
-# mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg"], dataset_name="mnist", world_sizes=[2, 3, 4])
-# sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg"], dataset_name="sbol_smm", world_sizes=[2])
-home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg"], dataset_name="home_credit_bureau_pos",
-                            world_sizes=[3])
+sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="sbol_smm",
+                         world_sizes=[2])
 
-sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["mlp"], dataset_name="sbol_smm", world_sizes=[2])
-mnist_dag = build_dag(dag_id="mnist_dag", model_names=["mlp"], dataset_name="mnist", world_sizes=[2])#, 3, 4])
+mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="mnist",
+                      world_sizes=[2, 3, 4])
 
-
-#todo: homecredit dag
-#todo: avito dag
+home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
+                            dataset_name="home_credit_bureau_pos", world_sizes=[3])
+# todo: avito dag

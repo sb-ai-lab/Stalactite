@@ -9,7 +9,7 @@ vfl_model:
   epochs: 10
   batch_size: 2500
   eval_batch_size: 200
-  vfl_model_name: mlp
+  vfl_model_name: resnet
   is_consequently: False
   use_class_weights: True
   learning_rate: 0.2
@@ -17,7 +17,6 @@ vfl_model:
   do_predict: False
   do_save_model: False
   vfl_model_path: ../../saved_models/mlp_model
-
 
 prerequisites:
   mlflow_host: 'node16.bdcl'
@@ -27,15 +26,15 @@ master:
   container_host: 'node16.bdcl'
   run_mlflow: True
   master_model_params: {
-    input_dim: 100,
+    input_dim: 338, #?
     output_dim: 1,
-    multilabel: False,
-#    init_weights: 0.005
+    use_bn: True,
+    #    init_weights: 0.005
   }
 
 member:
   member_model_params: {
-    hidden_channels:[1000, 300, 100],
+    hid_factor: [1, 1],
 #    init_weights: 0.005
   }
 

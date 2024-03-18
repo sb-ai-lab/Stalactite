@@ -15,8 +15,8 @@ class HonestPartyMasterResNetSplitNN(HonestPartyMasterSplitNN):
     def initialize_model(self, do_load_model: bool = False) -> None:
         """ Initialize the model based on the specified model name. """
         self._model = ResNetTop(**self._model_params)
-        self._criterion = nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
-        self._activation = nn.Sigmoid()
+        self._criterion = torch.nn.BCEWithLogitsLoss(
+            pos_weight=self.class_weights) if self.binary else torch.nn.CrossEntropyLoss(weight=self.class_weights)
 
     def initialize_optimizer(self) -> None:
         self._optimizer = torch.optim.SGD([
