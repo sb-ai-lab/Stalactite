@@ -36,15 +36,15 @@ def load_processors(config_path: str):
     elif config.data.dataset.lower() == "sbol_smm":
 
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1)
+            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1, is_single=True, sbol_only=True)
 
         dataset = {0: datasets.load_from_disk(
             os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
         )}
 
-        processor = [
-            TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
-        ]
+        processor = TabularPreprocessor(
+            dataset=dataset[0], member_id=0, params=config, is_master=True, master_has_features=True
+        )
 
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
@@ -74,10 +74,12 @@ def run(config_path: Optional[str] = None):
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
                 use_mlflow=config.master.run_mlflow,
-                target_uids=target_uids
+                target_uids=target_uids,
+                model_params=config.member.member_model_params
+
             )
 
-        elif model_name == "logreg":  # todo: fix
+        elif model_name == "logreg":
             party = PartySingleLogreg(
                 processor=processor,
                 batch_size=config.vfl_model.batch_size,
@@ -85,7 +87,8 @@ def run(config_path: Optional[str] = None):
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
                 use_mlflow=config.master.run_mlflow,
-                target_uids=target_uids
+                target_uids=target_uids,
+                model_params=config.member.member_model_params
             )
         else:
             raise ValueError(f"unknown model name: {model_name}")

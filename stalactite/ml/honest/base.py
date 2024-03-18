@@ -200,6 +200,8 @@ class HonestPartyMaster(PartyMaster, ABC):
         """
         logger.info("Master %s: entering training loop" % self.id)
         updates = self.make_init_updates(party.world_size)
+        # a = self._dataset["train_train"]["SK_ID_CURR"]# todo: remove
+
         for titer in batcher:
             logger.debug(
                 f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"

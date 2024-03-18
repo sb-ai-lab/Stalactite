@@ -76,7 +76,8 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         self.iteration_counter += 1
         tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
-        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if len(y.shape) == 2 else torch.nn.CrossEntropyLoss(weight=self.class_weights)
+        # criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if len(y.shape) == 2 else torch.nn.CrossEntropyLoss(weight=self.class_weights)
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if self.binary else torch.nn.CrossEntropyLoss(weight=self.class_weights)
         targets_type = torch.LongTensor if isinstance(criterion,
                                                       torch.nn.CrossEntropyLoss) else torch.FloatTensor
         loss = criterion(torch.squeeze(predictions), y.type(targets_type))

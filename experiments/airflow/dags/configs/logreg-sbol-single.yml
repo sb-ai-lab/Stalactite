@@ -1,0 +1,71 @@
+common:
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 1
+  experiment_label: airflow
+  reports_export_folder: ../../reports
+
+vfl_model:
+  epochs: 1
+  batch_size: 1000
+  eval_batch_size: 200
+  vfl_model_name: logreg
+  is_consequently: False
+  use_class_weights: True
+  learning_rate: 0.2
+  do_train: False
+  do_predict: True
+  do_save_model: True
+  vfl_model_path: ../../saved_models/logreg_model
+
+data:
+  random_seed: 0
+  dataset_size: 5000
+  dataset: 'sbol'
+  use_smm: False
+  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample10000_parts_sbol_only
+  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
+  train_split: "train_train" # name of the train split
+  test_split: "train_val" # name of the test split
+  features_key: "features_part_"
+  label_key: "labels"
+  uids_key: "user_id"
+
+prerequisites:
+  mlflow_host: node16.bdcl
+  mlflow_port: "9876"
+#  prometheus_host: 0.0.0.0
+#  prometheus_port: "9090"
+#  grafana_port: "3000"
+
+#grpc_server:
+#  host: 0.0.0.0
+#  port: 50051
+#  max_message_size: -1
+#  server_threadpool_max_workers: 10
+
+#grpc_arbiter:
+#  use_arbiter: False
+
+master:
+  run_mlflow: True
+#  logging_level: debug
+#  container_host: 0.0.0.0
+#  run_prometheus: False
+#  disconnect_idle_client_time: 120
+#  time_between_idle_connections_checks: 3
+#  recv_timeout: 360
+
+member:
+  member_model_params: {
+#    init_weights: None,
+    output_dim: 19,
+  }
+#  logging_level: debug
+#  recv_timeout: 360
+#  heartbeat_interval: 2
+#  sent_task_timout: 3600
+
+#docker:
+#  docker_compose_path: "../prerequisites"
+#  docker_compose_command: "docker compose"

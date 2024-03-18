@@ -65,6 +65,7 @@ class PartySingle:
         self.is_initialized = False
         self.is_finalized = False
         self.target_uids = target_uids
+        self._uid2tensor_idx = {uid: i for i, uid in enumerate(self.target_uids)}
         self._model_params = model_params
         self._optimizer = None
         self._criterion = None
@@ -84,12 +85,11 @@ class PartySingle:
         :param batcher: An iterable batch generator used for training.
         :return: None
         """
-
         for titer in batcher:
             step = titer.seq_num
             logger.debug(f"batch: {step}")
             batch = titer.batch
-            tensor_idx = [int(x) for x in batch]
+            tensor_idx = [self._uid2tensor_idx[uid] for uid in batch]
 
             x = self.x_train[tensor_idx]
             y = self.target[tensor_idx]
@@ -113,7 +113,7 @@ class PartySingle:
 
         :return: List of UUIDs as strings.
         """
-        return [str(x) for x in self.target_uids]
+        return sorted(x for x in self.target_uids)
 
     def make_batcher(self, uids: List[str]) -> Batcher:
         """ Create a make_batcher based on the provided UUIDs.
@@ -170,7 +170,6 @@ class PartySingle:
         logger.info("Centralized experiment initializing")
 
         self._dataset = self.processor.fit_transform()
-
         self.x_train = self._dataset[self.processor.data_params.train_split][self.processor.data_params.features_key]
         self.x_test = self._dataset[self.processor.data_params.test_split][self.processor.data_params.features_key]
         self.target = self._dataset[self.processor.data_params.train_split][self.processor.data_params.label_key]
@@ -489,14 +488,19 @@ class PartySingleMLP(PartySingle):
         self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer)
 
     def initialize_model(self):
-        init_weights = 0.005
+        # init_weights = None
+        # self._model = MLP(
+        #     input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
+        #     output_dim=1, #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1], #single label
+        #     hidden_channels=[1000, 300, 100],
+        #     init_weights=init_weights,
+        #     multilabel=True,
+        #     class_weights=self.class_weights)
+
         self._model = MLP(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-            output_dim=1, #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1], #single label
-            hidden_channels=[1000, 300, 100],
-            init_weights=init_weights,
-            multilabel=True,
-            class_weights=self.class_weights)
+            **self._model_params
+        )
 
         self._optimizer = torch.optim.SGD(
             self._model.parameters(),
@@ -504,9 +508,9 @@ class PartySingleMLP(PartySingle):
             momentum=self._common_params.momentum
         )
 
-        if self.use_mlflow:
-            mlflow.log_param("model_type", "base")
-            mlflow.log_param("init_weights", init_weights)
+        # if self.use_mlflow:
+        #     mlflow.log_param("model_type", "base")
+        #     mlflow.log_param("init_weights", init_weights)
 
     def compute_predictions(
             self,

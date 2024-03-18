@@ -25,7 +25,7 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
         self._check_if_ready()
         predictions = self._model.predict(x)
         if use_activation:
-            predictions = self._activation(predictions)
+            predictions = self.activation(predictions)
         logger.info("Master: made predictions.")
 
         return predictions
@@ -183,8 +183,20 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
             self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
-        avg = "micro"
-        roc_auc = roc_auc_score(y, predictions, average=avg)
-        logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
-        if self.run_mlflow:
-            mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+        if self.binary:
+
+            for avg in ["macro", "micro"]:
+                try:
+                    roc_auc = roc_auc_score(y, predictions, average=avg)
+                except ValueError:
+                    roc_auc = 0
+                logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
+                if self.run_mlflow:
+                    mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+        else:
+
+            avg = "macro"
+            roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
+            logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
+            if self.run_mlflow:
+                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)

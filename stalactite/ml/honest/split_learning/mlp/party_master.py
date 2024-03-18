@@ -20,8 +20,10 @@ class HonestPartyMasterMLPSplitNN(HonestPartyMasterSplitNN):
     def initialize_model(self, do_load_model: bool = False) -> None:
         """ Initialize the model based on the specified model name. """
         self._model = MLPTop(**self._model_params)
-        self._criterion = nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
-        self._activation = nn.Sigmoid()
+        self._criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if self.binary else torch.nn.CrossEntropyLoss(weight=self.class_weights)
+        # self._activation = torch.nn.Sigmoid() if self.binary else torch.nn.Softmax(dim=1)
+        # self._criterion = nn.BCEWithLogitsLoss(pos_weight=self.class_weights) #todo:
+        # self._activation = nn.Sigmoid() #todo:
 
     def initialize_optimizer(self) -> None:
         self._optimizer = torch.optim.SGD([

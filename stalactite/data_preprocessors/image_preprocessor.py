@@ -70,4 +70,12 @@ class ImagePreprocessor:
         pos_weights_list = []
         unique, counts = np.unique(y_train, return_counts=True)
         pos_weights_list.append(counts[0] / counts[1])
-        return torch.tensor(pos_weights_list)
+    #     return torch.tensor(pos_weights_list)
+    # def get_class_weights(self):
+    #     y_train = self._ds[self.data_params.train_split][self.data_params.label_key]
+    #     pos_weights_list = []
+    #     unique, counts = np.unique(y_train, return_counts=True)
+    #     counts_max = max(counts)
+    #     for class_count in counts:
+    #         pos_weights_list.append(counts_max/class_count)
+    #     return torch.tensor(pos_weights_list)

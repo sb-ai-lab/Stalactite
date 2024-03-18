@@ -1,0 +1,52 @@
+common:
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  experiment_label: airflow
+  reports_export_folder: "../../reports"
+
+vfl_model:
+  epochs: 2
+  batch_size: 2500
+  eval_batch_size: 200
+  vfl_model_name: mlp
+  is_consequently: False
+  use_class_weights: False
+  learning_rate: 0.2
+  do_train: True
+  do_predict: False
+  do_save_model: False
+  vfl_model_path: ../../saved_models/mlp_model
+
+
+prerequisites:
+  mlflow_host: 'node16.bdcl'
+  mlflow_port: '9876'
+
+master:
+  container_host: 'node16.bdcl'
+  run_mlflow: True
+  master_model_params: {
+    input_dim: 100,
+    output_dim: 1,
+    multilabel: False,
+#    init_weights: 0.005
+  }
+
+member:
+  member_model_params: {
+    hidden_channels:[1000, 300, 100],
+#    init_weights: 0.005
+  }
+
+data:
+  random_seed: 0
+  dataset_size: 8500
+  dataset: 'home_credit_bureau_pos'
+  host_path_data_dir:  /home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/home_credit_sample10000_parts3
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
+  features_key: "features_part_"
+  label_key: "TARGET"
+  uids_key: "SK_ID_CURR"
