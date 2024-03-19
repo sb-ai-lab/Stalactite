@@ -1,7 +1,7 @@
 common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 4
+  world_size: 1
   experiment_label: airflow
   reports_export_folder: "../../reports"
 
@@ -36,14 +36,16 @@ master:
 member:
   member_model_params: {
     hidden_channels:[1000, 300, 100],
-#    init_weights: 0.005
+    output_dim: 10,
+
+    #    init_weights: 0.005
   }
 
 data:
   random_seed: 0
   dataset_size: 8500
   dataset: 'mnist'
-  host_path_data_dir:  /opt/airflow/data/mnist_vfl_parts
+  host_path_data_dir:  /home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/mnist_single
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"

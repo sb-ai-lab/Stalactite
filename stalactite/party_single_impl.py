@@ -69,6 +69,7 @@ class PartySingle:
         self._model_params = model_params
         self._optimizer = None
         self._criterion = None
+        self._activation = None
     def run(self) -> None:
         """ Run centralized experiment.
 
@@ -145,14 +146,16 @@ class PartySingle:
         """
         ...
 
-    @abstractmethod
-    def compute_predictions(self, is_test: bool = False, use_activation: bool = False) -> DataTensor:
-        """Compute predictions using the current model.
-
-        :param is_test: Flag indicating whether to compute predictions for the test set.
-        :return: Predicted values.
-        """
-        ...
+    def compute_predictions(
+            self,
+            is_test: bool = False,
+            use_activation: bool = False
+    ) -> DataTensor:
+        features = self.x_test if is_test else self.x_train
+        predictions = self._model.predict(features)
+        if use_activation:
+            predictions = self._activation(predictions)
+        return predictions
 
     @abstractmethod
     def initialize_model(self) -> None:
@@ -181,10 +184,10 @@ class PartySingle:
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
         if torch.equal(torch.unique(self.target), torch.tensor([0, 1])):
-            self.activation = nn.Sigmoid()
+            self._activation = nn.Sigmoid()
             self.binary = True
         else:
-            self.activation = nn.Softmax(dim=1)
+            self._activation = nn.Softmax(dim=1)
             self.binary = False
 
         self.initialize_model()
@@ -212,26 +215,23 @@ class PartySingle:
         :return: None
         """
 
-        acc = ComputeAccuracy_numpy(is_linreg=self.model_name == "linreg", is_multilabel=True)
-        mae = mean_absolute_error(y.numpy(), predictions)
-        acc = acc.compute(true_label=y.numpy(), predictions=predictions)
+        if self.binary:
 
-        if self.use_mlflow:
-            mlflow.log_metric(f"{name.lower()}_mae", mae, step=step)
-            mlflow.log_metric(f"{name.lower()}_acc", acc, step=step)
+            for avg in ["macro", "micro"]:
+                try:
+                    roc_auc = roc_auc_score(y, predictions, average=avg)
+                except ValueError:
+                    roc_auc = 0
+                logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
+                if self.use_mlflow:
+                    mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
         else:
-            logger.info(f'{name} MAE on step {step}: {mae}')
-            logger.info(f'{name} Accuracy on step {step}: {acc}')
 
-        for avg in ["macro", "micro"]:
-            try:
-                roc_auc = roc_auc_score(y.numpy(), predictions, average=avg)
-            except ValueError:
-                roc_auc = 0
+            avg = "macro"
+            roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
+            logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
             if self.use_mlflow:
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-            else:
-                logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
 
 
 class PartySingleLinreg(PartySingle):
@@ -260,7 +260,7 @@ class PartySingleLinreg(PartySingle):
             use_activation: bool = False
     ) -> DataTensor:
         features = self.x_test if is_test else self.x_train
-        return self._model.predict(features).detach().numpy()
+        return self._model.predict(features)
 
 
 class PartySingleLogreg(PartySingle):
@@ -292,17 +292,6 @@ class PartySingleLogreg(PartySingle):
         self._criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
         self._activation = nn.Sigmoid()
 
-    def compute_predictions(
-            self,
-            is_test: bool = False,
-            use_activation: bool = False
-    ) -> DataTensor:
-        features = self.x_test if is_test else self.x_train
-        predictions = self._model.predict(features)
-        if use_activation:
-            predictions = self._activation(predictions)
-        return predictions
-
 
 class PartySingleLogregMulticlass(PartySingleLogreg):
 
@@ -320,25 +309,6 @@ class PartySingleLogregMulticlass(PartySingleLogreg):
 
         self._criterion = torch.nn.CrossEntropyLoss(weight=self.class_weights)
         self._activation = nn.Softmax(dim=1)
-
-    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
-        """Report metrics based on target values, predictions, and name.
-
-        Compute main metrics, if `use_mlflow` parameter was set to true, log them to MlFLow,
-        otherwise, log them to stdout.
-
-        :param y: Target values.
-        :param predictions: Predicted values.
-        :param name: Name for the metrics report (`Train`, `Test`).
-        :param step: Current step or iteration.
-        :return: None
-        """
-        avg = "macro"
-        roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
-        if self.use_mlflow:
-            mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-        else:
-            logger.info(f'{name} roc_auc_{avg} on step {step}: {roc_auc}')
 
 
 class PartySingleEfficientNet(PartySingleLogregMulticlass):
@@ -394,12 +364,12 @@ class PartySingleEfficientNet(PartySingleLogregMulticlass):
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
                 self.report_metrics(self.test_target, predictions_test, name="Test", step=step)
 
-    def compute_predictions(
-            self,
-            is_test: bool = False,
-    ) -> DataTensor:
-        features = self.x_test if is_test else self.x_train
-        return torch.softmax(self._model.predict(features), dim=1).detach().numpy()
+    # def compute_predictions(
+    #         self,
+    #         is_test: bool = False,
+    # ) -> DataTensor:
+    #     features = self.x_test if is_test else self.x_train
+    #     return torch.softmax(self._model.predict(features), dim=1).detach().numpy()
 
 
 class PartySingleEfficientNetSplitNN(PartySingleLogregMulticlass):
@@ -518,13 +488,6 @@ class PartySingleMLP(PartySingle):
         )
 
         self._criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if self.binary else torch.nn.CrossEntropyLoss(weight=self.class_weights)
-
-    def compute_predictions(
-            self,
-            is_test: bool = False,
-    ) -> DataTensor:
-        features = self.x_test if is_test else self.x_train
-        return torch.sigmoid(self._model.predict(features)).detach().numpy()
 
 
 class PartySingleMLPSplitNN(PartySingleLogregMulticlass):
