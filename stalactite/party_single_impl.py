@@ -180,6 +180,13 @@ class PartySingle:
 
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
+        if torch.equal(torch.unique(self.target), torch.tensor([0, 1])):
+            self.activation = nn.Sigmoid()
+            self.binary = True
+        else:
+            self.activation = nn.Softmax(dim=1)
+            self.binary = False
+
         self.initialize_model()
         self.is_initialized = True
         logger.info("Centralized experiment is initialized")
@@ -484,8 +491,10 @@ class PartySingleMLP(PartySingle):
             self,
             x: DataTensor,
             y: DataTensor,
-    ):
-        self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer)
+            optimizer: torch.optim.Optimizer = None,
+            criterion: Optional[torch.nn.Module] = None
+    ) -> None:
+        self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer, criterion=self._criterion)
 
     def initialize_model(self):
         # init_weights = None
@@ -508,9 +517,7 @@ class PartySingleMLP(PartySingle):
             momentum=self._common_params.momentum
         )
 
-        # if self.use_mlflow:
-        #     mlflow.log_param("model_type", "base")
-        #     mlflow.log_param("init_weights", init_weights)
+        self._criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if self.binary else torch.nn.CrossEntropyLoss(weight=self.class_weights)
 
     def compute_predictions(
             self,
