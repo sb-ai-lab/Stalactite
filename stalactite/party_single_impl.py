@@ -130,7 +130,6 @@ class PartySingle:
             shuffle=False
         )
 
-    @abstractmethod
     def update_weights(
             self,
             x: DataTensor,
@@ -138,13 +137,7 @@ class PartySingle:
             optimizer: torch.optim.Optimizer = None,
             criterion: Optional[torch.nn.Module] = None
     ) -> None:
-        """Update the model weights based on the input features and target values.
-
-        :param x: Input features.
-        :param y: Target values.
-        :return: None
-        """
-        ...
+        self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer, criterion=self._criterion)
 
     def compute_predictions(
             self,
@@ -268,15 +261,6 @@ class PartySingleLogreg(PartySingle):
     regression model. """
     model_name = 'logreg'
 
-    def update_weights(
-            self,
-            x: DataTensor,
-            y: DataTensor,
-            optimizer: torch.optim.Optimizer = None,
-            criterion: Optional[torch.nn.Module] = None
-    ):
-        self._model.update_weights(x, y, is_single=True, optimizer=optimizer, criterion=criterion)
-
     def initialize_model(self):
         self._model = LogisticRegressionBatch(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
@@ -327,12 +311,6 @@ class PartySingleEfficientNet(PartySingleLogregMulticlass):
 
         if self.use_mlflow:
             mlflow.log_param("model_type", "base")
-    def update_weights(
-            self,
-            x: DataTensor,
-            y: DataTensor,
-    ):
-        self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer)
 
     def loop(self, batcher: Batcher) -> None:
         """ Perform training iterations using the given batcher.
@@ -363,13 +341,6 @@ class PartySingleEfficientNet(PartySingleLogregMulticlass):
                 self.report_metrics(self.target, predictions, name="Train", step=step)
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
                 self.report_metrics(self.test_target, predictions_test, name="Test", step=step)
-
-    # def compute_predictions(
-    #         self,
-    #         is_test: bool = False,
-    # ) -> DataTensor:
-    #     features = self.x_test if is_test else self.x_train
-    #     return torch.softmax(self._model.predict(features), dim=1).detach().numpy()
 
 
 class PartySingleEfficientNetSplitNN(PartySingleLogregMulticlass):
@@ -467,14 +438,6 @@ class PartySingleMLP(PartySingle):
         self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer, criterion=self._criterion)
 
     def initialize_model(self):
-        # init_weights = None
-        # self._model = MLP(
-        #     input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-        #     output_dim=1, #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1], #single label
-        #     hidden_channels=[1000, 300, 100],
-        #     init_weights=init_weights,
-        #     multilabel=True,
-        #     class_weights=self.class_weights)
 
         self._model = MLP(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
@@ -577,20 +540,10 @@ class PartySingleResNet(PartySingle):
 
     model_name = 'resnet'
 
-    def update_weights(
-            self,
-            x: DataTensor,
-            y: DataTensor,
-    ):
-        self._model.update_weights(x, y, is_single=True, optimizer=self._optimizer, criterion=self._criterion)
-
     def initialize_model(self):
-        init_weights = None
         self._model = ResNet(
             input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
-            output_dim=1, #self._dataset[self._data_params.train_split][self._data_params.label_key].shape[1], #single label
-            hid_factor=[0.1, 0.1],
-            init_weights=init_weights,
+            **self._model_params,
             )
 
         self._optimizer = torch.optim.SGD(
@@ -599,18 +552,15 @@ class PartySingleResNet(PartySingle):
             momentum=self._common_params.momentum
         )
 
-        self._criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
+        self._criterion = torch.nn.BCEWithLogitsLoss(
+            pos_weight=self.class_weights) if self.binary else torch.nn.CrossEntropyLoss(weight=self.class_weights)
 
-        if self.use_mlflow:
-            mlflow.log_param("model_type", "base")
-            mlflow.log_param("init_weights", init_weights)
-
-    def compute_predictions(
-            self,
-            is_test: bool = False,
-    ) -> DataTensor:
-        features = self.x_test if is_test else self.x_train
-        return torch.sigmoid(self._model.predict(features)).detach().numpy()
+    # def compute_predictions(
+    #         self,
+    #         is_test: bool = False,
+    # ) -> DataTensor:
+    #     features = self.x_test if is_test else self.x_train
+    #     return torch.sigmoid(self._model.predict(features)).detach().numpy()
 
 
 class PartySingleResNetSplitNN(PartySingleLogregMulticlass):

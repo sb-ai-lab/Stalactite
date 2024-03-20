@@ -173,11 +173,13 @@ class ResNet(nn.Module):
         x = self.fc(x)
         return x.view(x.shape[0], -1)
 
-    def update_weights(self, x: torch.Tensor, y: torch.Tensor, criterion, is_single: bool,
-                       optimizer: torch.optim.Optimizer = None) -> None:
+    def update_weights(self, x: torch.Tensor, y: torch.Tensor, is_single: bool = False,
+                       optimizer: torch.optim.Optimizer = None, criterion: torch.nn.Module = None) -> None:
         optimizer.zero_grad()
         logit = self.forward(x)
-        loss = criterion(torch.squeeze(logit), y.type(torch.FloatTensor))
+        targets_type = torch.LongTensor if isinstance(criterion,
+                                                      torch.nn.CrossEntropyLoss) else torch.FloatTensor
+        loss = criterion(torch.squeeze(logit), y.type(targets_type))
         logger.info(f"loss: {loss.item()}")
         loss.backward()
         optimizer.step()

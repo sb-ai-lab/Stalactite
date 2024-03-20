@@ -64,7 +64,6 @@ class MLP(nn.Module):
         targets_type = torch.LongTensor if isinstance(criterion,
                                                       torch.nn.CrossEntropyLoss) else torch.FloatTensor
         loss = criterion(torch.squeeze(logit), y.type(targets_type))
-        # loss = criterion(torch.squeeze(logit), y.type(torch.FloatTensor))
         logger.info(f"loss: {loss.item()}")
         loss.backward()
         optimizer.step()
