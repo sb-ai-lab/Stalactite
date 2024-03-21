@@ -52,13 +52,14 @@ If everything is ok, you should see the following output:
     #   --help  Show this message and exit.
     #
     # Commands:
-    #   local          Local experiments (multi-process / single process) mode...
-    #   master         Distributed VFL master management command group.
-    #   member         Distributed VFL member management command group.
-    #   predict
-    #   prerequisites  Prerequisites management command group.
-    #   report         Experimental report command group.
-    #   test           Local tests (multi-process / single process) mode...
+    #  arbiter        Distributed VFL arbiter management command group.
+    #  local          Local experiments (multi-process / single process) mode...
+    #  master         Distributed VFL master management command group.
+    #  member         Distributed VFL member management command group.
+    #  predict
+    #  prerequisites  Prerequisites management command group.
+    #  report         Experimental report command group.
+    #  test           Local tests (multi-process / single process) mode...
 
 
 Examples
@@ -80,6 +81,7 @@ Configuration file contains settings for all the parts of the experiment:
 * ``grpc_server`` section used only in distributed experiments and configures the gRPC server used in communication between VFL agents;
 * ``master`` settings allow tuning of the VFL master instance;
 * ``member`` settings customizes VFL member instance;
+* ``grpc_arbiter`` settings customizes VFL arbiter and gRPC arbiter server instances;
 * ``docker`` section is required for prerequisites and distributed launches and must be customized to the experiments host.
 
 Example configuration files are shown in
@@ -183,6 +185,41 @@ Now, you can run the file from terminal / your IDE, or launch an experiment usin
 .. code-block:: bash
 
     stalactite local --single-process start --config-path examples/configs/logreg-sbol-smm-local.yml
+
+
+Logistic regression on SBOL and SMM (with Arbiter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+``examples/vfl/local/arbitered/logreg_sbol_smm_local.py`` and
+``examples/vfl/local/arbitered/logreg_sbol_smm_local_he.py`` launch the arbitered experiment multilabel classification
+with logistic regression on SBOL and SMM datasets (in the OVR multilabel class style). The first script uses the
+approach, which is mainly apllicable for debugging (without HE between agents) and the second script adds the
+homomorphic encryption in the communication process. The configuration for this
+experiment is ``examples/configs/arbitered-logreg-sbol-smm-local.yml`` and
+``examples/configs/arbitered-logreg-sbol-smm-local-he.yml``, respectively. In this case,
+it is required to set the arbiter configuration parameters.
+
+.. code-block:: yaml
+
+    grpc_arbiter:
+      use_arbiter: True
+
+      # Required in case of the HE experiment version
+      security_protocol_params:
+        he_type: paillier
+        key_length: 128
+        n_threads: 20
+        encryption_precision: 1e-10
+        encoding_precision: 1e-10
+
+
+
+Now, you can run the file from terminal / your IDE, or launch an experiment using the stalactite CLI:
+
+.. code-block:: bash
+
+    stalactite local --single-process start --config-path examples/configs/arbitered-logreg-sbol-smm-local[-he].yml
 
 
 Distributed multiple process experiment

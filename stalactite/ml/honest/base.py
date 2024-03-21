@@ -14,21 +14,15 @@ from stalactite.base import (
     PartyMember,
     PartyMaster,
     PartyCommunicator,
-    Method,
-    MethodKwargs,
     Task,
     DataTensor,
     RecordsBatch,
     Batcher, PartyDataTensor,
 )
 from stalactite.configs import DataConfig, CommonConfig
+from stalactite.communications.helpers import Method, MethodKwargs
 
 logger = logging.getLogger(__name__)
-
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
 
 
 class HonestPartyMaster(PartyMaster, ABC):
@@ -314,6 +308,7 @@ class HonestPartyMember(PartyMember, ABC):
     _dataset: datasets.DatasetDict
     _data_params: DataConfig
     _common_params: CommonConfig
+    ovr = False
 
     def __init__(
             self,
@@ -434,28 +429,28 @@ class HonestPartyMember(PartyMember, ABC):
     def _run(self, party: PartyCommunicator, is_infer: bool = False):
         # sync train
         synchronize_uids_task = party.recv(
-            Task(method_name=Method.records_uids, from_id=self.master_id, to_id=self.id)
+            Task(method_name=Method.records_uids, from_id=party.master, to_id=self.id)
         )
         uids = self.execute_received_task(synchronize_uids_task)
-        party.send(self.master_id, Method.records_uids, result=uids)
+        party.send(party.master, Method.records_uids, result=uids)
 
-        initialize_task = party.recv(Task(method_name=Method.initialize, from_id=self.master_id, to_id=self.id))
+        initialize_task = party.recv(Task(method_name=Method.initialize, from_id=party.master, to_id=self.id))
         self.execute_received_task(initialize_task)
 
         register_records_uids_task = party.recv(
-            Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
+            Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
         )
         self.execute_received_task(register_records_uids_task)
 
         if not is_infer:
             # sync test
             synchronize_uids_task = party.recv(
-                Task(method_name=Method.records_uids, from_id=self.master_id, to_id=self.id)
+                Task(method_name=Method.records_uids, from_id=party.master, to_id=self.id)
             )
             uids = self.execute_received_task(synchronize_uids_task)
-            party.send(self.master_id, Method.records_uids, result=uids)
+            party.send(party.master, Method.records_uids, result=uids)
             register_records_uids_task = party.recv(
-                Task(method_name=Method.register_records_uids, from_id=self.master_id, to_id=self.id)
+                Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
             )
             self.execute_received_task(register_records_uids_task)
 
@@ -463,15 +458,14 @@ class HonestPartyMember(PartyMember, ABC):
         else:
             self.inference_loop(batcher=self.make_batcher(is_infer=True), party=party)
 
-        finalize_task = party.recv(Task(method_name=Method.finalize, from_id=self.master_id, to_id=self.id))
+        finalize_task = party.recv(Task(method_name=Method.finalize, from_id=party.master, to_id=self.id))
         self.execute_received_task(finalize_task)
         logger.info("Finished member %s" % self.id)
 
-
     def _predict_metrics_loop(self, party: PartyCommunicator):
-        predict_task = party.recv(Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id))
+        predict_task = party.recv(Task(method_name=Method.predict, from_id=party.master, to_id=self.id))
         predictions = self.execute_received_task(predict_task)
-        party.send(self.master_id, Method.predict, result=predictions)
+        party.send(party.master, Method.predict, result=predictions)
 
     def loop(self, batcher: Batcher, party: PartyCommunicator):
         """ Run main training loop on the VFL member.
@@ -495,10 +489,10 @@ class HonestPartyMember(PartyMember, ABC):
 
             iter_start_time = time.time()
             update_predict_task = party.recv(
-                Task(method_name=Method.update_predict, from_id=self.master_id, to_id=self.id)
+                Task(method_name=Method.update_predict, from_id=party.master, to_id=self.id)
             )
             predictions = self.execute_received_task(update_predict_task)
-            party.send(self.master_id, Method.update_predict, result=predictions)
+            party.send(party.master, Method.update_predict, result=predictions)
 
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
                 logger.debug(
@@ -534,9 +528,9 @@ class HonestPartyMember(PartyMember, ABC):
                     logger.debug(f'Member {self.id} skipping {titer.seq_num}.')
                     continue
 
-            predict_task = party.recv(Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id))
+            predict_task = party.recv(Task(method_name=Method.predict, from_id=party.master, to_id=self.id))
             predictions = self.execute_received_task(predict_task)
-            party.send(self.master_id, Method.predict, result=predictions)
+            party.send(party.master, Method.predict, result=predictions)
 
     def make_batcher(
             self,
@@ -648,7 +642,7 @@ class HonestPartyMember(PartyMember, ABC):
         logger.info("Member %s: finalizing" % self.id)
         self.check_if_ready()
         if self.do_save_model and not is_infer:
-            self.save_model()
+            self.save_model(is_ovr_models=self.ovr)
         self.is_finalized = True
         logger.info("Member %s: has been finalized" % self.id)
 

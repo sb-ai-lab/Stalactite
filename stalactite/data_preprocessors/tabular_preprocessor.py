@@ -22,6 +22,7 @@ class TabularPreprocessor:
         self.multilabel = False
         self.is_master = is_master
         self.master_has_features = master_has_features
+
     def fit_transform(self):
 
         train_split_key = self.data_params.train_split

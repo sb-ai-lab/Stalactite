@@ -1,16 +1,16 @@
 import collections
-import enum
 import itertools
 import json
 import logging
 import os
-import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Iterator, List, Optional, Union, Tuple, Dict
 
 import torch
+
+from stalactite.communications.helpers import MethodKwargs, Method
 
 logger = logging.getLogger(__name__)
 
@@ -26,41 +26,6 @@ PartyDataTensor = List[torch.Tensor]
 RecordsBatch = List[str]
 
 
-class Method(str, enum.Enum):  # TODO _Method the same - unify
-    service_return_answer = "service_return_answer"
-    service_heartbeat = "service_heartbeat"
-
-    records_uids = "records_uids"
-    register_records_uids = "register_records_uids"
-
-    initialize = "initialize"
-    finalize = "finalize"
-
-    update_weights = "update_weights"
-    predict = "predict"
-    update_predict = "update_predict"
-
-
-class ArbiteredMethod(str, enum.Enum):
-    service_return_answer = "service_return_answer"
-    service_heartbeat = "service_heartbeat"
-
-    records_uids = "records_uids"
-    register_records_uids = "register_records_uids"
-
-    initialize = "initialize"
-    finalize = "finalize"
-
-    update_weights = "update_weights"
-    predict = "predict"
-    update_predict = "update_predict"
-
-    get_public_key = "get_public_key"
-    predict_partial = "predict_partial"
-    compute_gradient = "compute_gradient"
-    calculate_updates = "calculate_updates"
-
-
 @dataclass(frozen=True)
 class TrainingIteration:
     seq_num: int
@@ -70,15 +35,6 @@ class TrainingIteration:
     previous_batch: Optional[RecordsBatch]
     participating_members: Optional[List[str]]
     last_batch: bool
-
-
-@dataclass
-class MethodKwargs:  # TODO MethodMessage the same - unify
-    """Data class holding keyword arguments for called method."""
-
-    tensor_kwargs: dict[str, torch.Tensor] = field(default_factory=dict)
-    other_kwargs: dict[str, Any] = field(default_factory=dict)
-
 
 class Batcher(ABC):
     # todo: add docs
@@ -143,7 +99,7 @@ class PartyCommunicator(ABC):
     def send(
             self,
             send_to_id: str,
-            method_name: Union[Method, ArbiteredMethod],
+            method_name: Method,
             method_kwargs: Optional[MethodKwargs] = None,
             result: Optional[Any] = None,
             **kwargs,
@@ -176,7 +132,7 @@ class PartyCommunicator(ABC):
     @abstractmethod
     def broadcast(
             self,
-            method_name: Union[Method, ArbiteredMethod],
+            method_name: Method,
             method_kwargs: Optional[MethodKwargs] = None,
             result: Optional[Any] = None,
             participating_members: Optional[List[str]] = None,
@@ -199,7 +155,7 @@ class PartyCommunicator(ABC):
     @abstractmethod
     def scatter(
             self,
-            method_name: Union[Method, ArbiteredMethod],
+            method_name: Method,
             method_kwargs: Optional[List[MethodKwargs]] = None,
             result: Optional[Union[Any, List[Any]]] = None,
             participating_members: Optional[List[str]] = None,
@@ -336,19 +292,19 @@ class PartyAgent(ABC):
     def initialize_model_from_params(self, **model_params) -> Any:
         ...
 
-    def save_model(self):
+    def save_model(self, is_ovr_models: bool = False):
         """ Save model for further inference. """
         if self._model is not None and self.do_save_model:
             if self.model_path is None:
                 raise RuntimeError('If `do_save_model` is True, the `model_path` must be not None.')
             os.makedirs(os.path.join(self.model_path, f'agent_{self.id}'), exist_ok=True)
-            if isinstance(self._model, list):
+            if is_ovr_models:
                 for idx, model in enumerate(self._model):
                     torch.save(model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', f'model-{idx}.pt'))
             else:
                 torch.save(self._model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', 'model.pt'))
             with open(os.path.join(self.model_path, f'agent_{self.id}', 'model_init_params.json'), 'w') as f:
-                if isinstance(self._model, list):
+                if is_ovr_models:
                     init_params = {}
                     for idx, model in enumerate(self._model):
                         init_params[idx] = getattr(model, 'init_params', {})
@@ -356,7 +312,7 @@ class PartyAgent(ABC):
                 else:
                     json.dump(getattr(self._model, 'init_params', {}), f)
 
-    def load_model(self) -> Any:
+    def load_model(self, is_ovr_models: bool = False) -> Any:
         """ Load model saved for inference. """
         logger.info(f'{self.id} is loading model from {self.model_path}')
         if self.model_path is None:
@@ -371,7 +327,7 @@ class PartyAgent(ABC):
         with open(os.path.join(agent_model_path, 'model_init_params.json')) as f:
             init_model_params = json.load(f)
 
-        if not set(range(len(os.listdir(agent_model_path)) - 1)) - set([int(key) for key in init_model_params.keys()]):
+        if is_ovr_models:
             logger.info(f'Loading OVR models from {agent_model_path}')
             model = []
             for idx in sorted([int(key) for key in init_model_params.keys()]):
@@ -478,7 +434,7 @@ class PartyMember(PartyAgent, ABC):
         ...
 
 
-class UnsupportedError(Exception):  # TODO move from communications utils
+class UnsupportedError(Exception):
     """Custom exception class for indicating that an unsupported method is called on a class."""
 
     def __init__(self, message: str = "Unsupported method for class."):

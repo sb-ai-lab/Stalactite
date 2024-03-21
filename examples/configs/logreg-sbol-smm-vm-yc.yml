@@ -50,7 +50,6 @@ master:
 member:
   logging_level: 'info'
   heartbeat_interval: 2.
-  task_requesting_pings_interval: 0.1
   sent_task_timout: 3600
 
 grpc_arbiter:

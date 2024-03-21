@@ -10,15 +10,14 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 from stalactite.base import (
-    Method,
-    MethodKwargs,
     PartyCommunicator,
     PartyMaster,
     PartyMember,
-    Task, PartyAgent,
+    Task,
+    PartyAgent,
 )
 from stalactite.ml.arbitered.base import PartyArbiter, ArbiteredPartyMaster, ArbiteredPartyMember
-from stalactite.communications.helpers import ParticipantType
+from stalactite.communications.helpers import ParticipantType, MethodKwargs, Method
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +146,8 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             method_kwargs = [None for _ in range(len(participating_members))]
 
         if isinstance(result, list):
-            assert len(method_kwargs) == len(participating_members), (
-                f"Number of results in scatter operation ({len(method_kwargs)}) is not equal to the "
+            assert len(result) == len(participating_members), (
+                f"Number of results in scatter operation ({len(result)}) is not equal to the "
                 f"`participating_members` number ({len(participating_members)})"
             )
         else:
@@ -293,7 +292,7 @@ class LocalMemberPartyCommunicator(LocalPartyCommunicator):
         try:
             logger.info("Party communicator %s: running" % self.participant.id)
             self.rendezvous()
-            self.participant.master_id = self.master
+            self.participant.master = self.master
             self.participant.run(self)
             logger.info("Party communicator %s: finished" % self.participant.id)
         except:

@@ -16,10 +16,6 @@ from stalactite.communications.grpc_utils.utils import PrometheusMetric, Status
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
-logger.propagate = False
 
 
 class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
@@ -83,6 +79,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
 
         self._received_tasks = defaultdict(dict)
         self._tasks_to_send_queues = defaultdict(dict)
+        self._info_messages = 0
 
     def put_to_received_tasks(self, message: communicator_pb2.MainMessage, receive_from_id: str):
         self._received_tasks[message.method_name][receive_from_id] = message
@@ -152,7 +149,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
             ],
         )
         communicator_pb2_grpc.add_CommunicatorServicer_to_server(self, server)
-        server.add_insecure_port(f"{self.host}:{self.port}")  # TODO SSL goes here
+        server.add_insecure_port(f"{self.host}:{self.port}")
         logger.info(f"Starting server at {self.host}:{self.port}")
         asyncio.create_task(self._check_active_connections())
         await server.start()
@@ -194,6 +191,7 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
                 if time.time() - last_ping > self.disconnect_idle_client_time:
                     self.connected_clients.pop(conn_id)
                     self._log_agents_status()
+                    self._info_messages = 0
                     logger.info(f"Client {conn_id} disconnected")
 
     def process_heartbeat(self, request: communicator_pb2.HB) -> communicator_pb2.HB:
@@ -205,7 +203,9 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         logger.debug(f"Got ping from client {client_name}")
         self.connected_clients[client_name] = time.time()
         if len(self.connected_clients) == self.world_size:
-            logger.debug(f"All {self.world_size} clients connected")
+            if not self._info_messages:
+                logger.debug(f"All {self.world_size} clients connected")
+                self._info_messages += 1
             self.status = Status.all_ready
         else:
             self.status = Status.waiting

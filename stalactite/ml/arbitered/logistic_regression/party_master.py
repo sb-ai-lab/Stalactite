@@ -189,6 +189,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
         acc = ComputeAccuracy_numpy(is_linreg=False).compute(y, predictions)
         logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
         logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
+
         for avg in ["macro", "micro"]:
             try:
                 roc_auc = roc_auc_score(y, predictions, average=avg)

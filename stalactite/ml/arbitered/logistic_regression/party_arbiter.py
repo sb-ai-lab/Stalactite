@@ -131,7 +131,7 @@ class PartyArbiterLogReg(PartyArbiter):
         delta_gradients = self._get_delta_gradients()
 
         splitted_grads = torch.tensor_split(delta_gradients, torch.cumsum(torch.tensor(size_list), 0)[:-1], dim=1)
-        deltas = {agent: splitted_grads[i] for i, agent in enumerate([self.master] + members)}
+        deltas = {agent: splitted_grads[i].clone().detach() for i, agent in enumerate([self.master] + members)}
 
         return deltas
 

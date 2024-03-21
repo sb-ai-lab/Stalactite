@@ -6,13 +6,13 @@ def solve_ols_svd(U, S, Vh, Y, lamda=0.0):
     Solve OLS problem given the SVD decomposition
 
     Input:
-        ! Note X= U*S*Vh and Y are assumed to be normalized, hence lamda is between 0.0 and 1.0.
+    ! Note X= U*S*Vh and Y are assumed to be normalized, hence lamda is between 0.0 and 1.0.
 
-        U, S, Vh - SVD decomposition
-        Y - target variables
-        lamda - regularization parameter. Lamda must be normalized with respect
-                                          to number of samples. Data is assumed
-                                          to be normalized, so lamda is between 0.0 and 1.0.
+    U, S, Vh - SVD decomposition
+    Y - target variables
+    lamda - regularization parameter. Lamda must be normalized with respect
+                                      to number of samples. Data is assumed
+                                      to be normalized, so lamda is between 0.0 and 1.0.
     """
 
     n_points = U.shape[0]

@@ -7,8 +7,8 @@ import mlflow
 import torch
 from sklearn.metrics import roc_auc_score
 
-from stalactite.base import (DataTensor, PartyCommunicator, Method, MethodKwargs)
-
+from stalactite.base import DataTensor, PartyCommunicator
+from stalactite.communications.helpers import Method, MethodKwargs
 from stalactite.ml.honest.base import Batcher
 from stalactite.ml.honest.linear_regression.party_master import HonestPartyMasterLinReg
 

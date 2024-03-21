@@ -19,3 +19,7 @@ from stalactite.ml.honest.split_learning.efficientnet.party_member import Honest
 from stalactite.ml.honest.split_learning.mlp.party_master import HonestPartyMasterMLPSplitNN
 from stalactite.ml.honest.split_learning.mlp.party_member import HonestPartyMemberMLP
 
+from stalactite.ml.arbitered.logistic_regression.party_arbiter import PartyArbiterLogReg
+from stalactite.ml.arbitered.logistic_regression.party_master import ArbiteredPartyMasterLogReg
+from stalactite.ml.arbitered.logistic_regression.party_member import ArbiteredPartyMemberLogReg
+
