@@ -5,7 +5,7 @@ from copy import copy
 
 import mlflow
 import torch
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, root_mean_squared_error
 
 from stalactite.base import (DataTensor, PartyCommunicator, Method, MethodKwargs)
 
@@ -184,15 +184,19 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
         if self.binary:
-
             for avg in ["macro", "micro"]:
                 try:
                     roc_auc = roc_auc_score(y, predictions, average=avg)
                 except ValueError:
                     roc_auc = 0
+
+                rmse = root_mean_squared_error(y, predictions)
+
+                logger.info(f'{name} RMSE on step {step}: {rmse}')
                 logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
                 if self.run_mlflow:
                     mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+                    mlflow.log_metric(f"{name.lower()}_rmse", rmse, step=step)
         else:
 
             avg = "macro"

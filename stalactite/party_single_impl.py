@@ -13,7 +13,7 @@ import torch
 
 from torch.optim import SGD
 from torch import nn
-from sklearn.metrics import mean_absolute_error, roc_auc_score
+from sklearn.metrics import mean_absolute_error, roc_auc_score, root_mean_squared_error
 
 from stalactite.base import DataTensor
 from stalactite.batching import Batcher, ListBatcher
@@ -167,7 +167,9 @@ class PartySingle:
 
         self._dataset = self.processor.fit_transform()
         self.x_train = self._dataset[self.processor.data_params.train_split][self.processor.data_params.features_key]
+        a = torch.isnan(self.x_train).any()  # todo: remove
         self.x_test = self._dataset[self.processor.data_params.test_split][self.processor.data_params.features_key]
+        b = torch.isnan(self.x_test).any()  # todo: remove
         self.target = self._dataset[self.processor.data_params.train_split][self.processor.data_params.label_key]
         self.test_target = self._dataset[self.processor.data_params.test_split][self.processor.data_params.label_key]
 
@@ -176,7 +178,7 @@ class PartySingle:
 
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
-        if torch.equal(torch.unique(self.target), torch.tensor([0, 1])):
+        if torch.equal(torch.unique(self.target), torch.tensor([0, 1])) or torch.max(self.target).item() <= 1:
             self._activation = nn.Sigmoid()
             self.binary = True
         else:
@@ -195,7 +197,7 @@ class PartySingle:
         self.is_finalized = True
         logger.info("Experiment has finished")
 
-    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int):
+    def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
         """Report metrics based on target values, predictions, and name.
 
         Compute main metrics, if `use_mlflow` parameter was set to true, log them to MlFLow,
@@ -209,20 +211,27 @@ class PartySingle:
         """
 
         if self.binary:
-
             for avg in ["macro", "micro"]:
                 try:
                     roc_auc = roc_auc_score(y, predictions, average=avg)
                 except ValueError:
                     roc_auc = 0
+
+                rmse = root_mean_squared_error(y, predictions)
+
+                logger.info(f'{name} RMSE on step {step}: {rmse}')
                 logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
                 if self.use_mlflow:
                     mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-        else:
+                    mlflow.log_metric(f"{name.lower()}_rmse", rmse, step=step)
 
+        else:
             avg = "macro"
-            roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
-            logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
+            try:
+                roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
+            except ValueError:
+                roc_auc = 0
+
             if self.use_mlflow:
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
 
@@ -270,7 +279,8 @@ class PartySingleLogreg(PartySingle):
         self._optimizer = torch.optim.SGD(
             self._model.parameters(),
             lr=self._common_params.learning_rate,
-            momentum=self._common_params.momentum
+            momentum=self._common_params.momentum,
+            weight_decay=0.02 #self._common_params.weights_decay
         )
 
         self._criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)

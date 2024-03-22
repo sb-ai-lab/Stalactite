@@ -51,6 +51,12 @@ class TabularPreprocessor:
         ds_test = datasets.Dataset.from_dict(test_split_data, split=test_split_key)
         ds = datasets.DatasetDict({train_split_key: ds_train, test_split_key: ds_test})
         ds = ds.with_format("torch")
+        # to_check = ds["train_val"]["features_part_0"] #todo: remove
+        # _b = torch.isnan(to_check)
+        # _b810 = _b[8:10, :]
+        # c = _b.nonzero()
+        # b = torch.isnan(to_check).any()
+
         self._ds = ds
         return ds
 

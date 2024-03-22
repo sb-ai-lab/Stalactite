@@ -97,7 +97,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         self._data_params = self.processor.data_params
         self._common_params = self.processor.common_params
 
-        if torch.equal(torch.unique(self.target), torch.tensor([0, 1])):
+        if torch.equal(torch.unique(self.target), torch.tensor([0, 1])) or torch.max(self.target).item() <= 1:
             self.activation = nn.Sigmoid()
             self.binary = True
         else:

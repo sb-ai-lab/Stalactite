@@ -246,8 +246,9 @@ def run_single(config: VFLConfig, processors_dict_path: str):
                 raise ValueError(f"unknown dataset: {config.data.dataset.lower()} for logreg model")
 
         elif "mlp" in config.vfl_model.vfl_model_name:
-            single_party_class = PartySingleMLP #todo:
-
+            single_party_class = PartySingleMLP
+        elif "resnet" in config.vfl_model.vfl_model_name:
+            single_party_class = PartySingleResNet
         else:
             raise ValueError("Unknown vfl model %s" % config.vfl_model.vfl_model_name)
 
@@ -280,28 +281,30 @@ def infer(config: VFLConfig):
     logger.info(f"inference for model: {config.vfl_model.vfl_model_name} SUCCESS")
 
 
-def get_single_config(dataset_name: str) -> VFLConfig:
-    if dataset_name == "mnist":
-        config = VFLConfig.load_and_validate("/opt/airflow/dags/configs/logreg-mnist-single.yml")
-    elif dataset_name == "sbol":
-        config = VFLConfig.load_and_validate("/opt/airflow/dags/configs/logreg-sbol-single.yml")
-    elif dataset_name == "sbol_smm":
-        config = VFLConfig.load_and_validate("/opt/airflow/dags/configs/logreg-sbol_smm-single.yml")
-    elif dataset_name == "home_credit":
-        config = VFLConfig.load_and_validate("/opt/airflow/dags/configs/logreg-home_credit-single.yml")
-    elif dataset_name == "home_credit_bureau_pos":
-        config = VFLConfig.load_and_validate("/opt/airflow/dags/configs/logreg-home_credit_bureau_pos-single.yml")
-    else:
-        raise ValueError(f"Unknown dataset: {dataset_name}")
+def get_config(dataset_name: str, model_name: str, is_single: bool = False, members: int = None) -> VFLConfig:
+    postfix = "single" if is_single else "vfl"
+    config = VFLConfig.load_and_validate(
+        f"/opt/airflow/dags/configs/{model_name}/{postfix}/{model_name}-{dataset_name}-{postfix}.yml"
+    )
+    if members is not None:
+        config.common.world_size = members
+        config.data.host_path_data_dir = config.data.host_path_data_dir + str(members)
     return config
 
-
-def get_vfl_config(dataset_name: str, model_name: str, members: int) -> VFLConfig:
-
-    config = VFLConfig.load_and_validate(f"/opt/airflow/dags/configs/{model_name}-{dataset_name}-vfl.yml")
-    config.common.world_size = members
-    config.data.host_path_data_dir = config.data.host_path_data_dir + str(members)
-    return config
+# def get_single_config(dataset_name: str, model_name: str) -> VFLConfig:
+#
+#     config = VFLConfig.load_and_validate(
+#         f"/opt/airflow/dags/configs/{model_name}/single/{model_name}-{dataset_name}-single.yml")
+#
+#     return config
+#
+#
+# def get_vfl_config(dataset_name: str, model_name: str, members: int) -> VFLConfig:
+#
+#     config = VFLConfig.load_and_validate(f"/opt/airflow/dags/configs/{model_name}-{dataset_name}-vfl.yml")
+#     config.common.world_size = members
+#     config.data.host_path_data_dir = config.data.host_path_data_dir + str(members)
+#     return config
 
 
 def build_dag(
@@ -323,7 +326,8 @@ def build_dag(
 
         for model_name in model_names:
             for world_size in world_sizes:
-                config = get_vfl_config(dataset_name=dataset_name, model_name=model_name, members=world_size)
+                config = get_config(dataset_name=dataset_name, model_name=model_name, members=world_size,
+                                    is_single=False)
                 data_preparators.append(make_data_preparation(config=config))
                 tasks.append(get_processor(config=config, processors_dict_path=processors_path))
                 tasks.append(train(config=config))
@@ -346,25 +350,29 @@ def build_single_mode_dag(dag_id: str,
             catchup=False,
     ) as dag:
 
+
         processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
         data_preparators = []
 
         # make data preparation for each dataset, saving preprocessed dataset
         for dataset_name in set(dataset_names_list):
-            data_preparators.append(make_data_preparation(config=get_single_config(dataset_name)))
+            data_preparators.append(make_data_preparation(
+                config=get_config(dataset_name=dataset_name, model_name="logreg", is_single=True))  # model_name here is not matter
+            )
 
         # add processor and train-infer for each model
         tasks = []
-        for model_name, dataset_name in zip(models_names_list, dataset_names_list):
-            config = get_single_config(dataset_name)
-            # save processor
-            tasks.append(get_processor(
-                config=config,
-                processors_dict_path=processors_path))
-            # load processor and do train-infer
-            tasks.append(train_infer_single(
-                config=config,
-                processors_dict_path=processors_path))
+        for model_name in models_names_list:
+            for dataset_name in dataset_names_list:
+                config = get_config(dataset_name=dataset_name, model_name=model_name, is_single=True)
+                # save processor
+                tasks.append(get_processor(
+                    config=config,
+                    processors_dict_path=processors_path))
+                # load processor and do train-infer
+                tasks.append(train_infer_single(
+                    config=config,
+                    processors_dict_path=processors_path))
 
         chain(*data_preparators)
         chain(*tasks)
@@ -376,7 +384,7 @@ def build_single_mode_dag(dag_id: str,
 
 single_dag = build_single_mode_dag(
     dag_id="single_dag",
-    models_names_list=["logreg", "logreg", "logreg", "logreg", "logreg"],
+    models_names_list=["logreg", "mlp", "resnet"],
     dataset_names_list=["mnist", "sbol_smm", "sbol", "home_credit_bureau_pos", "home_credit"]
 )
 

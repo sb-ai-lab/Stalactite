@@ -23,7 +23,7 @@ data:
   dataset_size: 8500
   dataset: 'sbol'
   use_smm: False
-  host_path_data_dir:  /home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/multilabel_sber_sample10000_parts_sbol_only
+  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample10000_parts_sbol_only
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
@@ -49,7 +49,7 @@ prerequisites:
 
 master:
   container_host: 'node16.bdcl'
-  run_mlflow: True
+  run_mlflow: False
 
 member:
   member_model_params: {

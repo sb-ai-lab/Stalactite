@@ -39,7 +39,7 @@ data:
   random_seed: 0
   dataset_size: 8500
   dataset: 'mnist'
-  host_path_data_dir:  /home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/mnist_single
+  host_path_data_dir:  /opt/airflow/data/mnist_single
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"

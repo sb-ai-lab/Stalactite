@@ -200,7 +200,6 @@ class HonestPartyMaster(PartyMaster, ABC):
         """
         logger.info("Master %s: entering training loop" % self.id)
         updates = self.make_init_updates(party.world_size)
-        # a = self._dataset["train_train"]["SK_ID_CURR"]# todo: remove
 
         for titer in batcher:
             logger.debug(
@@ -468,7 +467,6 @@ class HonestPartyMember(PartyMember, ABC):
         finalize_task = party.recv(Task(method_name=Method.finalize, from_id=self.master_id, to_id=self.id))
         self.execute_received_task(finalize_task)
         logger.info("Finished member %s" % self.id)
-
 
     def _predict_metrics_loop(self, party: PartyCommunicator):
         predict_task = party.recv(Task(method_name=Method.predict, from_id=self.master_id, to_id=self.id))

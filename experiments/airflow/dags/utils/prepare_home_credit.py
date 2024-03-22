@@ -15,7 +15,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 logger = logging.getLogger(__name__)
 
 
-def fillna(df: pd.DataFrame, df_name: str) -> pd.DataFrame:
+def fillna_func(df: pd.DataFrame, df_name: str) -> pd.DataFrame:
     print(f"{df_name}: before fillna: {df.isnull().sum().sum()} NaN")
     df.replace([np.inf, -np.inf], np.nan, inplace=True)  # convert Inf to Nans
     df_mean_dict = df.mean(axis=0, skipna=True).to_dict()
@@ -260,7 +260,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, a
     # todo: check target distr in train-test split
     # # preparing applications dataframe
 
-    homecredit_data = fillna(df=homecredit_data, df_name="Applications")
+    homecredit_data = fillna_func(df=homecredit_data, df_name="Applications")
     cols_to_concat = [c for c in homecredit_data.columns if c not in ["SK_ID_CURR", "TARGET"]]
     homecredit_data["features_part_0"] = homecredit_data[cols_to_concat].apply(
         lambda x: list(x), axis=1)
@@ -282,7 +282,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, a
 
     # preparing bureau dataframe
     bureau = bureau.merge(other_sources_df, on="SK_ID_CURR", how="left")
-    bureau = fillna(df=bureau, df_name="Bureau")
+    bureau = fillna_func(df=bureau, df_name="Bureau")
     cols_to_concat = [c for c in bureau.columns if c not in ["SK_ID_CURR"]]
     bureau["features_part_1"] = bureau[cols_to_concat].apply(
         lambda x: list(x), axis=1)
@@ -295,7 +295,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, a
                             dir_name_postfix=3, data_dir_path=data_dir_path)
 
     # preparing pos balance dataframe
-    pos = fillna(df=pos, df_name="POS Balance")
+    pos = fillna_func(df=pos, df_name="POS Balance")
     cols_to_concat = [c for c in pos.columns if c not in ["SK_ID_CURR"]]
     pos["features_part_2"] = pos[cols_to_concat].apply(
         lambda x: list(x), axis=1)

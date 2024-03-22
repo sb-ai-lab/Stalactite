@@ -3,11 +3,9 @@ from typing import List
 
 import mlflow
 import torch
-from sklearn import metrics
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, root_mean_squared_error
 
 from stalactite.base import DataTensor, PartyDataTensor
-from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.ml.honest.linear_regression.party_master import HonestPartyMasterLinReg
 
 logger = logging.getLogger(__name__)
@@ -108,19 +106,27 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         predictions = predictions.detach().numpy()
 
         if self.binary:
-
             for avg in ["macro", "micro"]:
                 try:
                     roc_auc = roc_auc_score(y, predictions, average=avg)
                 except ValueError:
                     roc_auc = 0
+
+                rmse = root_mean_squared_error(y, predictions)
+
+                logger.info(f'{name} RMSE on step {step}: {rmse}')
                 logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
                 if self.run_mlflow:
                     mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+                    mlflow.log_metric(f"{name.lower()}_rmse", rmse, step=step)
         else:
-
             avg = "macro"
-            roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
+            try:
+                roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
+            except ValueError:
+                roc_auc = 0
+
             logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
+
             if self.run_mlflow:
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
