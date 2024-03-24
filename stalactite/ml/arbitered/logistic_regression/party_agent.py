@@ -41,6 +41,8 @@ class ArbiteredPartyAgentLogReg(PartyAgent, ABC):
     num_classes: int
     use_inner_join: bool
 
+    ovr = True
+
     def initialize_model_from_params(self, **model_params) -> Any:
         return LogisticRegressionBatch(**model_params)
 
@@ -102,7 +104,7 @@ class ArbiteredPartyAgentLogReg(PartyAgent, ABC):
 
     def initialize_model(self, do_load_model: bool = False):
         if do_load_model:
-            self._model = self.load_model()
+            self._model = self.load_model(is_ovr_models=self.ovr)
         else:
             input_dim = self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1]
             model_type = 'OVR models' if self.num_classes > 1 else 'binary model'
@@ -118,7 +120,7 @@ class ArbiteredPartyAgentLogReg(PartyAgent, ABC):
     def finalize(self, is_infer: bool = False):
         self.check_if_ready()
         if self.do_save_model and not is_infer:
-            self.save_model()
+            self.save_model(is_ovr_models=self.ovr)
         self.is_finalized = True
         logger.info(f"{self.role.capitalize()} {self.id} has finalized")
 

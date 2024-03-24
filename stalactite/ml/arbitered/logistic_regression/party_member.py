@@ -1,4 +1,4 @@
-from typing import List, Optional, Any, Union
+from typing import List, Optional, Union
 import logging
 
 import torch

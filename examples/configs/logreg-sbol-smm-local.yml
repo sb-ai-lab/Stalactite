@@ -13,7 +13,7 @@ vfl_model:
   is_consequently: False
   use_class_weights: True
   learning_rate: 0.05
-  do_train: False
+  do_train: True
   do_predict: True
   do_save_model: True
   vfl_model_path: ../../saved_models/logreg_model
@@ -36,7 +36,7 @@ member:
 
 data:
   random_seed: 0
-  dataset_size: 850
+  dataset_size: 8500
   dataset: 'sbol_smm'
   host_path_data_dir:  ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2
   dataset_part_prefix: 'part_'

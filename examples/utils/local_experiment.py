@@ -5,7 +5,6 @@ import threading
 from typing import Optional
 import datasets
 
-# from stalactite.party_member_impl import PartyMemberImpl
 from stalactite.ml import (
     HonestPartyMasterLinRegConsequently,
     HonestPartyMasterLinReg,
@@ -20,7 +19,6 @@ from stalactite.ml import (
     HonestPartyMemberMLP
 )
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor, ImagePreprocessorEff
-# from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 from stalactite.communications.local import LocalMasterPartyCommunicator, LocalMemberPartyCommunicator
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
@@ -43,8 +41,10 @@ def load_processors(config: VFLConfig):
     """
     if config.data.dataset.lower() == "mnist":
 
+        binary = False if config.vfl_model.vfl_model_name == "efficientnet" else True
+
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_mnist(config.data.host_path_data_dir, config.common.world_size)
+            load_mnist(config.data.host_path_data_dir, config.common.world_size, binary=binary)
 
         dataset = {}
         for m in range(config.common.world_size):
@@ -58,6 +58,7 @@ def load_processors(config: VFLConfig):
         processors = [
             image_preprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
+
         master_processor = image_preprocessor(dataset=datasets.load_from_disk(
             os.path.join(f"{config.data.host_path_data_dir}/master_part")
         ), member_id=-1, params=config, is_master=True)
@@ -96,9 +97,6 @@ def run(config_path: Optional[str] = None):
     master_processor, processors = load_processors(config)
 
     with reporting(config):
-        # target_uids = [str(i) for i in range(config.data.dataset_size)]
-        # inference_target_uids = [str(i) for i in range(500)]
-
         shared_party_info = dict()
         if 'logreg' in config.vfl_model.vfl_model_name:
             master_class = HonestPartyMasterLogReg
@@ -118,7 +116,6 @@ def run(config_path: Optional[str] = None):
                 master_class = HonestPartyMasterLinRegConsequently
             else:
                 master_class = HonestPartyMasterLinReg
-        master_processor = master_processor if config.data.dataset.lower() == "sbol_smm" else processors[0]
         master = master_class(
             uid="master",
             epochs=config.vfl_model.epochs,

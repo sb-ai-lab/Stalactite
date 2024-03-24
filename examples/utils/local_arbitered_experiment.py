@@ -13,7 +13,6 @@ from stalactite.ml import (
 from stalactite.ml.arbitered.security_protocols.paillier_sp import SecurityProtocolPaillier, \
     SecurityProtocolArbiterPaillier
 from stalactite.data_preprocessors import ImagePreprocessor, TabularPreprocessor, ImagePreprocessorEff
-# from stalactite.party_master_impl import PartyMasterImpl, PartyMasterImplConsequently, PartyMasterImplLogreg
 from stalactite.communications.local import ArbiteredLocalPartyCommunicator
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
@@ -27,48 +26,6 @@ logging.getLogger('PIL').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 
-# def load_processors(config: VFLConfig):
-#     """
-#
-#     Assigns parameters to preprocessor class, which is selected depending on the type of dataset: MNIST or SBOL.
-#     If there is no data to run the experiment, downloads data after preprocessing.
-#
-#     """
-#     if config.data.dataset.lower() == "mnist":
-#
-#         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-#             load_mnist(config.data.host_path_data_dir, config.common.world_size)
-#
-#         dataset = {}
-#         for m in range(config.common.world_size):
-#             dataset[m] = datasets.load_from_disk(
-#                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
-#             )
-#
-#         processors = [
-#             ImagePreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
-#         ]
-#
-#     elif config.data.dataset.lower() == "sbol_smm":
-#
-#         dataset = {}
-#         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-#             load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=config.common.world_size + 1)
-#
-#         for m in range(config.common.world_size + 1):
-#             dataset[m] = datasets.load_from_disk(
-#                 os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
-#             )
-#         processors = [
-#             TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
-#         ]
-#
-#     else:
-#         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
-#
-#     return processors
-
-
 def load_processors(config: VFLConfig):
     """
 
@@ -76,7 +33,6 @@ def load_processors(config: VFLConfig):
     If there is no data to run the experiment, downloads data after preprocessing.
 
     """
-    master_processor = None
     if config.data.dataset.lower() == "mnist":
 
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
@@ -94,6 +50,11 @@ def load_processors(config: VFLConfig):
         processors = [
             image_preprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
         ]
+
+        master_processor = image_preprocessor(dataset=datasets.load_from_disk(
+            os.path.join(f"{config.data.host_path_data_dir}/master_part")
+        ), member_id=-1, params=config, is_master=True)
+
 
     elif config.data.dataset.lower() == "sbol_smm":
 
@@ -126,12 +87,9 @@ def run(config_path: Optional[str] = None):
         )
 
     config = VFLConfig.load_and_validate(config_path)
-    # processors = load_processors(config)
     master_processor, processors = load_processors(config)
 
     with reporting(config):
-        # target_uids = [str(i) for i in range(config.data.dataset_size)]
-        # test_target_uids = [str(i) for i in range(1500)]
 
         shared_party_info = dict()
         master_class = ArbiteredPartyMasterLogReg
@@ -201,7 +159,7 @@ def run(config_path: Optional[str] = None):
                 do_train=config.vfl_model.do_train,
                 do_save_model=config.vfl_model.do_save_model,
                 model_path=config.vfl_model.vfl_model_path,
-                use_inner_join=True
+                use_inner_join=False
             )
             for member_rank, member_uid in enumerate(member_ids)
         ]
@@ -234,7 +192,7 @@ def run(config_path: Optional[str] = None):
                 participant=arbiter,
                 world_size=config.common.world_size,
                 shared_party_info=shared_party_info,
-                recv_timeout=3600.,
+                recv_timeout=config.grpc_arbiter.recv_timeout,
             )
             comm.run()
             logger.info("Finishing thread %s" % threading.current_thread().name)
@@ -246,7 +204,6 @@ def run(config_path: Optional[str] = None):
             target_member_func=local_member_main,
             arbiter=arbiter,
             target_arbiter_func=local_arbiter_main,
-
         )
 
 

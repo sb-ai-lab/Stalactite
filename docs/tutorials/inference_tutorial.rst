@@ -55,6 +55,13 @@ on the master and member:
         eval_batch_size=config.vfl_model.eval_batch_size,
         do_predict=True, # config.vfl_model.do_predict
         model_path=config.vfl_model.vfl_model_path,
+        num_classes=config.data.num_classes,
+    )
+
+    arbiter = arbiter_class(
+        eval_batch_size=config.vfl_model.eval_batch_size,
+        num_classes=config.data.num_classes,
+        do_predict=True,
     )
 
 
@@ -81,7 +88,7 @@ To launch the inference, passing the configuration file path same to the trainin
 Distributed (multiple host) prediction
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Distributed inference uses the stalactite CLI  ``master`` and ``member`` groups.
+Distributed inference uses the stalactite CLI  ``master``, ``member`` and ``arbiter`` groups.
 After the training, again using the same to the training process configuration files, run:
 
 .. code-block:: bash
@@ -93,3 +100,6 @@ After the training, again using the same to the training process configuration f
     # To launch members on the members hosts
     stalactite member start --infer --rank <member_rank> --config-path <path-to-defined/config.yml> [-d]
 
+
+    # To launch arbiter on the arbiter host
+    stalactite arbiter start --infer --config-path <path-to-defined/config.yml> [-d]
