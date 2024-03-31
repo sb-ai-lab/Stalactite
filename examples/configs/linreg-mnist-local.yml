@@ -1,8 +1,8 @@
 common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-q  world_size: 2
-  experiment_label: test-experiment-mnist-local
+  world_size: 2
+  experiment_label: test-experiment-mnist-local-2
   reports_export_folder: /Users/alexgrig/stalactite_data/reports
 
 vfl_model:
