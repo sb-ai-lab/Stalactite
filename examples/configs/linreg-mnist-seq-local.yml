@@ -3,10 +3,10 @@ common:
   report_test_metrics_iteration: 1
   world_size: 2
   experiment_label: experiment-mnist-sequential-local
-  reports_export_folder: ../../reports
+  reports_export_folder: /Users/alexgrig/stalactite_data/reports
 
 vfl_model:
-  epochs: 6
+  epochs: 2
   batch_size: 5000
   eval_batch_size: 200
   vfl_model_name: linreg
@@ -16,13 +16,14 @@ vfl_model:
   do_train: True
   do_predict: True
   do_save_model: True
-  vfl_model_path: ../../saved_models/linreg_model_seq
+  vfl_model_path: /Users/alexgrig/stalactite_data/models/linreg_model_seq
 
 data:
   random_seed: 0
   dataset_size: 5000
   dataset: 'mnist'
-  host_path_data_dir: ../../data/sber_ds_vfl/mnist_binary38_parts2
+  use_smm: False
+  host_path_data_dir: /Users/alexgrig/stalactite_data/mnist_binary38_parts_2
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"
@@ -31,14 +32,32 @@ data:
   uids_key: "image_idx"
 
 prerequisites:
-  mlflow_host: node3.bdcl
-  mlflow_port: "5555"
+  mlflow_host: localhost
+  mlflow_port: "9876"
+  prometheus_host: localhost
+  prometheus_port: "9090"
+  grafana_port: "3000"
 
 master:
-  run_mlflow: False
+  run_mlflow: True
+  logging_level: debug
+  #container_host: 0.0.0.0
+  run_prometheus: True
+  #disconnect_idle_client_time: 120
+  #time_between_idle_connections_checks: 3
+  recv_timeout: 360
 
 member:
   member_model_params: {
     output_dim: 1,
     reg_lambda: 0.5
   }
+
+  logging_level: debug
+  recv_timeout: 360
+
+
+docker:
+  docker_compose_path: "../../prerequisites"
+  docker_compose_command: "docker compose"
+  use_gpu: False
