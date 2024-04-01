@@ -23,7 +23,8 @@ class HonestPartyMasterEfficientNetSplitNN(HonestPartyMasterSplitNN):
     def initialize_model(self, do_load_model: bool = False) -> None:
         """ Initialize the model based on the specified model name. """
         self._model = EfficientNetTop(**self._model_params)
-        self._criterion = nn.CrossEntropyLoss(weight=self.class_weights.type(torch.FloatTensor))
+        class_weights = None if self.class_weights is None else self.class_weights.type(torch.FloatTensor)
+        self._criterion = nn.CrossEntropyLoss(weight=class_weights)
         self._activation = nn.Softmax(dim=1)
 
     def initialize_optimizer(self) -> None:
@@ -35,7 +36,7 @@ class HonestPartyMasterEfficientNetSplitNN(HonestPartyMasterSplitNN):
         )
 
     def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+            self, participating_members: List[str], party_predictions: PartyDataTensor, is_infer: bool = False
     ) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()

@@ -114,7 +114,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
 
         :return: Batcher instance.
         """
-        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, uids))
+        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, len(uids)))
         self._check_if_ready()
         batch_size = self._eval_batch_size if is_infer else self._batch_size
         epochs = 1 if is_infer else self.epochs
@@ -244,7 +244,7 @@ class HonestPartyMasterLinRegConsequently(HonestPartyMasterLinReg):
 
         :return: ConsecutiveListBatcher instance.
         """
-        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, uids))
+        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, len(uids)))
         self._check_if_ready()
         epochs = 1 if is_infer else self.epochs
         batch_size = self._eval_batch_size if is_infer else self._batch_size

@@ -7,7 +7,7 @@ import mlflow
 import torch
 from sklearn.metrics import roc_auc_score
 
-from stalactite.base import DataTensor, PartyCommunicator
+from stalactite.base import DataTensor, PartyCommunicator, IterationTime
 from stalactite.communications.helpers import Method, MethodKwargs
 from stalactite.ml.honest.base import Batcher
 from stalactite.ml.honest.linear_regression.party_master import HonestPartyMasterLinReg
@@ -180,7 +180,9 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
                     self.test_target.numpy(), master_predictions.detach().numpy(), name="Test", step=titer.seq_num
                 )
 
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
+            self.iteration_times.append(
+                IterationTime(client_id=self.id, iteration=titer.seq_num, iteration_time=time.time() - iter_start_time)
+            )
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
         postfix = "-infer" if step == -1 else ""

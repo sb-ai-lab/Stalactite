@@ -3,6 +3,7 @@ import itertools
 import json
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -14,16 +15,26 @@ from stalactite.communications.helpers import MethodKwargs, Method
 
 logger = logging.getLogger(__name__)
 
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
 
 DataTensor = torch.Tensor
 # in reality, it will be a DataTensor but with one more dimension
 PartyDataTensor = List[torch.Tensor]
 
 RecordsBatch = List[str]
+
+
+@dataclass
+class TaskExecutionTime:
+    client_id: str
+    task_name: Union[str, Method]
+    execution_time: float
+
+
+@dataclass
+class IterationTime:
+    client_id: str
+    iteration: int
+    iteration_time: float
 
 
 @dataclass(frozen=True)
@@ -35,6 +46,7 @@ class TrainingIteration:
     previous_batch: Optional[RecordsBatch]
     participating_members: Optional[List[str]]
     last_batch: bool
+
 
 class Batcher(ABC):
     # todo: add docs
@@ -207,10 +219,12 @@ class PartyAgent(ABC):
     do_train: bool
     do_predict: bool
     do_save_model: bool
-    _model: torch.nn.Module
+    _model: Union[torch.nn.Module, List[torch.nn.Module]]
     model_path: str
     uid2tensor_idx: Dict[Any, int]
     uid2tensor_idx_test: Dict[Any, int]
+
+    task_execution_times: List[TaskExecutionTime] = list()
 
     @abstractmethod
     def make_batcher(
@@ -239,7 +253,15 @@ class PartyAgent(ABC):
         :return: Execution result.
         """
         try:
+            time_st = time.time()
             result = getattr(self, task.method_name)(**task.kwargs_dict)
+            self.task_execution_times.append(
+                TaskExecutionTime(
+                    client_id=self.id,
+                    task_name=str(task.method_name),
+                    execution_time=time.time() - time_st
+                )
+            )
         except AttributeError as exc:
             raise UnsupportedError(f'Method {task.method_name} is not supported on {self.id}') from exc
         return result
@@ -350,12 +372,13 @@ class PartyMaster(PartyAgent, ABC):
     target_uids: List[str]
     test_target: DataTensor
     inference_target_uids: List[str]
-    _iter_time: list[tuple[int, float]] = list()
+
+    iteration_times: List[IterationTime] = list()
 
     @property
     def train_timings(self) -> list:
         """ Return list of tuples representing iteration timings from the main loop. """
-        return self._iter_time
+        return self.iteration_times
 
     def synchronize_uids(
             self, collected_uids: list[Tuple[list[str], bool]], world_size: int, is_infer: bool = False
@@ -405,7 +428,6 @@ class PartyMember(PartyAgent, ABC):
 
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
-    _iter_time: list[tuple[int, float]] = list()
 
     @abstractmethod
     def records_uids(self, is_infer: bool = False) -> Tuple[List[str], bool]:

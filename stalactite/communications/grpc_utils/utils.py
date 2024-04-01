@@ -6,9 +6,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Optional, Tuple
 
+import numpy as np
 import safetensors.torch
 import torch
-from prometheus_client import Gauge, Summary
+from prometheus_client import Gauge, Histogram
 
 from stalactite.base import MethodKwargs, ParticipantFuture
 from stalactite.communications.grpc_utils.generated_code import communicator_pb2
@@ -19,25 +20,41 @@ logger = logging.getLogger(__name__)
 class PrometheusMetric(enum.Enum):
     """Class holding Prometheus metrics."""
 
-    number_of_connected_agents = Gauge("number_of_connected_agents", "Active clients number", ["experiment_label"])
-    execution_time = Summary(
-        "member_task_execution_time",
-        "Execution time in sec of the tasks on members",
-        ["experiment_label", "client_id", "task_type"],
+    number_of_connected_agents = Gauge(
+        "number_of_connected_agents",
+        "Active clients number",
+        ["experiment_label", "run_id"]
     )
-    message_size = Summary(
-        "member_task_message_size",
-        "Size of the returned by member message containing results",
-        ["experiment_label", "client_id", "task_type"],
+    execution_time = Histogram(
+        "agent_task_execution_time",
+        "Execution time in sec of the tasks on agents",
+        ["experiment_label", "client_id", "task_type", "run_id"],
+        buckets=np.concatenate([np.arange(0, 2., 0.2), np.arange(5., 120., 25.)])
     )
-    send_client_time = Summary(
+    recv_message_size = Histogram(
+        "task_message_size",
+        "Size of the received by master messages (bytes)",
+        ["experiment_label", "client_id", "task_type", "run_id"],
+        buckets=np.concatenate([np.arange(0, 10000, 2500), np.array([10 ** pow for pow in range(4, 9)])])
+    )
+    send_client_time = Histogram(
         "member_send_time",
         "Time of the unary send operation to master until an acknowledgment is received",
-        ["experiment_label", "client_id", "task_type"],
+        ["experiment_label", "client_id", "task_type", "run_id"],
+        buckets=np.concatenate([np.arange(0, 5., 0.5), np.arange(5., 35., 10.)])
     )
-    iteration_times = Summary(
-        "master_iteration_time", "Time of iterations in the training loop", ["experiment_label", "iteration"]
+    iteration_time_hist = Histogram(
+        "iteration_time_hist",
+        "Time of the iteration in the master training loop",
+        ["experiment_label", "run_id"],
+        buckets=np.concatenate([np.arange(0, 3., 0.5), np.arange(5., 300., 20.)])
     )
+    iteration_time_gauge = Gauge(
+        "iteration_time_gauge",
+        "Time of the iteration in the master training loop",
+        ["experiment_label", "run_id"],
+    )
+
 
 class ArbiterServerError(Exception):
     """Custom exception class for errors related to the Arbiter server."""
@@ -95,7 +112,6 @@ class PreparedTask:
 
     task_id: str
     task_message: communicator_pb2.MainMessage
-    # task_future: ParticipantFuture
     task_future: Optional[ParticipantFuture] = field(default=None)
 
 
@@ -127,7 +143,7 @@ def save_data(tensor: torch.Tensor):
 
 
 def prepare_kwargs(
-    kwargs: Optional[MethodKwargs], prometheus_metrics: Optional[dict] = None
+        kwargs: Optional[MethodKwargs], prometheus_metrics: Optional[dict] = None
 ) -> SerializedMethodMessage:
     """
     Serialize data fields for protobuf message.
@@ -164,7 +180,7 @@ def prepare_kwargs(
 
 
 def collect_kwargs(
-    message_kwargs: SerializedMethodMessage, prometheus_metrics: Optional[dict[str, bytes]] = None
+        message_kwargs: SerializedMethodMessage, prometheus_metrics: Optional[dict[str, bytes]] = None
 ) -> Tuple[MethodKwargs, dict, Any]:
     """
     Collect and deserialize protobuf message data fields.

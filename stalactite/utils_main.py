@@ -222,6 +222,16 @@ def start_distributed_agent(
         data_path = os.path.abspath(config.data.host_path_data_dir)
         model_path = os.path.abspath(config.vfl_model.vfl_model_path)
 
+        if role == Role.master:
+            if networks := client.networks(names=[PREREQUISITES_NETWORK]):
+                network = networks.pop()["Name"]
+            else:
+                network = PREREQUISITES_NETWORK
+                client.create_network(network)
+            networking_config = client.create_networking_config({network: client.create_endpoint_config()})
+        else:
+            networking_config = None
+
         command = [
             "python",
             "run_grpc_agent.py",
@@ -244,6 +254,7 @@ def start_distributed_agent(
             name = ctx.obj["member_container_name"](rank) + ("-predict" if infer else "")
 
         container = create_and_start_container(
+            network_config=networking_config,
             client=client,
             image=BASE_IMAGE_TAG,
             container_label=ctx.obj[f"{role}_container_label"],
