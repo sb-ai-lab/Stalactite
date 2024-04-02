@@ -6,7 +6,7 @@ common:
   reports_export_folder: "../../reports"
 
 vfl_model:
-  epochs: 1
+  epochs: 10
   batch_size: 8500
   vfl_model_name: logreg
   is_consequently: False
@@ -14,17 +14,21 @@ vfl_model:
   learning_rate: 0.05
 #  l2_alpha: 0.2
   do_train: True
-  do_predict: True
+  do_predict: False
   do_save_model: True
   vfl_model_path: ../../saved_models/logreg_model_arbitered_he
 
 prerequisites:
   mlflow_host: 'node3.bdcl'
   mlflow_port: '5555'
+  prometheus_host: 'node3.bdcl'
+  prometheus_port: '9090'
+  grafana_port: '3001'
 
 master:
   container_host: 'node3.bdcl'
   run_mlflow: True
+  run_prometheus: True
   host: 0.0.0.0
   port: "50051"
   logging_level: 'debug'
@@ -35,7 +39,6 @@ member:
   heartbeat_interval: 2.
   logging_level: 'info'
   recv_timeout: 3600.
-
 
 grpc_arbiter:
   use_arbiter: True
@@ -50,8 +53,7 @@ grpc_arbiter:
 #    encryption_precision: 1e-10
 #    encoding_precision: 1e-10
   recv_timeout: 3600.
-
-
+  server_threadpool_max_workers: 5
 
 data:
   random_seed: 0
@@ -65,4 +67,9 @@ data:
   label_key: "labels"
   num_classes: 19
 
+docker:
+  docker_compose_command: "docker compose"
+  docker_compose_path: '../../prerequisites'
 
+grpc_server:
+  server_threadpool_max_workers: 5

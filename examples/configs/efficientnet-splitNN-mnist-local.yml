@@ -30,14 +30,14 @@ master:
     input_dim: 128,
     dropout: 0.2,
     num_classes: 10,
-#    init_weights: 0.005
+    #    init_weights: 0.005
   }
 
 member:
   member_model_params: {
-   width_mult: 0.1,
-   depth_mult: 0.1,
-#    init_weights: 0.005
+    width_mult: 0.1,
+    depth_mult: 0.1,
+    #    init_weights: 0.005
   }
 
 data:
@@ -45,9 +45,10 @@ data:
   dataset_size: 750
   dataset: 'mnist'
   use_smm: False
-  host_path_data_dir:  ../../data/sber_ds_vfl/mnist_efficientnet_multiclass
+  host_path_data_dir: ../../data/sber_ds_vfl/mnist_efficientnet_multiclass
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
   features_key: "image_part_"
   label_key: "label"
+  uids_key: "image_idx"

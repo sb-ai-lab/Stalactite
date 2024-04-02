@@ -17,7 +17,7 @@ from stalactite.base import (
     DataTensor,
     RecordsBatch,
     Batcher,
-    PartyAgent, PartyDataTensor,
+    PartyAgent, PartyDataTensor, IterationTime,
 )
 from stalactite.communications.helpers import Method, MethodKwargs
 
@@ -520,8 +520,9 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                 )
 
                 self.report_metrics(targets, aggr_predictions, 'Test', step=titer.seq_num)
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
+            self.iteration_times.append(
+                IterationTime(client_id=self.id, iteration=titer.seq_num, iteration_time=time.time() - iter_start_time)
+            )
 
     def inference(self, party: PartyCommunicator):
         """ Run VFL inference on master. """
@@ -582,7 +583,6 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                 f"Master %s: inference loop - starting batch %s (sub iter %s) on epoch %s"
                 % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
             )
-            iter_start_time = time.time()
             predict_test_tasks = party.broadcast(
                 Method.predict,
                 method_kwargs=MethodKwargs(other_kwargs={"uids": titer.batch, "is_infer": True}),
@@ -593,7 +593,6 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
             for task in party.gather(predict_test_tasks, recv_results=True):
                 party_predictions_test[task.from_id].append(task.result)
             test_targets = torch.cat([test_targets, target])
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
         aggr_party_predictions = self._aggregate_batched_predictions(party.members, party_predictions_test)
         predictions = self.aggregate_predictions(
             torch.cat(party_predictions_test[self.id], dim=1),
@@ -750,7 +749,6 @@ class ArbiteredPartyMember(PartyMember, ABC):
     def loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
         """ Run VFL training loop on member. """
         for titer in batcher:
-            iter_start_time = time.time()
             participant_partial_pred_task = party.recv(
                 Task(Method.predict_partial, from_id=party.master, to_id=self.id),
                 recv_results=False
@@ -805,5 +803,3 @@ class ArbiteredPartyMember(PartyMember, ABC):
                     method_name=Method.predict,
                     result=member_prediction
                 )
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))

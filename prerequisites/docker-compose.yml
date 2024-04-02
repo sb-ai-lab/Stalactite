@@ -16,10 +16,12 @@ services:
     ports:
       - "${GRAFANA_PORT}:3000"
     volumes:
-      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/datasources:/etc/grafana/provisioning/datasources"
-      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/dashboards:/etc/grafana/provisioning/dashboards"
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/datasources:/var/lib/grafana/provisioning/datasources"
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/dashboards:/var/lib/grafana/provisioning/dashboards"
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/default_dashboards:/var/lib/grafana/dashboards/default_dashboards"
 #      - grafana_storage:/var/lib/grafana
     environment:
+      - GF_PATHS_PROVISIONING=/var/lib/grafana/provisioning
       - PROMETHEUS_HOST=prometheus-db
       - PROMETHEUS_PORT=${PROMETHEUS_PORT}
     networks:

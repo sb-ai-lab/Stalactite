@@ -17,7 +17,9 @@ from stalactite.base import (
     Task,
     DataTensor,
     RecordsBatch,
-    Batcher, PartyDataTensor,
+    Batcher,
+    PartyDataTensor,
+    IterationTime,
 )
 from stalactite.configs import DataConfig, CommonConfig
 from stalactite.communications.helpers import Method, MethodKwargs
@@ -262,7 +264,9 @@ class HonestPartyMaster(PartyMaster, ABC):
 
                 self.report_metrics(test_target, predictions, name="Test", step=titer.seq_num)
 
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
+            self.iteration_times.append(
+                IterationTime(client_id=self.id, iteration=titer.seq_num, iteration_time=time.time() - iter_start_time)
+            )
 
     def inference_loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
         """ Run main inference loop on the VFL master.
@@ -281,7 +285,6 @@ class HonestPartyMaster(PartyMaster, ABC):
                 f"Master %s: inference loop - starting batch %s (sub iter %s) on epoch %s"
                 % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
             )
-            iter_start_time = time.time()
             predict_test_tasks = party.broadcast(
                 Method.predict,
                 method_kwargs=MethodKwargs(other_kwargs={"uids": titer.batch, "is_infer": True}),
@@ -289,7 +292,6 @@ class HonestPartyMaster(PartyMaster, ABC):
             )
             for task in party.gather(predict_test_tasks, recv_results=True):
                 party_predictions_test[task.from_id].append(task.result)
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
         party_predictions_test = self._aggregate_batched_predictions(party.members, party_predictions_test)
         predictions = self.aggregate(party.members, party_predictions_test, is_infer=True)
@@ -486,8 +488,6 @@ class HonestPartyMember(PartyMember, ABC):
                 f"Member %s: train loop - starting batch %s (sub iter %s) on epoch %s"
                 % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
             )
-
-            iter_start_time = time.time()
             update_predict_task = party.recv(
                 Task(method_name=Method.update_predict, from_id=party.master, to_id=self.id)
             )
@@ -507,8 +507,6 @@ class HonestPartyMember(PartyMember, ABC):
                     % (self.id, titer.seq_num, titer.epoch)
                 )
                 self._predict_metrics_loop(party)
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
 
     def inference_loop(self, batcher: Batcher, party: PartyCommunicator):
         """ Run main inference loop on the VFL member.

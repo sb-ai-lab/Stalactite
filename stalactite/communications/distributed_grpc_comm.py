@@ -39,7 +39,6 @@ from stalactite.communications.grpc_utils.utils import (
 from stalactite.communications.helpers import METHOD_VALUES, Method, MethodKwargs
 from stalactite.ml.arbitered.base import PartyArbiter, Role
 
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -239,11 +238,6 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         """
         self.raise_if_not_ready()
 
-        prometheus_metrics = dict()
-        for key, value in kwargs:
-            if key.startswith(PROMETHEUS_METRICS_PREFIX):
-                prometheus_metrics[key] = kwargs.pop(key)
-
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
 
@@ -255,7 +249,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             kwargs["result"] = result
             setattr(method_kwargs, attr, kwargs)
 
-        message_kwargs = prepare_kwargs(method_kwargs, prometheus_metrics=prometheus_metrics)
+        message_kwargs = prepare_kwargs(method_kwargs)
         task_id = str(uuid.uuid4())
 
         if self.arbiter == send_to_id:
@@ -377,7 +371,6 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             timeout: float = 30.0,
             task_id: Optional[str] = None,
     ) -> communicator_pb2.MainMessage:
-        # TODO add logging of left in the queue tasks
         timer_start = time.time()
         if self.use_arbiter:
             if receive_from_id == self.arbiter:
@@ -412,18 +405,18 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 "Check `recv_results` kwarg in recv / gather operation."
             )
 
-        _prometh_metrics = dict(received_message.prometheus_metrics) if not self.use_arbiter else None
+        _prometheus_metrics = getattr(received_message, 'prometheus_metrics', None)
 
         received_kwargs, prometheus_metrics, result = collect_kwargs(
             SerializedMethodMessage(
                 tensor_kwargs=dict(received_message.tensor_kwargs),
                 other_kwargs=dict(received_message.other_kwargs),
             ),
-            prometheus_metrics=_prometh_metrics,
+            prometheus_metrics=_prometheus_metrics,
         )
 
         if prometheus_metrics:
-            pass  # TODO log to prometheus (put to queue)
+            self.servicer.log_execution_time(prometheus_metrics[PROMETHEUS_METRICS_PREFIX + 'execution_time'])
 
         return Task(
             method_name=received_message.method_name,
@@ -477,7 +470,8 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                         ("grpc.max_receive_message_length", self.max_message_size),
                     ],
                 )
-                self._arbiter_stub = arbitered_communicator_pb2_grpc.ArbiteredCommunicatorStub(self._grpc_channel_arbiter)
+                self._arbiter_stub = arbitered_communicator_pb2_grpc.ArbiteredCommunicatorStub(
+                    self._grpc_channel_arbiter)
                 logger.info(f"Connecting to the arbiter at {self.arbiter_host}:{self.arbiter_port}")
 
             with start_thread(
@@ -491,13 +485,31 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                 self.participant.members = self.members
                 self.participant.master = self.participant.id
                 self.participant.arbiter = self.arbiter
-                self.participant.run(self)
-                self.servicer.log_iteration_timings(self.participant.train_timings)
+
+                with start_thread(
+                        target=self.log_master_metrics,
+                        daemon=True,
+                        thread_timeout=5.0
+                ):
+                    self.participant.run(self)
+
             logger.info("Party communicator %s: finished" % self.participant.id)
 
         except:
             logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
             raise
+
+    def log_master_metrics(self):
+        while not self.participant.is_finalized:
+            exec_timings = self.participant.task_execution_times
+            self.participant.task_execution_times = list()
+
+            iter_timings = self.participant.iteration_times
+            self.participant.iteration_times = list()
+
+            self.servicer.log_execution_time(exec_timings)
+            self.servicer.log_iteration_time(iter_timings)
+            time.sleep(3.)
 
 
 class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
@@ -639,7 +651,8 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                 if not self.arbiter_ready:
                     try:
                         arbiter_msg = self._arbiter_stub.CheckIfAvailable(
-                            arbitered_communicator_pb2.IsReady(sender_id=self.participant.id, ready=True, role=Role.member),
+                            arbitered_communicator_pb2.IsReady(sender_id=self.participant.id, ready=True,
+                                                               role=Role.member),
                             timeout=self.sent_task_timout,
                         )
                         self.arbiter_ready = arbiter_msg.ready
@@ -686,9 +699,9 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             raise UnsupportedError("GRpcMemberPartyCommunicator cannot send to other Members")
 
         prometheus_metrics = dict()
-        for key, value in kwargs:
-            if key.startswith(PROMETHEUS_METRICS_PREFIX):
-                prometheus_metrics[key] = kwargs.pop(key)
+        logging_execution_timings = self.participant.task_execution_times
+        self.participant.task_execution_times = list()
+        prometheus_metrics[PROMETHEUS_METRICS_PREFIX + 'execution_time'] = logging_execution_timings
 
         if kwargs:
             logger.warning(f"Got unexpected kwargs in PartyCommunicator.sent method {kwargs}. Omitting.")
@@ -722,7 +735,6 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                 tensor_kwargs=message_kwargs.tensor_kwargs,
                 other_kwargs=message_kwargs.other_kwargs,
             )
-
 
         if send_to_id in (self.master, self.arbiter):
             start = time.time()
@@ -885,7 +897,6 @@ class GRpcArbiterPartyCommunicator(GRpcMasterPartyCommunicator):
         self.max_message_size = max_message_size
         self.rendezvous_timeout = rendezvous_timeout
 
-
         self.server_thread = None
         self.asyncio_event_loop = None
         self.servicer: Optional[GRpcArbiterCommunicatorServicer] = None
@@ -1006,4 +1017,3 @@ class GRpcArbiterPartyCommunicator(GRpcMasterPartyCommunicator):
         except:
             logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
             raise
-
