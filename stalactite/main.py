@@ -4,7 +4,7 @@ This script implements main Stalactite command line interface commands,
 allowing launch of the VFL experiments in single-node or multi-node mode
 using the configuration file in the YAML format.
 """
-
+import enum
 import logging
 import os
 from pathlib import Path
@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)
 logging.getLogger('docker').setLevel(logging.ERROR)
 
 
+class PrerequisitesGroup(str, enum.Enum):
+    mlflow = 'mlflow'
+    monitoring = 'monitoring'
+
+
 @click.group()
 def cli():
     """Main stalactite CLI command group."""
@@ -52,30 +57,51 @@ def prerequisites():
 @click.option(
     "-d", "--detached", is_flag=True, show_default=True, default=False, help="Run non-blocking start in detached mode."
 )
-def start(config_path, detached):
+@click.option(
+    "--group",
+    type=click.Choice(PrerequisitesGroup.__members__),
+    required=False,
+    help="Which prerequisites to start. One of: `mlflow`, `monitoring`. If no group is passes, starts both groups."
+)
+def start(config_path, detached, group):
     """
-    Start containers with prerequisites (MlFlow, Prometheus, Grafana).
+    Start containers with prerequisites (MlFlow, Postgresql, Prometheus, Grafana).
+    Group `mlflow` starts two containers: MlFlow and Postgresql for experimental metrics reporting.
+    Group `monitoring` launches Prometheus and Grafana, which scrap runtime metrics and visualize it via Grafana
+    dashboards.
 
-    :param config_path: Absolute path to the configuration file in `YAML` format
-    :param detached: Run non-blocking start in detached mode
+    Note! `monitoring` group must be started at the same host as the VFL master to be able to see the
+    targets from which the metrics are scraped.
     """
-    logger.info("Starting prerequisites containers")
+    if group is not None:
+        group = [group]
+    else:
+        group = list(PrerequisitesGroup.__members__)
+
+    logger.info(f"Starting prerequisites containers ({group})")
     config = VFLConfig.load_and_validate(config_path)
     env_vars = get_env_vars(config)
-    command = f"{config.docker.docker_compose_command}"
-    run_subprocess_command(
-        command=command + " up" + (" -d" if detached else "") + " --build",
-        logger_err_info="Failed build process",
-        cwd=config.docker.docker_compose_path,
-        env=env_vars,
-        shell=True,
-    )
-    if detached:
-        logger.info(
-            f"MlFlow port: {config.prerequisites.mlflow_port}\n"
-            f"Prometheus port: {config.prerequisites.prometheus_port}\n"
-            f"Grafana port: {config.prerequisites.grafana_port}"
+    for group_name in group:
+        command = f"{config.docker.docker_compose_command} -f docker-compose-{group_name}.yml"
+        run_subprocess_command(
+            command=command + (
+                " -p stalactite-mlflow" if group_name == PrerequisitesGroup.mlflow else ""
+            ) + " up" + (" -d" if detached else "") + " --build",
+            logger_err_info="Failed build process",
+            cwd=config.docker.docker_compose_path,
+            env=env_vars,
+            shell=True,
         )
+        if detached:
+            if group_name == PrerequisitesGroup.monitoring:
+                logger.info(
+                    f"Prometheus port: {config.prerequisites.prometheus_port}\n"
+                    f"Grafana port: {config.prerequisites.grafana_port}"
+                )
+            else:
+                logger.info(
+                    f"MlFlow port: {config.prerequisites.mlflow_port}\n"
+                )
 
 
 @prerequisites.command()
@@ -84,35 +110,45 @@ def start(config_path, detached):
 )
 @click.option("--remove", is_flag=True, show_default=True, default=False, help="Delete created containers, networks.")
 @click.option("--remove-volumes", is_flag=True, show_default=True, default=False, help="Delete created volumes.")
-def stop(config_path, remove, remove_volumes):
+@click.option(
+    "--group",
+    type=click.Choice(PrerequisitesGroup.__members__),
+    required=False,
+    help="Which prerequisites to stop. One of: `mlflow`, `monitoring`. If no group is passes, stops both groups."
+)
+def stop(config_path, remove, remove_volumes, group):
     """
     Stop prerequisites containers (and remove all defined in docker-compose.yml networks and images[, and volumes]).
-
-    :param config_path: Absolute path to the configuration file in `YAML` format
-    :param remove: Delete created containers, networks
-    :param remove_volumes: Delete created volumes
+    Group `mlflow` stops both MlFlow and Postgresql.
+    Group `monitoring` stops Prometheus and Grafana containers.
     """
-    logger.info("Stopping prerequisites containers")
+    if group is not None:
+        group = [group]
+    else:
+        group = list(PrerequisitesGroup.__members__)
+
+    logger.info(f"Stopping prerequisites containers ({group})")
     config = VFLConfig.load_and_validate(config_path)
     env_vars = get_env_vars(config)
-    command = f"{config.docker.docker_compose_command}"
-    run_subprocess_command(
-        command=command + " stop",
-        logger_err_info="Failed stopping prerequisites containers",
-        cwd=config.docker.docker_compose_path,
-        env=env_vars,
-        shell=True,
-    )
-    logger.info(f"Successfully stopped prerequisite containers")
-    if remove:
+    for group_name in group:
+        command = f"{config.docker.docker_compose_command} -f docker-compose-{group_name}.yml"
         run_subprocess_command(
-            command=command + " down" + (" -v" if remove_volumes else ""),
-            logger_err_info="Failed releasing resources",
+            command=command + " stop",
+            logger_err_info="Failed stopping prerequisites containers",
             cwd=config.docker.docker_compose_path,
             env=env_vars,
             shell=True,
         )
-        logger.info(f"Successfully teared down prerequisite resources")
+        logger.info(f"Successfully stopped prerequisite containers ({group_name})")
+        if remove:
+            run_subprocess_command(
+                command=command + " down" + (" -v" if remove_volumes else ""),
+                logger_err_info="Failed releasing resources",
+                cwd=config.docker.docker_compose_path,
+                env=env_vars,
+                shell=True,
+            )
+            logger.info(f"Successfully teared down prerequisite resources ({group_name})")
 
 
 @cli.group()
