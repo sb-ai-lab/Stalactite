@@ -3,11 +3,9 @@ from typing import List
 
 import mlflow
 import torch
-from sklearn import metrics
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, root_mean_squared_error
 
 from stalactite.base import DataTensor, PartyDataTensor
-from stalactite.metrics import ComputeAccuracy_numpy
 from stalactite.ml.honest.linear_regression.party_master import HonestPartyMasterLinReg
 
 logger = logging.getLogger(__name__)
@@ -24,7 +22,7 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         """
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        return [torch.zeros(self._batch_size, self.target.shape[1]) for _ in range(world_size)]
+        return [torch.zeros(self._batch_size) for _ in range(world_size)]
 
     def aggregate(
             self, participating_members: List[str], party_predictions: PartyDataTensor, is_infer: bool = False
@@ -45,7 +43,7 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
             party_predictions = list(self.party_predictions.values())
             predictions = torch.sum(torch.stack(party_predictions, dim=1), dim=1)
         else:
-            predictions = torch.sigmoid(torch.sum(torch.stack(party_predictions, dim=1), dim=1))
+            predictions = self.activation(torch.sum(torch.stack(party_predictions, dim=1), dim=1))
         return predictions
 
     def compute_updates(
@@ -69,12 +67,12 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        # y = self.target[self._batch_size * subiter_seq_num: self._batch_size * (subiter_seq_num + 1)]
         tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
-
-        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights)
-        loss = criterion(torch.squeeze(predictions), y.float())
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if self.binary else torch.nn.CrossEntropyLoss(weight=self.class_weights)
+        targets_type = torch.LongTensor if isinstance(criterion,
+                                                      torch.nn.CrossEntropyLoss) else torch.FloatTensor
+        loss = criterion(torch.squeeze(predictions), y.type(targets_type))
         grads = torch.autograd.grad(outputs=loss, inputs=predictions)
 
         for i, member_id in enumerate(participating_members):
@@ -103,19 +101,28 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         postfix = '-infer' if step == -1 else ""
         step = step if step != -1 else None
 
-        mae = metrics.mean_absolute_error(y, predictions)
-        acc = ComputeAccuracy_numpy(is_linreg=False).compute(y, predictions)
-        logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
-        logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
-        if self.run_mlflow:
-            mlflow.log_metric(f"{name.lower()}_mae{postfix}", mae, step=step)
-            mlflow.log_metric(f"{name.lower()}_acc{postfix}", acc, step=step)
+        if self.binary:
+            for avg in ["macro", "micro"]:
+                try:
+                    roc_auc = roc_auc_score(y, predictions, average=avg)
+                except ValueError:
+                    roc_auc = 0
 
-        for avg in ["macro", "micro"]:
+                rmse = root_mean_squared_error(y, predictions)
+
+                logger.info(f'{name} RMSE on step {step}: {rmse}')
+                logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
+                if self.run_mlflow:
+                    mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}{postfix}", roc_auc, step=step)
+                    mlflow.log_metric(f"{name.lower()}_rmse{postfix}", rmse, step=step)
+        else:
+            avg = "macro"
             try:
-                roc_auc = roc_auc_score(y, predictions, average=avg)
+                roc_auc = roc_auc_score(y, predictions, average=avg, multi_class="ovr")
             except ValueError:
                 roc_auc = 0
+
             logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
+
             if self.run_mlflow:
                 mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}{postfix}", roc_auc, step=step)
