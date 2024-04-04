@@ -16,6 +16,11 @@ for benchmarking various models and algorithms.
 .. toctree::
    :maxdepth: 4
 
+   overview
+
+.. toctree::
+   :maxdepth: 4
+
    quickstart
 
 .. toctree::

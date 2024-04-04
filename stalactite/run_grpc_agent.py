@@ -55,6 +55,8 @@ def main(config_path, infer, role):
             arbiter_port=config.grpc_arbiter.port if config.grpc_arbiter.use_arbiter else None,
             use_arbiter=config.grpc_arbiter.use_arbiter,
         )
+        comm.run()
+
     elif role == Role.master:
         with reporting(config):
             comm = GRpcMasterPartyCommunicator(
@@ -77,6 +79,7 @@ def main(config_path, infer, role):
                 use_arbiter=config.grpc_arbiter.use_arbiter,
                 sent_task_timout=config.member.sent_task_timout,
             )
+            comm.run()
 
     elif role == Role.arbiter:
         if not config.grpc_arbiter.use_arbiter:
@@ -95,11 +98,11 @@ def main(config_path, infer, role):
             rendezvous_timeout=config.common.rendezvous_timeout,
             recv_timeout=config.grpc_arbiter.recv_timeout,
         )
+        comm.run()
+
     else:
         raise ValueError(f'Unknown role to initialize communicator ({role}). '
                          f'Role must be one of `master`, `member`, `arbiter`')
-
-    comm.run()
 
 
 if __name__ == "__main__":
