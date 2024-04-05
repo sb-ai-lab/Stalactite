@@ -1,3 +1,4 @@
+import logging
 import time
 from contextlib import contextmanager
 from threading import Thread
@@ -7,7 +8,35 @@ import mlflow
 
 from stalactite.base import PartyMaster, PartyMember
 from stalactite.configs import VFLConfig
-from stalactite.ml.arbitered.base import PartyArbiter
+from stalactite.ml.arbitered.base import PartyArbiter, Role
+
+
+def global_logging(
+        role: Optional[Role] = None,
+        config: Optional[VFLConfig] = None,
+        logging_level: Optional[int] = logging.DEBUG
+):
+    loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
+    for logger in loggers:
+        if logger.name.startswith('stalactite'):
+            if logger.hasHandlers():
+                logger.handlers.clear()
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.propagate = False
+            if role is not None:
+                if role == Role.master:
+                    logger.setLevel(config.master.logging_level)
+                elif role == Role.member:
+                    logger.setLevel(config.member.logging_level)
+                elif role == Role.arbiter:
+                    logger.setLevel(config.grpc_arbiter.logging_level)
+                else:
+                    logger.setLevel(logging.INFO)
+            else:
+                logger.setLevel(logging_level)
 
 
 @contextmanager

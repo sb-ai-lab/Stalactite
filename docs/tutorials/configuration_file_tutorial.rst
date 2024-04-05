@@ -9,6 +9,25 @@ An example of configuration file can be found at the ``configs/config-test.yml``
 All the path parameters (``reports_export_folder``, ``host_path_data_dir``, ``docker_compose_path``) should be either
 absolute paths to the directories, or are resolved relatively to the path of the configuration file.
 
+The logging in the module is also defined via configuration files. We use standard Python logger and you can set the
+logging level to ``info``, ``debug`` or ``warning`` using the following instruction.
+
+.. code-block:: yaml
+
+    # general logging level of the Stalactite, applied if you use Stalactite CLI in local or distributed experiments
+    common:
+      logging_level: # 'info', 'debug' or 'warning'
+
+    # Agent level logging is applicable in distributed multi-process and multi-host regimes - you can set different
+    # levels to different agents by customizing the following fields:
+    master:
+      logging_level: # 'info', 'debug' or 'warning': Logging level of the master (in master container)
+    member:
+      logging_level: # 'info', 'debug' or 'warning': Logging level of the member (in member container)
+    grpc_arbiter:
+      logging_level: # 'info', 'debug' or 'warning': Logging level of the arbiter (in arbiter container)
+
+
 Common parameters are required in any experiment and define general experimental specifics.
 
 .. code-block:: yaml
@@ -20,6 +39,7 @@ Common parameters are required in any experiment and define general experimental
       experiment_label: # Label of the experiment
       reports_export_folder: # Path to export tests logs and reports
       rendezvous_timeout: # If master and members do not finish rendezvous in a given time, TimeoutError is raised
+      logging_level: # 'info', 'debug' or 'warning' - general logging level of the Stalactite
 
 VFL model are training and model specific parameters also used in any experiment.
 

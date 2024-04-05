@@ -40,7 +40,6 @@ from stalactite.communications.helpers import METHOD_VALUES, Method, MethodKwarg
 from stalactite.ml.arbitered.base import PartyArbiter, Role
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 PROMETHEUS_METRICS_PREFIX = "__prometheus_"
 

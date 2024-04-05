@@ -12,6 +12,8 @@ from stalactite.communications.grpc_utils.utils import Status
 from stalactite.ml.arbitered.base import Role
 
 logger = logging.getLogger(__name__)
+logging.getLogger('asyncio').setLevel(logging.ERROR)
+logging.getLogger('grpc').setLevel(logging.ERROR)
 
 
 class GRpcArbiterCommunicatorServicer(arbitered_communicator_pb2_grpc.ArbiteredCommunicatorServicer):

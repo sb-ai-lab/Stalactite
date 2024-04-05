@@ -83,7 +83,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             result: Optional[Any] = None,
             **kwargs,
     ) -> Task:
-        self._check_if_ready()
+        self.raise_if_not_ready()
         if send_to_id not in self._party_info:
             raise ValueError(f"Unknown receiver: {send_to_id}")
         task = Task(
@@ -211,7 +211,7 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             raise TimeoutError(f"{self.participant.id} could not gather tasks from {number_to} members.")
         return [task.result() for task in done_tasks]
 
-    def _check_if_ready(self):
+    def raise_if_not_ready(self):
         """Raise an exception if the communicator was not initialized properly."""
         if not self.is_ready:
             raise RuntimeError(

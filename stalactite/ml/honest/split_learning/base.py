@@ -22,7 +22,7 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
         :return: Model predictions.
         """
         logger.info("Master: predicting.")
-        self._check_if_ready()
+        self.check_if_ready()
         predictions = self._model.predict(x)
         if use_activation:
             predictions = self.activation(predictions)
@@ -32,13 +32,13 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
 
     def update_weights(self, agg_members_output: DataTensor, upd: DataTensor) -> None:
         logger.info(f"Master: updating weights. Incoming tensor: {upd.size()}")
-        self._check_if_ready()
+        self.check_if_ready()
         self._model.update_weights(x=agg_members_output, gradients=upd, is_single=False, optimizer=self._optimizer)
         logger.info("Master: successfully updated weights")
 
     def update_predict(self, upd: DataTensor, agg_members_output: DataTensor) -> DataTensor:
         logger.info("Master: updating and predicting.")
-        self._check_if_ready()
+        self.check_if_ready()
         # get aggregated output from previous batch if exist (we do not make update_weights if it's the first iter)
         if self.aggregated_output is not None:
             self.update_weights(
@@ -68,7 +68,7 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
         :return: List of gradients as tensors.
         """
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
-        self._check_if_ready()
+        self.check_if_ready()
         self.iteration_counter += 1
         tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
