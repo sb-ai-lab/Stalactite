@@ -97,9 +97,6 @@ def run(config_path: Optional[str] = None):
     master_processor, processors = load_processors(config)
 
     with reporting(config):
-        # target_uids = [str(i) for i in range(config.data.dataset_size)]
-        # inference_target_uids = [str(i) for i in range(500)]
-
         shared_party_info = dict()
         if 'logreg' in config.vfl_model.vfl_model_name:
             master_class = HonestPartyMasterLogReg

@@ -56,6 +56,7 @@ used for training and validation.
       test_split: # Name of the test split
       features_key: # Feature columns key
       label_key: # Target column key
+      num_classes: # Number of classes in the multiclass classification task (used only in arbitered OVR setting)
 
 Master and member configuration fields can be split into two main groups. Required parameters for both local and
 distributed experiments are the following.
@@ -74,6 +75,29 @@ distributed experiments are the following.
 
 Rest of the parameters are used only in the distributed setting.
 
+In the arbitered setting, you need to configure an arbiter agent, too. Usage of the arbiter implies the introduction of
+the homomorphic encryption in the process.
+
+.. code-block:: yaml
+
+    grpc_arbiter:
+      use_arbiter: True # To launch an arbiter in an experiment
+      logging_level: # Logging level of the arbiter
+
+      # You can scip initialization of the `security_protocol_params`, no HE will be added into training
+      security_protocol_params:
+        he_type: paillier # By now only paillier HE is available
+        # Lower key length means faster operations, worse precision and security. In a real-world setting, we recommend
+        # setting the `key_length` to 2048
+        key_length: 128
+        n_threads: 20 # Number of available for parallelization CPU cores
+        encryption_precision: 1e-10 # Precision of the encryption
+        # (if the overflow error occurs, reduce this value or increase the key length)
+        encoding_precision: 1e-10 # Precision of the encoding
+        # (if the overflow error occurs, reduce this value or increase the key length)
+      recv_timeout: # Timeout of the recv operations on arbiter
+
+
 .. code-block:: yaml
 
     master:
@@ -89,6 +113,11 @@ Rest of the parameters are used only in the distributed setting.
       port: # Which port is used to launch and access gRPC server
       max_message_size: -1 # Maximum message size in bytes, -1 means no limits are applied
       server_threadpool_max_workers: # When running the gRPC servicer the threadpool workers are used
+
+    grpc_arbiter:
+      host: 0.0.0.0 # Which host is used inside the container to launch the gRPC server of the arbiter
+      port: # Which port is used to launch and access gRPC server !must be different from ``grpc_server.port``
+      container_host: # Host of the arbiter container, which can be accessed by the members and master
 
     docker:
       # When containers are launched the built image depends on whether the GPU is available

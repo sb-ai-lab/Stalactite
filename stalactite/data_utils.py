@@ -1,71 +1,190 @@
 # TODO: this file is added temporary. It will be removed or significantly changed after refactoring of the preprocessors
-
+from stalactite.base import PartyMaster, PartyMember
+from stalactite.ml.arbitered.base import PartyArbiter
 from stalactite.ml import (
-    HonestPartyMasterLinRegConsequently,
     HonestPartyMasterLinReg,
     HonestPartyMemberLogReg,
+    HonestPartyMemberResNet,
+    HonestPartyMemberEfficientNet,
+    HonestPartyMemberMLP,
     HonestPartyMemberLinReg,
-    HonestPartyMasterLogReg
+    HonestPartyMasterLogReg,
+    HonestPartyMasterResNetSplitNN,
+    HonestPartyMasterEfficientNetSplitNN,
+    HonestPartyMasterMLPSplitNN,
+    PartyArbiterLogReg,
+    ArbiteredPartyMasterLogReg,
+    ArbiteredPartyMemberLogReg,
 )
-
 
 from stalactite.configs import VFLConfig
 
-from examples.utils.local_experiment import load_processors
+from examples.utils.local_experiment import load_processors as load_processors_honest
+from examples.utils.local_arbitered_experiment import load_processors as load_processors_arbitered
+from stalactite.ml.arbitered.security_protocols.paillier_sp import (
+    SecurityProtocolPaillier,
+    SecurityProtocolArbiterPaillier,
+)
 
 
-def get_party_master(config_path: str, is_infer: bool = False):
+def get_party_master(config_path: str, is_infer: bool = False) -> PartyMaster:
     config = VFLConfig.load_and_validate(config_path)
-    processors = load_processors(config)
+    if config.grpc_arbiter.use_arbiter:
+        master_processor, processors = load_processors_arbitered(config)
+        master_processor = master_processor if config.data.dataset.lower() == "sbol_smm" else processors[0]
+        master_class = ArbiteredPartyMasterLogReg
+        if config.grpc_arbiter.security_protocol_params is not None:
+            if config.grpc_arbiter.security_protocol_params.he_type == 'paillier':
+                sp_agent = SecurityProtocolPaillier(**config.grpc_arbiter.security_protocol_params.init_params)
+            else:
+                raise ValueError('Only paillier HE implementation is available')
+        else:
+            sp_agent = None
+        return master_class(
+            uid="master",
+            epochs=config.vfl_model.epochs,
+            report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+            report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+            processor=master_processor,
+            target_uids=master_processor.dataset[config.data.train_split][config.data.uids_key][
+                        :config.data.dataset_size],
+            inference_target_uids=master_processor.dataset[config.data.test_split][config.data.uids_key],
+            batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
+            model_update_dim_size=0,
+            run_mlflow=config.master.run_mlflow,
+            num_classes=config.data.num_classes,
+            security_protocol=sp_agent,
+            do_predict=is_infer,
+            do_train=not is_infer,
+            do_save_model=config.vfl_model.do_save_model,
+            model_path=config.vfl_model.vfl_model_path,
+        )
 
-    target_uids = [str(i) for i in range(config.data.dataset_size)]
-    inference_target_uids = [str(i) for i in range(1000)]
-    if 'logreg' in config.vfl_model.vfl_model_name:
-        master_class = HonestPartyMasterLogReg
     else:
-        if config.common.is_consequently:
-            master_class = HonestPartyMasterLinRegConsequently
+        master_processor, processors = load_processors_honest(config)
+        if 'logreg' in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterLogReg
+        elif "resnet" in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterResNetSplitNN
+        elif "efficientnet" in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterEfficientNetSplitNN
+        elif "mlp" in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterMLPSplitNN
         else:
             master_class = HonestPartyMasterLinReg
-    return master_class(
-        uid="master",
-        epochs=config.vfl_model.epochs,
-        report_train_metrics_iteration=config.common.report_train_metrics_iteration,
-        report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-        processor=processors[0],
-        target_uids=target_uids,
-        batch_size=config.vfl_model.batch_size,
-        eval_batch_size=config.vfl_model.eval_batch_size,
-        model_update_dim_size=0,
-        run_mlflow=config.master.run_mlflow,
-        do_train=not is_infer,
-        do_predict=is_infer,
-        inference_target_uids=inference_target_uids,
-    )
+        return master_class(
+            uid="master",
+            epochs=config.vfl_model.epochs,
+            report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+            report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+            processor=master_processor,
+            target_uids=master_processor.dataset[config.data.train_split][config.data.uids_key][
+                        :config.data.dataset_size],
+            inference_target_uids=master_processor.dataset[config.data.test_split][config.data.uids_key],
+            batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
+            model_update_dim_size=0,
+            run_mlflow=config.master.run_mlflow,
+            do_predict=is_infer,
+            do_train=not is_infer,
+            model_name=config.vfl_model.vfl_model_name if
+            config.vfl_model.vfl_model_name in ["resnet", "mlp", "efficientnet"] else None,
+            model_params=config.master.master_model_params
+        )
 
 
-def get_party_member(config_path: str, member_rank: int, is_infer: bool = False):
+def get_party_member(config_path: str, member_rank: int, is_infer: bool = False) -> PartyMember:
     config = VFLConfig.load_and_validate(config_path)
-    processors = load_processors(config)
-    target_uids = [str(i) for i in range(config.data.dataset_size)]
-    inference_target_uids = [str(i) for i in range(1000)]
-    if 'logreg' in config.vfl_model.vfl_model_name:
-        member_class = HonestPartyMemberLogReg
+    if config.grpc_arbiter.use_arbiter:
+        master_processor, processors = load_processors_arbitered(config)
+        member_class = ArbiteredPartyMemberLogReg
+        if config.grpc_arbiter.security_protocol_params is not None:
+            if config.grpc_arbiter.security_protocol_params.he_type == 'paillier':
+                sp_agent = SecurityProtocolPaillier(**config.grpc_arbiter.security_protocol_params.init_params)
+            else:
+                raise ValueError('Only paillier HE implementation is available')
+        else:
+            sp_agent = None
+
+        return member_class(
+            uid=f"member-{member_rank}",
+            member_record_uids=processors[member_rank].dataset[config.data.train_split][config.data.uids_key],
+            member_inference_record_uids=processors[member_rank].dataset[config.data.test_split][
+                config.data.uids_key],
+            processor=processors[member_rank],
+            batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
+            epochs=config.vfl_model.epochs,
+            report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+            report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+            num_classes=config.data.num_classes,
+            security_protocol=sp_agent,
+            do_predict=is_infer,
+            do_train=not is_infer,
+            do_save_model=config.vfl_model.do_save_model,
+            model_path=config.vfl_model.vfl_model_path,
+            use_inner_join=False
+        )
+
     else:
-        member_class = HonestPartyMemberLinReg
-    return member_class(
-        uid=f"member-{member_rank}",
-        member_record_uids=target_uids,
-        member_inference_record_uids=inference_target_uids,
-        model_name=config.vfl_model.vfl_model_name,
-        processor=processors[member_rank],
+        master_processor, processors = load_processors_honest(config)
+        if 'logreg' in config.vfl_model.vfl_model_name:
+            member_class = HonestPartyMemberLogReg
+        elif "resnet" in config.vfl_model.vfl_model_name:
+            member_class = HonestPartyMemberResNet
+        elif "efficientnet" in config.vfl_model.vfl_model_name:
+            member_class = HonestPartyMemberEfficientNet
+        elif "mlp" in config.vfl_model.vfl_model_name:
+            member_class = HonestPartyMemberMLP
+        else:
+            member_class = HonestPartyMemberLinReg
+
+        return member_class(
+            uid=f"member-{member_rank}",
+            member_record_uids=processors[member_rank].dataset[config.data.train_split][config.data.uids_key],
+            member_inference_record_uids=processors[member_rank].dataset[config.data.test_split][config.data.uids_key],
+            model_name=config.vfl_model.vfl_model_name,
+            processor=processors[member_rank],
+            batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
+            epochs=config.vfl_model.epochs,
+            report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+            report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+            is_consequently=config.vfl_model.is_consequently,
+            members=None,
+            do_predict=is_infer,
+            do_train=not is_infer,
+            do_save_model=config.vfl_model.do_save_model,
+            model_path=config.vfl_model.vfl_model_path,
+            model_params=config.member.member_model_params,
+            use_inner_join=True if member_rank == 0 else False
+        )
+
+
+def get_party_arbiter(config_path: str, is_infer: bool = False) -> PartyArbiter:
+    config = VFLConfig.load_and_validate(config_path)
+    if not config.grpc_arbiter.use_arbiter:
+        raise RuntimeError('Arbiter should not be called in honest setting.')
+
+    arbiter_class = PartyArbiterLogReg
+    if config.grpc_arbiter.security_protocol_params is not None:
+        if config.grpc_arbiter.security_protocol_params.he_type == 'paillier':
+            sp_arbiter = SecurityProtocolArbiterPaillier(**config.grpc_arbiter.security_protocol_params.init_params)
+        else:
+            raise ValueError('Only paillier HE implementation is available')
+    else:
+        sp_arbiter = None
+
+    return arbiter_class(
+        uid="arbiter",
+        epochs=config.vfl_model.epochs,
         batch_size=config.vfl_model.batch_size,
         eval_batch_size=config.vfl_model.eval_batch_size,
-        epochs=config.vfl_model.epochs,
-        report_train_metrics_iteration=config.common.report_train_metrics_iteration,
-        report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-        do_train=not is_infer,
+        security_protocol=sp_arbiter,
+        learning_rate=config.vfl_model.learning_rate,
+        momentum=0.0,
+        num_classes=config.data.num_classes,
         do_predict=is_infer,
-        do_save_model=True,
-        model_path=config.vfl_model.vfl_model_path,
+        do_train=not is_infer,
     )

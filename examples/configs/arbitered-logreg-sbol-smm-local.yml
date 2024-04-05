@@ -2,16 +2,21 @@ common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 1
-  experiment_label: tests-sbol-smm-single
+  experiment_label: no-he-sbol-smm-logreg-multi
   reports_export_folder: "../../reports"
 
 vfl_model:
-  epochs: 15
-  batch_size: 500
+  epochs: 2
+  batch_size: 8500
   vfl_model_name: logreg
   is_consequently: False
   use_class_weights: False
-  learning_rate: 0.02
+  learning_rate: 0.05
+  l2_alpha: 0.2
+  do_train: True
+  do_predict: True
+  do_save_model: True
+  vfl_model_path: ../../saved_models/logreg_model_arbitered_he
 
 prerequisites:
   mlflow_host: 'node3.bdcl'
@@ -19,15 +24,26 @@ prerequisites:
 
 master:
   container_host: 'node3.bdcl'
-  run_mlflow: True
+  run_mlflow: False
+  recv_timeout: 3600.
+
+member:
+  recv_timeout: 3600.
+
 
 data:
   random_seed: 0
   dataset_size: 8500
   dataset: 'sbol_smm'
-  host_path_data_dir: /home/dmitriy/data/examples/sber/vfl_multilabel_sber_sample10000_parts2
+  host_path_data_dir: ../../data/sber_ds_vfl/multilabel_sber_sample10000_parts2
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"
   features_key: "features_part_"
   label_key: "labels"
+  num_classes: 19
+
+grpc_arbiter:
+  use_arbiter: True
+  recv_timeout: 3600.
+

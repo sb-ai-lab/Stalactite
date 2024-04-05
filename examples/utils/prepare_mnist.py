@@ -35,7 +35,6 @@ def make_train_val_split(ds, test_size=0.15, stratify_by_column='label', shuffle
 
 
 def split_image(image, parts=2):
-
     split_dim = 1
     split_dim_size = image.shape[split_dim]
 
@@ -53,7 +52,6 @@ def split_image(image, parts=2):
 
 
 def split_vertically(sample, parts=3, split_feature='image', part_prefix='image_part'):
-
     """
 
     3. Image divided into different parts.
@@ -88,7 +86,7 @@ def split_dataset_dict(ds_dict, parts, split_feature='image', part_prefix='image
 
     splited_dss = {}
     for val, ds in ds_dict.items():
-        ds_splited = ds.map(partial(split_vertically, parts = parts, part_prefix=part_prefix,
+        ds_splited = ds.map(partial(split_vertically, parts=parts, part_prefix=part_prefix,
                                     split_feature=split_feature), remove_columns=split_feature)
         splited_dss[val] = ds_splited
 
@@ -190,17 +188,19 @@ def load_data(save_path, parts_num, binary: bool = True, is_single: bool = False
     # Save the whole dataset:
     # Saving parameters:
     save_splitted_dataset(rr, path=save_dir, clean_dir=False)
+    save_master_dataset(master_dataset, path=os.path.join(save_dir, "master_part"))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Command line params')
-    
-    parser.add_argument('--save_path', type=str, default='~/stalactite_data', help='Path where the splitted data is saved to')
+
+    parser.add_argument('--save_path', type=str, default='~/stalactite_data',
+                        help='Path where the splitted data is saved to')
     parser.add_argument('--members_no', type=int, default=3, help='Amount of parties (members)')
-    
+
     args = parser.parse_args()
     save_path = Path(args.save_path).absolute() / ('mnist_binary38_parts_' + str(args.members_no))
-    
+
     load_data(save_path, args.members_no)
-    
+
     print(f"Splitted data is saved to: {save_path}")

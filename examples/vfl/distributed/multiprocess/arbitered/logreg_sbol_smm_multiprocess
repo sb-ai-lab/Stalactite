@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+
+function run() {
+  poetry run stalactite local \
+  --multi-process start \
+  --config-path examples/configs/arbitered-logreg-sbol-smm-multiprocess.yml
+}
+
+
+function halt() {
+  poetry run stalactite local --multi-process stop
+}
+
+
+function master_logs() {
+  poetry run stalactite local --multi-process logs --agent-id master-agent-vfl
+}
+
+
+function main () {
+    echo "============================"
+
+    cmd="$1"
+
+    if [ -z "${cmd}" ]
+    then
+      echo "No command is provided."
+      help
+      exit 1
+    fi
+
+    shift 1
+
+    echo "Executing command: ${cmd}"
+
+    case "${cmd}" in
+
+    "run")
+        run
+        ;;
+    "halt")
+        halt
+        ;;
+    "master-logs")
+        master_logs
+        ;;
+
+
+
+    "help")
+        help
+        ;;
+
+    *)
+        echo "Unknown command: ${cmd}"
+        ;;
+
+    esac
+}
+
+main "${@}"

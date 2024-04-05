@@ -1,0 +1,36 @@
+version: '3.9'
+
+services:
+  prometheus-db:
+    image: prom/prometheus
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+    volumes:
+      -  "${DOCKER_COMPOSE_PATH}/configs/prometheus.yml:/etc/prometheus/prometheus.yml"
+      - prometheus_storage:/prometheus
+    networks:
+      - vfl-network
+
+  grafana:
+    image: grafana/grafana-enterprise
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    volumes:
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/datasources:/var/lib/grafana/provisioning/datasources"
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/dashboards:/var/lib/grafana/provisioning/dashboards"
+      - "${DOCKER_COMPOSE_PATH}/configs/grafana_provisioning/default_dashboards:/var/lib/grafana/dashboards/default_dashboards"
+      - grafana_storage:/var/lib/grafana
+    environment:
+      - GF_PATHS_PROVISIONING=/var/lib/grafana/provisioning
+      - PROMETHEUS_HOST=prometheus-db
+      - PROMETHEUS_PORT=${PROMETHEUS_PORT}
+    networks:
+      - vfl-network
+
+networks:
+  vfl-network:
+
+volumes:
+  prometheus_storage:
+  grafana_storage:
+

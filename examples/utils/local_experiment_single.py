@@ -36,7 +36,7 @@ def load_processors(config_path: str):
     elif config.data.dataset.lower() == "sbol_smm":
 
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1, is_single=True, sbol_only=True)
+            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1, is_single=True, sbol_only=False)
 
         dataset = {0: datasets.load_from_disk(
             os.path.join(f"{config.data.host_path_data_dir}/part_{0}")

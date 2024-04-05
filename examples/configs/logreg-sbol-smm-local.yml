@@ -6,7 +6,7 @@ common:
   reports_export_folder: "../../reports"
 
 vfl_model:
-  epochs: 1
+  epochs: 5
   batch_size: 250
   eval_batch_size: 200
   vfl_model_name: logreg
@@ -14,8 +14,8 @@ vfl_model:
   use_class_weights: True
   learning_rate: 0.05
   do_train: True
-  do_predict: False
-  do_save_model: False
+  do_predict: True
+  do_save_model: True
   vfl_model_path: ../../saved_models/logreg_model
 
 
@@ -36,9 +36,9 @@ member:
 
 data:
   random_seed: 0
-  dataset_size: 850
+  dataset_size: 8500
   dataset: 'sbol_smm'
-  host_path_data_dir:  /home/dmitriy/data/my_test/vfl_multilabel_sber_sample10000_parts2
+  host_path_data_dir:  ../../data/sber_ds_vfl/multilabel_sber_sample10000_parts2
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"

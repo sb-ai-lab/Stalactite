@@ -7,8 +7,8 @@ import mlflow
 import torch
 from sklearn.metrics import roc_auc_score, root_mean_squared_error
 
-from stalactite.base import (DataTensor, PartyCommunicator, Method, MethodKwargs)
-
+from stalactite.base import DataTensor, PartyCommunicator, IterationTime
+from stalactite.communications.helpers import Method, MethodKwargs
 from stalactite.ml.honest.base import Batcher
 from stalactite.ml.honest.linear_regression.party_master import HonestPartyMasterLinReg
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
 
-    def predict(self, x: DataTensor, use_test: bool = False, use_activation: bool = False) -> DataTensor:
+    def predict(self, x: DataTensor, is_infer: bool = False, use_activation: bool = False) -> DataTensor:
         """ Make predictions using the master model.
         :return: Model predictions.
         """
@@ -70,7 +70,7 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
+        tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
         targets_type = torch.LongTensor if isinstance(self._criterion, torch.nn.CrossEntropyLoss) else torch.FloatTensor
         loss = self._criterion(torch.squeeze(master_predictions), y.type(targets_type))
@@ -151,10 +151,10 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
                                         key=lambda x: int(x.from_id.split('-')[-1]))
                 party_members_predictions = [task.result for task in ordered_gather]
 
-                agg_members_predictions = self.aggregate(party.members, party_members_predictions, infer=True)
+                agg_members_predictions = self.aggregate(party.members, party_members_predictions, is_infer=True)
                 master_predictions = self.predict(x=agg_members_predictions, use_activation=True)
 
-                target = self.target[[self._uid2tensor_idx[uid] for uid in batcher.uids]]
+                target = self.target[[self.uid2tensor_idx[uid] for uid in batcher.uids]]
 
                 self.report_metrics(
                     target.numpy(), master_predictions.detach().numpy(), name="Train", step=titer.seq_num
@@ -167,20 +167,22 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
                 )
                 predict_test_tasks = party.broadcast(
                     Method.predict,
-                    method_kwargs=MethodKwargs(other_kwargs={"uids": None, "use_test": True}),
+                    method_kwargs=MethodKwargs(other_kwargs={"uids": None, "is_infer": True}),
                     participating_members=titer.participating_members,
                 )
                 ordered_gather = sorted(party.gather(predict_test_tasks, recv_results=True),
                                         key=lambda x: int(x.from_id.split('-')[-1]))
 
                 party_members_predictions = [task.result for task in ordered_gather]
-                agg_members_predictions = self.aggregate(party.members, party_members_predictions, infer=True)
+                agg_members_predictions = self.aggregate(party.members, party_members_predictions, is_infer=True)
                 master_predictions = self.predict(x=agg_members_predictions, use_activation=True)
                 self.report_metrics(
                     self.test_target.numpy(), master_predictions.detach().numpy(), name="Test", step=titer.seq_num
                 )
 
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
+            self.iteration_times.append(
+                IterationTime(client_id=self.id, iteration=titer.seq_num, iteration_time=time.time() - iter_start_time)
+            )
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
         if self.binary:

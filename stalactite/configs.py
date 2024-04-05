@@ -2,11 +2,10 @@ import logging
 import os
 import warnings
 from pathlib import Path
-from typing import Literal, Optional, Union, List
+from typing import Literal, Optional, Union
 
-import tenseal as ts
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 def raise_path_not_exist(path: str):
@@ -39,7 +38,6 @@ class CommonConfig(BaseModel):
     """Common experimental parameters config."""
     use_grpc: bool = Field(default=False, description="Whether to use local or gRPC-based communicators")
 
-    # epochs: int = Field(default=3, description="Number of epochs to train a model")
     world_size: int = Field(default=2, description="Number of the VFL member agents (without the master)")
     report_train_metrics_iteration: int = Field(
         default=1,
@@ -49,7 +47,6 @@ class CommonConfig(BaseModel):
         default=1,
         description="Number of iteration steps between reporting metrics on test dataset split."
     )
-    # batch_size: int = Field(default=100, description="Batch size used for training")
     experiment_label: str = Field(
         default="default-experiment",
         description="Experiment name used in prerequisites, if unset, defaults to `default-experiment`",
@@ -69,9 +66,10 @@ class VFLModelConfig(BaseModel):
         description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`, `efficientnet`, `mlp`, `resnet`'
     )
     is_consequently: bool = Field(default=False, description='Run linear regression updates in sequential mode')
-    use_class_weights: bool = Field(default=False, description='Logistic regression')  # TODO
+    use_class_weights: bool = Field(default=False, description='Imbalanced classes logistic regression class weights')
     learning_rate: float = Field(default=0.01, description='Learning rate')
-    momentum: float = Field(default=0, description='Momentum')
+    l2_alpha: Optional[float] = Field(default=None, description='Alpha used for L2 regularization')
+    momentum: Optional[float] = Field(default=0, description='Optimizer momentum')
     do_train: bool = Field(default=True, description='Whether to run a training loop.')
     do_predict: bool = Field(default=True, description='Whether to run an inference loop.')
     do_save_model: bool = Field(default=True, description='Whether to save the model after training.')
@@ -84,8 +82,10 @@ class VFLModelConfig(BaseModel):
 class DataConfig(BaseModel):
     """Experimental data parameters config."""
 
-    random_seed: int = Field(default=0,
-                             description="Experiment data random seed (including random, numpy, torch)")  # TODO use?
+    random_seed: int = Field(
+        default=0,
+        description="Experiment data random seed (including random, numpy, torch)"
+    )
     dataset_size: int = Field(default=1000, description="Number of dataset rows to use")
     host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
     dataset: Literal[
@@ -94,12 +94,13 @@ class DataConfig(BaseModel):
         description='Dataset type. One of `mnist`, `sbol`, `sbol_smm`, `home_credit`,  `home_credit_bureau_pos`,'
                     ' `avito`, `avito_texts_images`'
     )
-    dataset_part_prefix: str = Field(default='part_')  # TODO use?
+    dataset_part_prefix: str = Field(default='part_')
     train_split: str = Field(default='train_train')
     test_split: str = Field(default='train_val')
     features_key: str = Field(default="image_part_")
     label_key: str = Field(default="label")
     uids_key: str = Field(default="user_id")
+    num_classes: int = Field(default=1)
 
 
 class PrerequisitesConfig(BaseModel):
@@ -130,33 +131,45 @@ class GRpcServerConfig(GRpcConfig):
 
 class PaillierSPParams(BaseModel):
     """ Security protocol parameters if the Paillier is used. """
-    precision: float = Field(default=1e-8, description='Precision of the paillier encoding.')
+    he_type: Literal['paillier']
+    encryption_precision: float = Field(default=1e-8, description='Precision of the Paillier encryption.')
+    encoding_precision: float = Field(default=1e-8, description='Precision of the Paillier encoding.')
+    key_length: int = Field(default=2048, description='Length of the Paillier cryptokey.')
     n_threads: int = Field(default=None, description='Number of threads to use for computations')
 
-
-class GRpcArbiterConfig(GRpcConfig):
-    """gRPC arbiter server and servicer parameters config."""
-    container_host: str = Field(default="0.0.0.0", description="Host of the container with gRPC arbiter service")
-    use_arbiter: bool = Field(default=False, description="Whether to include arbiter for VFL with HE")
-    grpc_operations_timeout: float = Field(default=300, description="Timeout of the unary calls to gRPC arbiter server")
-    security_protocol_params: Optional[PaillierSPParams] = Field(default=None)
+    @property
+    def init_params(self):
+        return {
+            "encryption_precision": self.encryption_precision,
+            "encoding_precision": self.encoding_precision,
+            "key_length": self.key_length,
+            "n_threads": self.n_threads,
+        }
 
 
 class PartyConfig(BaseModel):
     """VFL base parties` parameters config."""
-
     logging_level: Literal["debug", "info", "warning"] = Field(default="info", description="Logging level")
     recv_timeout: float = Field(default=360., description='Timeout of the recv operation')
 
-    @field_validator("logging_level")
-    @classmethod
-    def validate_logging_level(cls, v: str):
+    @model_validator(mode="after")
+    def validate_logging_level(self):
         level = {
             "info": logging.INFO,
             "warning": logging.WARNING,
             "debug": logging.DEBUG,
         }
-        return level.get(v, logging.INFO)
+        self.logging_level = level.get(self.logging_level, logging.INFO)
+        return self
+
+
+
+class GRpcArbiterConfig(GRpcConfig, PartyConfig):
+    """gRPC arbiter server and servicer parameters config."""
+    container_host: str = Field(default="0.0.0.0", description="Host of the container with gRPC arbiter service")
+    use_arbiter: bool = Field(default=False, description="Whether to include arbiter for VFL with HE")
+    grpc_operations_timeout: float = Field(default=300, description="Timeout of the unary calls to gRPC arbiter server")
+    security_protocol_params: Optional[PaillierSPParams] = Field(default=None)
 
 
 class MasterConfig(PartyConfig):
@@ -179,9 +192,6 @@ class MemberConfig(PartyConfig):
     """VFL member parties` parameters config."""
 
     heartbeat_interval: float = Field(default=2.0, description="Time in seconds to sent heartbeats to master.")
-    task_requesting_pings_interval: float = Field(
-        default=0.1, description="Interval between new tasks requests from master"
-    )  # TODO ?
     sent_task_timout: float = Field(default=3600, description="Timeout of the unary endpoints calls to the gRPC")
     member_model_params: dict = Field(default={}, description="Member model parameters")
 

@@ -1,5 +1,4 @@
 import collections
-import enum
 import itertools
 import json
 import logging
@@ -7,17 +6,15 @@ import os
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
-from dataclasses import dataclass, field
-from typing import Any, Iterator, List, Optional, Union, Tuple
+from dataclasses import dataclass
+from typing import Any, Iterator, List, Optional, Union, Tuple, Dict
 
 import torch
 
+from stalactite.communications.helpers import MethodKwargs, Method
+
 logger = logging.getLogger(__name__)
 
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
 
 DataTensor = torch.Tensor
 # in reality, it will be a DataTensor but with one more dimension
@@ -26,19 +23,18 @@ PartyDataTensor = List[torch.Tensor]
 RecordsBatch = List[str]
 
 
-class Method(str, enum.Enum):  # TODO _Method the same - unify
-    service_return_answer = "service_return_answer"
-    service_heartbeat = "service_heartbeat"
+@dataclass
+class TaskExecutionTime:
+    client_id: str
+    task_name: Union[str, Method]
+    execution_time: float
 
-    records_uids = "records_uids"
-    register_records_uids = "register_records_uids"
 
-    initialize = "initialize"
-    finalize = "finalize"
-
-    update_weights = "update_weights"
-    predict = "predict"
-    update_predict = "update_predict"
+@dataclass
+class IterationTime:
+    client_id: str
+    iteration: int
+    iteration_time: float
 
 
 @dataclass(frozen=True)
@@ -50,14 +46,6 @@ class TrainingIteration:
     previous_batch: Optional[RecordsBatch]
     participating_members: Optional[List[str]]
     last_batch: bool
-
-
-@dataclass
-class MethodKwargs:  # TODO MethodMessage the same - unify
-    """Data class holding keyword arguments for called method."""
-
-    tensor_kwargs: dict[str, torch.Tensor] = field(default_factory=dict)
-    other_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 class Batcher(ABC):
@@ -231,8 +219,13 @@ class PartyAgent(ABC):
     do_train: bool
     do_predict: bool
     do_save_model: bool
-    _model: torch.nn.Module
+    _model: Union[torch.nn.Module, List[torch.nn.Module]]
     model_path: str
+    uid2tensor_idx: Dict[Any, int]
+    uid2tensor_idx_test: Dict[Any, int]
+
+    task_execution_times: List[TaskExecutionTime] = list()
+
     @abstractmethod
     def make_batcher(
             self,
@@ -260,7 +253,15 @@ class PartyAgent(ABC):
         :return: Execution result.
         """
         try:
+            time_st = time.time()
             result = getattr(self, task.method_name)(**task.kwargs_dict)
+            self.task_execution_times.append(
+                TaskExecutionTime(
+                    client_id=self.id,
+                    task_name=str(task.method_name),
+                    execution_time=time.time() - time_st
+                )
+            )
         except AttributeError as exc:
             raise UnsupportedError(f'Method {task.method_name} is not supported on {self.id}') from exc
         return result
@@ -313,29 +314,51 @@ class PartyAgent(ABC):
     def initialize_model_from_params(self, **model_params) -> Any:
         ...
 
-    def save_model(self):
+    def save_model(self, is_ovr_models: bool = False):
         """ Save model for further inference. """
         if self._model is not None and self.do_save_model:
             if self.model_path is None:
                 raise RuntimeError('If `do_save_model` is True, the `model_path` must be not None.')
             os.makedirs(os.path.join(self.model_path, f'agent_{self.id}'), exist_ok=True)
-            torch.save(self._model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', 'model.pt'))
+            if is_ovr_models:
+                for idx, model in enumerate(self._model):
+                    torch.save(model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', f'model-{idx}.pt'))
+            else:
+                torch.save(self._model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', 'model.pt'))
             with open(os.path.join(self.model_path, f'agent_{self.id}', 'model_init_params.json'), 'w') as f:
-                json.dump(getattr(self._model, 'init_params', {}), f)
+                if is_ovr_models:
+                    init_params = {}
+                    for idx, model in enumerate(self._model):
+                        init_params[idx] = getattr(model, 'init_params', {})
+                    json.dump(init_params, f)
+                else:
+                    json.dump(getattr(self._model, 'init_params', {}), f)
 
-    def load_model(self) -> Any:
+    def load_model(self, is_ovr_models: bool = False) -> Any:
         """ Load model saved for inference. """
+        logger.info(f'{self.id} is loading model from {self.model_path}')
         if self.model_path is None:
             raise RuntimeError('If `do_load_model` is True, the `model_path` must be not None.')
-        if not os.path.exists(os.path.join(self.model_path, f'agent_{self.id}')):
+        agent_model_path = os.path.join(self.model_path, f'agent_{self.id}')
+        if not os.path.exists(agent_model_path):
             raise FileNotFoundError(
                 f'You should train the model before launching the inference, however, {self.id} cannot find the model '
                 f'at {os.path.join(self.model_path)}.'
             )
-        with open(os.path.join(self.model_path, f'agent_{self.id}', 'model_init_params.json')) as f:
+
+        with open(os.path.join(agent_model_path, 'model_init_params.json')) as f:
             init_model_params = json.load(f)
-        model = self.initialize_model_from_params(**init_model_params)
-        model.load_state_dict(torch.load(os.path.join(self.model_path, f'agent_{self.id}', 'model.pt')))
+
+        if is_ovr_models:
+            logger.info(f'Loading OVR models from {agent_model_path}')
+            model = []
+            for idx in sorted([int(key) for key in init_model_params.keys()]):
+                m = self.initialize_model_from_params(**init_model_params[str(idx)])
+                m.load_state_dict(torch.load(os.path.join(agent_model_path, f'model-{idx}.pt')))
+                model.append(m)
+        else:
+            model = self.initialize_model_from_params(**init_model_params)
+            model.load_state_dict(torch.load(os.path.join(self.model_path, f'agent_{self.id}', 'model.pt')))
         return model
 
 
@@ -349,15 +372,16 @@ class PartyMaster(PartyAgent, ABC):
     target_uids: List[str]
     test_target: DataTensor
     inference_target_uids: List[str]
-    _iter_time: list[tuple[int, float]] = list()
+
+    iteration_times: List[IterationTime] = list()
 
     @property
     def train_timings(self) -> list:
         """ Return list of tuples representing iteration timings from the main loop. """
-        return self._iter_time
+        return self.iteration_times
 
     def synchronize_uids(
-            self, collected_uids: list[Tuple[list[str], bool]], world_size: int, is_test: bool = False
+            self, collected_uids: list[Tuple[list[str], bool]], world_size: int, is_infer: bool = False
     ) -> List[str]:
         """ Synchronize unique records identifiers across party members.
 
@@ -368,7 +392,7 @@ class PartyMaster(PartyAgent, ABC):
         """
         logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, world_size))
         inner_collected_uids = [col_uids[0] for col_uids in collected_uids if col_uids[1]]
-        uids = self.inference_target_uids if is_test else self.target_uids
+        uids = self.inference_target_uids if is_infer else self.target_uids
         if len(inner_collected_uids) > 0:
             uids = itertools.chain(
                 uids, (uid for member_uids in inner_collected_uids for uid in set(member_uids))
@@ -377,7 +401,7 @@ class PartyMaster(PartyAgent, ABC):
             [uid for uid, count in collections.Counter(uids).items() if count == len(inner_collected_uids) + 1]
         )
         logger.debug("Master %s: registering shared uids f size %s" % (self.id, len(shared_uids)))
-        if is_test:
+        if is_infer:
             self.inference_target_uids = shared_uids
         else:
             self.target_uids = shared_uids
@@ -404,7 +428,6 @@ class PartyMember(PartyAgent, ABC):
 
     report_train_metrics_iteration: int
     report_test_metrics_iteration: int
-    _iter_time: list[tuple[int, float]] = list()
 
     @abstractmethod
     def records_uids(self, is_infer: bool = False) -> Tuple[List[str], bool]:
@@ -433,7 +456,7 @@ class PartyMember(PartyAgent, ABC):
         ...
 
 
-class UnsupportedError(Exception):  # TODO move from communications utils
+class UnsupportedError(Exception):
     """Custom exception class for indicating that an unsupported method is called on a class."""
 
     def __init__(self, message: str = "Unsupported method for class."):

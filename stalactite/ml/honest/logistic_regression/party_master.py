@@ -9,10 +9,6 @@ from stalactite.base import DataTensor, PartyDataTensor
 from stalactite.ml.honest.linear_regression.party_master import HonestPartyMasterLinReg
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-logger.addHandler(sh)
 
 
 class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
@@ -26,23 +22,22 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         """
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
         self._check_if_ready()
-        # return [torch.zeros(self._batch_size, self.target.shape[1]) for _ in range(world_size)]
         return [torch.zeros(self._batch_size) for _ in range(world_size)]
 
     def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+            self, participating_members: List[str], party_predictions: PartyDataTensor, is_infer: bool = False
     ) -> DataTensor:
         """ Aggregate party predictions for logistic regression.
 
         :param participating_members: List of participating party member identifiers.
         :param party_predictions: List of party predictions.
-        :param infer: Flag indicating whether to perform inference.
+        :param is_infer: Flag indicating whether to perform inference.
 
         :return: Aggregated predictions after applying sigmoid function.
         """
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()
-        if not infer:
+        if not is_infer:
             for member_id, member_prediction in zip(participating_members, party_predictions):
                 self.party_predictions[member_id] = member_prediction
             party_predictions = list(self.party_predictions.values())
@@ -72,9 +67,8 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
         self._check_if_ready()
         self.iteration_counter += 1
-        tensor_idx = [self._uid2tensor_idx[uid] for uid in uids]
+        tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
-        # criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if len(y.shape) == 2 else torch.nn.CrossEntropyLoss(weight=self.class_weights)
         criterion = torch.nn.BCEWithLogitsLoss(pos_weight=self.class_weights) if self.binary else torch.nn.CrossEntropyLoss(weight=self.class_weights)
         targets_type = torch.LongTensor if isinstance(criterion,
                                                       torch.nn.CrossEntropyLoss) else torch.FloatTensor
@@ -104,6 +98,8 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
 
         y = y.numpy()
         predictions = predictions.detach().numpy()
+        postfix = '-infer' if step == -1 else ""
+        step = step if step != -1 else None
 
         if self.binary:
             for avg in ["macro", "micro"]:
@@ -117,8 +113,8 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
                 logger.info(f'{name} RMSE on step {step}: {rmse}')
                 logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
                 if self.run_mlflow:
-                    mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
-                    mlflow.log_metric(f"{name.lower()}_rmse", rmse, step=step)
+                    mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}{postfix}", roc_auc, step=step)
+                    mlflow.log_metric(f"{name.lower()}_rmse{postfix}", rmse, step=step)
         else:
             avg = "macro"
             try:
@@ -129,4 +125,4 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
             logger.info(f'{name} ROC AUC {avg} on step {step}: {roc_auc}')
 
             if self.run_mlflow:
-                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}", roc_auc, step=step)
+                mlflow.log_metric(f"{name.lower()}_roc_auc_{avg}{postfix}", roc_auc, step=step)

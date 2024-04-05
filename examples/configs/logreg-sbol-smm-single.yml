@@ -23,7 +23,6 @@ master:
 
 member:
   member_model_params: {
-#    init_weights: None,
     output_dim: 19,
   }
 
@@ -31,7 +30,7 @@ data:
   random_seed: 0
   dataset_size: 850
   dataset: 'sbol_smm'
-  host_path_data_dir: /home/dmitriy/data/my_test/multilabel_sber_sample10000_parts_sbol_only
+  host_path_data_dir: ../../data/sber_ds_vfl/multilabel_sber_sample10000_parts_single
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"

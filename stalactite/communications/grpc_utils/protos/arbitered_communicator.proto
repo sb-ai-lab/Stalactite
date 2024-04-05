@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+
+service ArbiteredCommunicator {
+  rpc SendToArbiter(MainArbiterMessage) returns (MainArbiterMessage) {}
+  rpc RecvFromArbiter(MainArbiterMessage) returns (MainArbiterMessage) {}
+  rpc CheckIfAvailable(IsReady) returns (IsReady) {}
+}
+
+message IsReady {
+  string sender_id = 1;
+  bool ready = 2;
+  optional string role = 3;
+}
+
+message MainArbiterMessage {
+  string sender_id = 1;
+  optional string task_id = 2;
+  optional string method_name = 3;
+  map<string, bytes> tensor_kwargs = 4;
+  map<string, bytes> other_kwargs = 5;
+  optional float get_response_timeout = 7;
+}

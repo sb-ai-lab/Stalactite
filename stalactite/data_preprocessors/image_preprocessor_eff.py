@@ -70,5 +70,5 @@ class ImagePreprocessorEff:
         unique, counts = np.unique(y_train, return_counts=True)
         counts_max = max(counts)
         for class_count in counts:
-            pos_weights_list.append(counts_max/class_count)
+            pos_weights_list.append(counts_max / class_count)
         return torch.tensor(pos_weights_list)

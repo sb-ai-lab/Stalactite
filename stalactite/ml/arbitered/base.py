@@ -1,38 +1,35 @@
-import collections
 import enum
-import itertools
 import logging
 import time
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, List, Optional, Union, TypeVar
 
 import numpy as np
 import torch
-import tenseal as ts
 
 from stalactite.base import (
     PartyMember,
     PartyMaster,
     PartyCommunicator,
-    Method,
-    MethodKwargs,
     Task,
     DataTensor,
     RecordsBatch,
     Batcher,
-    PartyAgent, PartyDataTensor,
+    PartyAgent, PartyDataTensor, IterationTime,
 )
-from stalactite.batching import ListBatcher
+from stalactite.communications.helpers import Method, MethodKwargs
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T', np.ndarray, ts.CKKSTensor)
+T = TypeVar('T', np.ndarray, torch.Tensor)
 
 
 @dataclass
 class Keys:
-    public: Any
+    """ Helper class for generated public and private HE key pair. """
+    public: Any = None
     private: Any = None
 
 
@@ -40,26 +37,6 @@ class Role(str, enum.Enum):
     arbiter = "arbiter"
     master = "master"
     member = "member"
-
-
-class ArbiteredMethod(str, enum.Enum):  # TODO Move to method
-    service_return_answer = "service_return_answer"
-    service_heartbeat = "service_heartbeat"
-
-    records_uids = "records_uids"
-    register_records_uids = "register_records_uids"
-
-    initialize = "initialize"
-    finalize = "finalize"
-
-    update_weights = "update_weights"
-    predict = "predict"
-    update_predict = "update_predict"
-
-    get_public_key = "get_public_key"
-    predict_partial = "predict_partial"
-    compute_gradient = "compute_gradient"
-    calculate_updates = "calculate_updates"
 
 
 class SecurityProtocol(ABC):
@@ -120,7 +97,7 @@ class SecurityProtocol(ABC):
 
     @abstractmethod
     def multiply_plain_cypher(self, plain_arr: Any, cypher_arr: T) -> T:
-        """ Multiply plaintext matrix to the encrypted matrix .
+        """ Multiply plaintext matrix to the encrypted matrix.
 
         :param plain_arr: Plaintext matrix of shape (n; x).
         :param cypher_arr: Encrypted matrix of shape (x; m).
@@ -137,6 +114,18 @@ class SecurityProtocol(ABC):
         :param array2: Encrypted matrix of shape (n; m).
 
         :return: Encrypted matrix - result of the matrix summation of shape (n; m).
+        """
+        ...
+
+    @abstractmethod
+    def encode(self, array: [Any]) -> T:
+        """ Encode plain tensor for multiplication.
+        If the multiplication is perfomed on encoded and cyphered data, return encoded data, otherwise,
+        return initial data without transformation.
+
+        :param array: Plaintext matrix.
+
+        :return: Encoded or plaintext matrix.
         """
         ...
 
@@ -160,6 +149,11 @@ class SecurityProtocolArbiter(SecurityProtocol, ABC):
 
 
 class PartyArbiter(PartyAgent, ABC):
+    """ Base VFL arbiter class.
+    In the experiment, the arbiter is the party, which generates Homomorphic Encryption keys, sends the public key
+    to agents and performs decryption of the data by the agents request.
+    """
+
     security_protocol: SecurityProtocolArbiter
     id: str
 
@@ -172,15 +166,14 @@ class PartyArbiter(PartyAgent, ABC):
         """
         ...
 
-    @property
-    @abstractmethod
-    def batcher(self) -> Batcher:
-        ...
-
     def get_public_key(self) -> Keys:
-        return self.security_protocol.public_key
+        """ Return public key if the security protocol is initialized, otherwise, return an empty Keys object. """
+        if self.security_protocol is not None:
+            return self.security_protocol.public_key
+        return Keys()
 
     def _collect_gradients_for_update(self, master_task: Task, member_tasks: List[Task]) -> dict:
+        """ Collect gradients from agents, create dictionary of sender-gradient pairs. """
         gradients = {master_task.from_id: master_task.kwargs_dict['gradient']}
         for task in member_tasks:
             gradients[task.from_id] = task.kwargs_dict['gradient']
@@ -197,44 +190,59 @@ class PartyArbiter(PartyAgent, ABC):
         ...
 
     def run(self, party: PartyCommunicator) -> None:
+        """ Run main arbiter loops (training and inference). """
         logger.info("Running arbiter %s" % self.id)
+        if self.do_train:
+            self.fit(party)
+
+        if self.do_predict:
+            self.inference(party)
+
+    def fit(self, party: PartyCommunicator):
+        """ Run arbiter for VFL training. """
         initialize_task = party.recv(Task(method_name=Method.initialize, from_id=party.master, to_id=self.id))
         self.execute_received_task(initialize_task)
-
         register_records_uids_task = party.recv(
             Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
         )
         self.execute_received_task(register_records_uids_task)
 
+        register_test_records_uids_task = party.recv(
+            Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
+        )
+
+        self.execute_received_task(register_test_records_uids_task)
+
         public_keys_tasks = [
-            Task(ArbiteredMethod.get_public_key, from_id=agent, to_id=self.id)
+            Task(Method.get_public_key, from_id=agent, to_id=self.id)
             for agent in party.members + [party.master]
         ]
 
         pk_tasks = party.gather(public_keys_tasks, recv_results=False)
+
         keys = [self.execute_received_task(task) for task in pk_tasks]
         party.scatter(
-            method_name=ArbiteredMethod.get_public_key,
+            method_name=Method.get_public_key,
             result=keys,
             participating_members=party.members + [party.master]
         )
-
-        self.loop(batcher=self.batcher, party=party)
+        self.loop(batcher=self.make_batcher(), party=party)
 
         finalize_task = party.recv(Task(method_name=Method.finalize, from_id=party.master, to_id=self.id))
         self.execute_received_task(finalize_task)
         logger.info("Finished master %s" % self.id)
 
     def loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        """ Main training loop on arbiter. """
         logger.info("Arbiter %s: entering training loop" % self.id)
         for titer in batcher:
             master_gradient = party.recv(
-                Task(method_name=ArbiteredMethod.calculate_updates, from_id=party.master, to_id=self.id),
+                Task(method_name=Method.calculate_updates, from_id=party.master, to_id=self.id),
                 recv_results=False
             )
 
             members_tasks = [
-                Task(method_name=ArbiteredMethod.calculate_updates, from_id=member_id, to_id=self.id)
+                Task(method_name=Method.calculate_updates, from_id=member_id, to_id=self.id)
                 for member_id in titer.participating_members
             ]
             members_gradients = party.gather(members_tasks, recv_results=False)
@@ -248,29 +256,35 @@ class PartyArbiter(PartyAgent, ABC):
                 agents.append(agent_id)
 
             party.scatter(
-                method_name=ArbiteredMethod.calculate_updates,
+                method_name=Method.calculate_updates,
                 result=results,
                 participating_members=agents
             )
 
+    def inference(self, party: PartyCommunicator):
+        """ Run VFL inference on arbiter.
+        Due to the inference is performed on a non-encrypted data, no arbiter is required in the loop.
+        """
+        logger.info('Arbiter is not included in the inference loop.')
+
+    def inference_loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        """ Run VFL inference loop on arbiter. """
+        pass
+
 
 class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
+    """ Base VFL master class in an arbitered setting. """
     security_protocol: Optional[SecurityProtocol] = None
     is_initialized: bool
     is_finalized: bool
     _batch_size: int
+    _eval_batch_size: int
     _batcher: Batcher
 
-    def make_batcher(self, uids: List[str], party_members: List[str]) -> Batcher:
-        logger.info("Master %s: making a make_batcher for uids of length %s" % (self.id, len(uids)))
-        self.check_if_ready()
-        assert party_members is not None, "Master is trying to initialize make_batcher without members list"
-        batcher = ListBatcher(epochs=self.epochs, members=party_members, uids=uids, batch_size=self._batch_size)
-        self._batcher = batcher
-        return batcher
-
     @abstractmethod
-    def predict(self, uids: Optional[List[str]], is_test: bool = False) -> tuple[DataTensor, DataTensor]:
+    def predict(
+            self, uids: Optional[List[str]], is_infer: bool = False  # , batch: Any = None
+    ) -> tuple[DataTensor, DataTensor]:
         """ Calculate predictions on current model.
 
         :param uids: Batch of record unique identifiers.
@@ -280,7 +294,7 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
         ...
 
     @abstractmethod
-    def predict_partial(self, uids: RecordsBatch) -> DataTensor:
+    def predict_partial(self, uids: RecordsBatch) -> DataTensor:  # , batch: Any
         """ Calculate error using the current model.
 
         :param uids: Batch of record unique identifiers.
@@ -332,26 +346,49 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
         ...
 
     def run(self, party: PartyCommunicator) -> None:
+        """ Run main master loops (training and inference). """
+
+        if self.do_train:
+            self.fit(party)
+
+        if self.do_predict:
+            self.inference(party)
+
+    def fit(self, party: PartyCommunicator):
+        """ Run master for VFL training. """
+
         logger.info("Running master %s" % self.id)
 
         records_uids_tasks = party.broadcast(
-            ArbiteredMethod.records_uids,
+            Method.records_uids,
             participating_members=party.members,
         )
-
         records_uids_results = party.gather(records_uids_tasks, recv_results=True)
 
         collected_uids_results = [task.result for task in records_uids_results]
 
+        test_records_uids_tasks = party.broadcast(
+            Method.records_uids,
+            participating_members=party.members,
+            method_kwargs=MethodKwargs(other_kwargs={'is_infer': True}),
+        )
+
+        test_records_uids_results = party.gather(test_records_uids_tasks, recv_results=True)
+
+        test_collected_uids_results = [task.result for task in test_records_uids_results]
+
         party.broadcast(
-            ArbiteredMethod.initialize,
+            Method.initialize,
             participating_members=party.members + [party.arbiter],
         )
-        self.initialize()
+
+        self.initialize(is_infer=False)
 
         uids = self.synchronize_uids(collected_uids_results, world_size=party.world_size)
+        test_uids = self.synchronize_uids(test_collected_uids_results, world_size=party.world_size, is_infer=True)
+
         party.broadcast(
-            ArbiteredMethod.register_records_uids,
+            Method.register_records_uids,
             method_kwargs=MethodKwargs(other_kwargs={"uids": uids}),
             participating_members=party.members + [party.master] + [party.arbiter],
         )
@@ -359,17 +396,30 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
         register_records_uids_task = party.recv(
             Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
         )
+
         self.execute_received_task(register_records_uids_task)
 
-        pk_task = party.send(method_name=ArbiteredMethod.get_public_key,
-                             send_to_id=party.arbiter)  # TODO move to execute_task
+        party.broadcast(
+            Method.register_records_uids,
+            method_kwargs=MethodKwargs(other_kwargs={"uids": test_uids, "is_infer": True}),
+            participating_members=party.members + [party.master] + [party.arbiter],
+        )
+
+        register_test_records_uids_task = party.recv(
+            Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
+        )
+
+        self.execute_received_task(register_test_records_uids_task)
+
+        pk_task = party.send(method_name=Method.get_public_key, send_to_id=party.arbiter)
         pk = party.recv(pk_task, recv_results=True).result
 
-        self.security_protocol.keys = pk
-        self.security_protocol.initialize()
+        if self.security_protocol is not None:
+            self.security_protocol.keys = pk
+            self.security_protocol.initialize()
 
         self.loop(batcher=self.make_batcher(uids=uids, party_members=party.members), party=party)
-        #
+
         party.broadcast(
             Method.finalize,
             participating_members=party.members + [party.arbiter],
@@ -390,18 +440,16 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
         for titer in batcher:
             iter_start_time = time.time()
             participant_partial_pred_tasks = party.broadcast(
-                ArbiteredMethod.predict_partial,
+                Method.predict_partial,
                 participating_members=titer.participating_members,
                 method_kwargs=MethodKwargs(
                     other_kwargs={'uids': titer.batch}
                 )
             )
-            print('master_partial_preds')
             master_partial_preds = self.predict_partial(uids=titer.batch)  # d
 
             participant_partial_predictions_tasks = party.gather(participant_partial_pred_tasks, recv_results=True)
             partial_predictions = [task.result for task in participant_partial_predictions_tasks]
-            print('partial_predictions')
 
             predictions_delta = self.aggregate_partial_predictions(
                 master_prediction=master_partial_preds,
@@ -409,82 +457,169 @@ class ArbiteredPartyMaster(PartyMaster, PartyMember, ABC):
                 uids=titer.batch,
             )  # d
 
-            print('predictions_delta', predictions_delta[0])
+            if self.security_protocol is None:
+                tensor_kw, other_kw = {'aggregated_predictions_diff': predictions_delta}, {'uids': titer.batch}
+            else:
+                tensor_kw, other_kw = dict(), {'uids': titer.batch, 'aggregated_predictions_diff': predictions_delta}
 
             party.broadcast(
-                ArbiteredMethod.compute_gradient,
-                method_kwargs=MethodKwargs(
-                    tensor_kwargs={'aggregated_predictions_diff': predictions_delta},
-                    other_kwargs={'uids': titer.batch}
-                ),
+                Method.compute_gradient,
+                method_kwargs=MethodKwargs(tensor_kwargs=tensor_kw, other_kwargs=other_kw),
                 participating_members=titer.participating_members
             )
 
             master_gradient = self.compute_gradient(predictions_delta, titer.batch)  # g_enc
-            print('master_gradient', master_gradient[0])
+
+            if self.security_protocol is None:
+                tensor_kw, other_kw = {'gradient': master_gradient}, dict()
+            else:
+                tensor_kw, other_kw = dict(), {'gradient': master_gradient}
 
             calculate_updates_task = party.send(
                 send_to_id=party.arbiter,
-                method_name=ArbiteredMethod.calculate_updates,
-                method_kwargs=MethodKwargs(tensor_kwargs={'gradient': master_gradient}),
+                method_name=Method.calculate_updates,
+                method_kwargs=MethodKwargs(tensor_kwargs=tensor_kw, other_kwargs=other_kw),
             )
             model_updates = party.recv(calculate_updates_task, recv_results=True)
-            print('model_updates')
 
             self.update_weights(upd=model_updates.result, uids=titer.batch)
-            print('update_weights')
 
-            # self.update_weights(upd=master_gradient, uids=titer.batch) # !!! TODO rm
+            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
+                predict_tasks = party.broadcast(
+                    Method.predict,
+                    method_kwargs=MethodKwargs(
+                        other_kwargs={'uids': None, 'is_infer': False}
+                    ),
+                    participating_members=titer.participating_members
+                )
 
-            # TODO REPORT METRICS
-            predict_tasks = party.broadcast(
-                ArbiteredMethod.predict,
-                method_kwargs=MethodKwargs(
-                    other_kwargs={'uids': None, 'is_test': False}
-                ),
-                participating_members=titer.participating_members
+                master_predictions, targets = self.predict(uids=None)
+
+                participant_partial_predictions_tasks = party.gather(predict_tasks, recv_results=True)
+                aggr_predictions = self.aggregate_predictions(
+                    master_predictions=master_predictions,
+                    members_predictions=[task.result for task in participant_partial_predictions_tasks],
+                )
+
+                self.report_metrics(targets, aggr_predictions, 'Train', step=titer.seq_num)
+
+            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
+                predict_tasks = party.broadcast(
+                    Method.predict,
+                    method_kwargs=MethodKwargs(
+                        other_kwargs={'uids': None, 'is_infer': True}
+                    ),
+                    participating_members=titer.participating_members
+                )
+
+                master_predictions, targets = self.predict(uids=None, is_infer=True)
+                participant_partial_predictions_tasks = party.gather(predict_tasks, recv_results=True)
+                aggr_predictions = self.aggregate_predictions(
+                    master_predictions=master_predictions,
+                    members_predictions=[task.result for task in participant_partial_predictions_tasks]
+                )
+
+                self.report_metrics(targets, aggr_predictions, 'Test', step=titer.seq_num)
+            self.iteration_times.append(
+                IterationTime(client_id=self.id, iteration=titer.seq_num, iteration_time=time.time() - iter_start_time)
             )
 
-            master_predictions, targets = self.predict(uids=None)
-            print('master_predictions')
-
-            participant_partial_predictions_tasks = party.gather(predict_tasks, recv_results=True)
-            aggr_predictions = self.aggregate_predictions(
-                master_predictions=master_predictions,
-                members_predictions=[task.result for task in participant_partial_predictions_tasks],
+    def inference(self, party: PartyCommunicator):
+        """ Run VFL inference on master. """
+        if not self.do_train:
+            records_uids_tasks = party.broadcast(
+                Method.records_uids,
+                participating_members=party.members,
+                method_kwargs=MethodKwargs(other_kwargs={'is_infer': True})
             )
-            print('aggr_predictions')
+            records_uids_results = party.gather(records_uids_tasks, recv_results=True)
 
-            self.report_metrics(targets, aggr_predictions, 'Train', step=titer.seq_num)
+            collected_uids_results = [task.result for task in records_uids_results]
 
-            predict_tasks = party.broadcast(
-                ArbiteredMethod.predict,
-                method_kwargs=MethodKwargs(
-                    other_kwargs={'uids': None, 'is_test': True}
-                ),
-                participating_members=titer.participating_members
+        party.broadcast(
+            Method.initialize,
+            participating_members=party.members,
+            method_kwargs=MethodKwargs(other_kwargs={'is_infer': True})
+
+        )
+        self.initialize(is_infer=True)
+        if not self.do_train:
+            uids = self.synchronize_uids(collected_uids_results, world_size=party.world_size, is_infer=True)
+            party.broadcast(
+                Method.register_records_uids,
+                method_kwargs=MethodKwargs(other_kwargs={"uids": uids, 'is_infer': True}),
+                participating_members=party.members,
+            )
+        else:
+            uids = None
+            party.broadcast(
+                Method.fillna,
+                method_kwargs=MethodKwargs(other_kwargs={'is_infer': True}),
+                participating_members=party.members,
             )
 
-            master_predictions, targets = self.predict(uids=None, is_test=True)
-            participant_partial_predictions_tasks = party.gather(predict_tasks, recv_results=True)
-            aggr_predictions = self.aggregate_predictions(
-                master_predictions=master_predictions,
-                members_predictions=[task.result for task in participant_partial_predictions_tasks]
+        self.inference_loop(
+            batcher=self.make_batcher(uids=uids, party_members=party.members, is_infer=True),
+            party=party
+        )
+
+        party.broadcast(
+            Method.finalize,
+            participating_members=party.members,
+            method_kwargs=MethodKwargs(other_kwargs={'is_infer': True})
+        )
+        self.finalize(is_infer=True)
+        logger.info("Finished master %s" % self.id)
+
+    def inference_loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        """ Run VFL inference loop on master. """
+        logger.info("Master %s: entering inference loop" % self.id)
+        party_predictions_test = defaultdict(list)
+        test_targets = torch.tensor([])
+        for titer in batcher:
+            if titer.last_batch:
+                break
+            logger.debug(
+                f"Master %s: inference loop - starting batch %s (sub iter %s) on epoch %s"
+                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
             )
+            predict_test_tasks = party.broadcast(
+                Method.predict,
+                method_kwargs=MethodKwargs(other_kwargs={"uids": titer.batch, "is_infer": True}),
+                participating_members=titer.participating_members,
+            )
+            predictions_master, target = self.predict(uids=titer.batch, is_infer=True)
+            party_predictions_test[self.id].append(predictions_master)
+            for task in party.gather(predict_test_tasks, recv_results=True):
+                party_predictions_test[task.from_id].append(task.result)
+            test_targets = torch.cat([test_targets, target])
+        aggr_party_predictions = self._aggregate_batched_predictions(party.members, party_predictions_test)
+        predictions = self.aggregate_predictions(
+            torch.cat(party_predictions_test[self.id], dim=1),
+            aggr_party_predictions
+        )
+        self.report_metrics(test_targets, predictions, name="Test", step=-1)
 
-            self.report_metrics(targets, aggr_predictions, 'Test', step=titer.seq_num)
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
+    def _aggregate_batched_predictions(
+            self,
+            party_members: List[str],
+            batched_party_predictions: dict[str, List[DataTensor]]
+    ):
+        """ Aggregate members predictions collected in batches. """
+        return [torch.cat(batched_party_predictions[member], dim=1) for member in party_members]
 
 
 class ArbiteredPartyMember(PartyMember, ABC):
+    """ Base VFL member class in an arbitered setting. """
     security_protocol: Optional[SecurityProtocol] = None
+    master: str
 
     @abstractmethod
-    def predict(self, uids: Optional[List[str]], is_test: bool = False) -> DataTensor:
+    def predict(self, uids: Optional[List[str]], is_infer: bool = False) -> DataTensor:
         """ Calculate predictions on current model.
 
         :param uids: Batch of record unique identifiers.
+        :param is_infer: Whether to use test split.
 
         :return: Predictions.
         """
@@ -516,13 +651,73 @@ class ArbiteredPartyMember(PartyMember, ABC):
         ...
 
     def run(self, party: PartyCommunicator) -> None:
+        """ Run main member loops (training and inference). """
+
         logger.info("Running member %s" % self.id)
+
+        if self.do_train:
+            self.fit(party)
+
+        if self.do_predict:
+            self.inference(party)
+
+    def inference(self, party: PartyCommunicator):
+        """ Run VFL inference on member. """
+        if not self.do_train:
+            synchronize_uids_task = party.recv(
+                Task(method_name=Method.records_uids, from_id=party.master, to_id=self.id)
+            )
+            uids = self.execute_received_task(synchronize_uids_task)
+            party.send(party.master, Method.records_uids, result=uids)
+
+        initialize_task = party.recv(Task(method_name=Method.initialize, from_id=party.master, to_id=self.id))
+        self.execute_received_task(initialize_task)
+        if not self.do_train:
+            register_records_uids_task = party.recv(
+                Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
+            )
+            self.execute_received_task(register_records_uids_task)
+
+        else:
+            fillna_task = party.recv(Task(method_name=Method.fillna, from_id=party.master, to_id=self.id))
+            self.execute_received_task(fillna_task)
+
+        self.inference_loop(batcher=self.make_batcher(is_infer=True), party=party)
+
+        finalize_task = party.recv(Task(method_name=Method.finalize, from_id=party.master, to_id=self.id))
+        self.execute_received_task(finalize_task)
+        logger.info("Finished member %s" % self.id)
+
+    def inference_loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        """ Run VFL inference loop on member. """
+        logger.info("Member %s: entering inference loop" % self.id)
+
+        for titer in batcher:
+            if titer.last_batch:
+                break
+            if titer.participating_members is not None:
+                if self.id not in titer.participating_members:
+                    logger.debug(f'Member {self.id} skipping {titer.seq_num}.')
+                    continue
+
+            predict_task = party.recv(Task(method_name=Method.predict, from_id=party.master, to_id=self.id))
+            predictions = self.execute_received_task(predict_task)
+            party.send(party.master, Method.predict, result=predictions)
+
+    def fit(self, party: PartyCommunicator):
+        """ Run member for VFL training. """
 
         synchronize_uids_task = party.recv(
             Task(method_name=Method.records_uids, from_id=party.master, to_id=self.id)
         )
         uids = self.execute_received_task(synchronize_uids_task)
         party.send(party.master, Method.records_uids, result=uids)
+
+        synchronize_test_uids_task = party.recv(
+            Task(method_name=Method.records_uids, from_id=party.master, to_id=self.id)
+        )
+        test_uids = self.execute_received_task(synchronize_test_uids_task)
+        party.send(party.master, Method.records_uids, result=test_uids)
 
         initialize_task = party.recv(Task(method_name=Method.initialize, from_id=party.master, to_id=self.id))
         self.execute_received_task(initialize_task)
@@ -533,71 +728,78 @@ class ArbiteredPartyMember(PartyMember, ABC):
 
         self.execute_received_task(register_records_uids_task)
 
-        pk_task = party.send(method_name=ArbiteredMethod.get_public_key,
-                             send_to_id=party.arbiter)  # TODO move to execute_task
+        register_test_records_uids_task = party.recv(
+            Task(method_name=Method.register_records_uids, from_id=party.master, to_id=self.id)
+        )
+        self.execute_received_task(register_test_records_uids_task)
+
+        pk_task = party.send(method_name=Method.get_public_key, send_to_id=party.arbiter)
         pk = party.recv(pk_task, recv_results=True).result
 
-        self.security_protocol.keys = pk
-        self.security_protocol.initialize()
+        if self.security_protocol is not None:
+            self.security_protocol.keys = pk
+            self.security_protocol.initialize()
 
-        self.loop(batcher=self.make_batcher, party=party)
+        self.loop(batcher=self.make_batcher(), party=party)
 
         finalize_task = party.recv(Task(method_name=Method.finalize, from_id=party.master, to_id=self.id))
         self.execute_received_task(finalize_task)
         logger.info("Finished member %s" % self.id)
 
     def loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
+        """ Run VFL training loop on member. """
         for titer in batcher:
-            iter_start_time = time.time()
             participant_partial_pred_task = party.recv(
-                Task(ArbiteredMethod.predict_partial, from_id=party.master, to_id=self.id),
+                Task(Method.predict_partial, from_id=party.master, to_id=self.id),
                 recv_results=False
             )
             member_partial_preds = self.execute_received_task(participant_partial_pred_task)
 
             party.send(
                 send_to_id=party.master,
-                method_name=ArbiteredMethod.predict_partial,
+                method_name=Method.predict_partial,
                 result=member_partial_preds
             )
 
             compute_gradient_task = party.recv(
-                Task(ArbiteredMethod.compute_gradient, from_id=party.master, to_id=self.id),
+                Task(Method.compute_gradient, from_id=party.master, to_id=self.id),
                 recv_results=False
             )
             member_gradient = self.execute_received_task(compute_gradient_task)
 
+            if self.security_protocol is None:
+                tensor_kw, other_kw = {'gradient': member_gradient}, dict()
+            else:
+                tensor_kw, other_kw = dict(), {'gradient': member_gradient}
+
             calculate_updates_task = party.send(
                 send_to_id=party.arbiter,
-                method_name=ArbiteredMethod.calculate_updates,
-                method_kwargs=MethodKwargs(tensor_kwargs={'gradient': member_gradient}),
+                method_name=Method.calculate_updates,
+                method_kwargs=MethodKwargs(tensor_kwargs=tensor_kw, other_kwargs=other_kw),
             )
             model_updates = party.recv(calculate_updates_task, recv_results=True)
 
             self.update_weights(upd=model_updates.result, uids=titer.batch)
-            # self.update_weights(upd=member_gradient, uids=titer.batch) # !!! TODO rm
 
-            # TODO REPORT METRICS
-            predict_task = party.recv(
-                Task(ArbiteredMethod.predict, from_id=party.master, to_id=self.id),
-                recv_results=False
-            )
-            member_prediction = self.execute_received_task(predict_task)
-            party.send(
-                send_to_id=party.master,
-                method_name=ArbiteredMethod.predict,
-                result=member_prediction
-            )
-
-            predict_task = party.recv(
-                Task(ArbiteredMethod.predict, from_id=party.master, to_id=self.id),
-                recv_results=False
-            )
-            member_prediction = self.execute_received_task(predict_task)
-            party.send(
-                send_to_id=party.master,
-                method_name=ArbiteredMethod.predict,
-                result=member_prediction
-            )
-
-            self._iter_time.append((titer.seq_num, time.time() - iter_start_time))
+            if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
+                predict_task = party.recv(
+                    Task(Method.predict, from_id=party.master, to_id=self.id),
+                    recv_results=False
+                )
+                member_prediction = self.execute_received_task(predict_task)
+                party.send(
+                    send_to_id=party.master,
+                    method_name=Method.predict,
+                    result=member_prediction
+                )
+            if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
+                predict_task = party.recv(
+                    Task(Method.predict, from_id=party.master, to_id=self.id),
+                    recv_results=False
+                )
+                member_prediction = self.execute_received_task(predict_task)
+                party.send(
+                    send_to_id=party.master,
+                    method_name=Method.predict,
+                    result=member_prediction
+                )

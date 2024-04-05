@@ -9,6 +9,7 @@ Subpackages
 
    stalactite.ml.honest.linear_regression
    stalactite.ml.honest.logistic_regression
+   stalactite.ml.honest.split_learning
 
 Submodules
 ----------

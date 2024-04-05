@@ -1,137 +1,156 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Any, Union
 
 import torch.nn.parameter
 
 from stalactite.base import DataTensor, Batcher
 from stalactite.batching import ListBatcher
-from stalactite.ml.arbitered.base import PartyArbiter, SecurityProtocolArbiter
+from stalactite.ml.arbitered.base import PartyArbiter, SecurityProtocolArbiter, Role
 
 logger = logging.getLogger(__name__)
 
+
 class PartyArbiterLogReg(PartyArbiter):
-    _uids_to_use: List[str]
-    _prev_model_parameter: Optional[torch.Tensor] = None
-    _model_parameter: Optional[torch.Tensor] = None
-    _optimizer: Optional[torch.optim.Optimizer] = None
-    members: List[str]
-    master: str
+    role = Role.arbiter
 
     def __init__(
             self,
             uid: str,
             epochs: int,
+            num_classes: int,
             batch_size: int,
-            security_protocol: SecurityProtocolArbiter,
+            eval_batch_size: int,
+            security_protocol: Optional[SecurityProtocolArbiter] = None,
             learning_rate: float = 0.01,
             momentum: float = 0.0,
+            do_train: bool = True,
+            do_predict: bool = False,
     ) -> None:
         self.id = uid
         self.epochs = epochs
-        self.batch_size = batch_size
+        self.num_classes = num_classes
+        self._batch_size = batch_size
+        self._eval_batch_size = eval_batch_size
         self.security_protocol = security_protocol
         self.learning_rate = learning_rate
         self.momentum = momentum
+        self.do_train = do_train
+        self.do_predict = do_predict
 
         self.is_initialized = False
         self.is_finalized = False
-        self._batcher = None
 
         self._model_initialized = False
+        if self.num_classes < 1:
+            raise AttributeError('Number of classes (`num_classes`) must be a positive integer')
+
+        self._prev_model_parameter: Optional[Union[torch.Tensor, List[torch.Tensor]]] = None
+        self._model_parameter: Optional[Union[torch.Tensor, List[torch.Tensor]]] = None
+        self._optimizer: Optional[Union[torch.optim.Optimizer, List[torch.optim.Optimizer]]] = None
+        self.members: Optional[List[str]] = None
+        self.master: Optional[str] = None
+        self._uids_to_use: Optional[List[str]] = None
+        self._uids_to_use_test: Optional[List[str]] = None
+
+    def make_batcher(
+            self,
+            uids: Optional[List[str]] = None,
+            party_members: Optional[List[str]] = None,
+            is_infer: bool = False
+    ) -> Batcher:
+        if uids is None:
+            uids = self._uids_to_use_test if is_infer else self._uids_to_use
+
+        epochs = 1 if is_infer else self.epochs
+        batch_size = self._eval_batch_size if is_infer else self._batch_size
+        return ListBatcher(
+            epochs=epochs,
+            members=self.members if party_members is None else party_members,
+            uids=uids,
+            batch_size=batch_size,
+        )
+
+    def initialize_model_from_params(self, **model_params) -> Any:
+        raise AttributeError('Arbiter is not included in the inference process.')
 
     def _init_optimizer(self):
-        self._optimizer = torch.optim.SGD([self._model_parameter], lr=self.learning_rate, momentum=self.momentum)
+        self._optimizer = [
+            torch.optim.SGD([self._model_parameter[class_idx]], lr=self.learning_rate, momentum=self.momentum)
+            for class_idx in range(self.num_classes)
+        ]
 
     def _init_model_parameter(self, features_len: int, dtype: torch.float64):
-        # self._model_parameter = torch.nn.Linear(features_len, 1, bias=False, device=None, dtype=dtype)
-        # init_weights = 0.005
-        # if init_weights is not None:
-        #     self._model_parameter.weight.data = torch.full((1, features_len), init_weights, requires_grad=True)
-        # # self._model_parameter.weight.data = torch.zeros((1, features_len), requires_grad=True, dtype=dtype)
-
-
-        self._model_parameter = torch.nn.parameter.Parameter(
-            torch.zeros((features_len, 1), requires_grad=True, dtype=dtype),
-        )
+        self._model_parameter = [
+            torch.nn.parameter.Parameter(torch.zeros((features_len, 1), requires_grad=True, dtype=dtype))
+            for _ in range(self.num_classes)
+        ]
         self._init_optimizer()
         self._model_initialized = True
 
     def _optimizer_step(self, gradient: torch.Tensor):
-        self._optimizer.zero_grad()
-        self._prev_model_parameter = self._model_parameter.data.clone()
-        self._model_parameter.grad = gradient
-        self._optimizer.step()
-
+        self._prev_model_parameter = []
+        for class_idx in range(self.num_classes):
+            self._optimizer[class_idx].zero_grad()
+            self._prev_model_parameter.append(self._model_parameter[class_idx].data.clone())
+            self._model_parameter[class_idx].grad = gradient[class_idx]
+            self._optimizer[class_idx].step()
 
     def _get_delta_gradients(self) -> torch.Tensor:
         if self._prev_model_parameter is not None:
-            return self._prev_model_parameter - self._model_parameter.data
-
-
+            return torch.stack(self._prev_model_parameter) - torch.stack([mp.data for mp in self._model_parameter])
         else:
             raise ValueError(f"No previous steps were performed.")
-
-    @property
-    def batcher(self) -> Batcher:
-        if self._batcher is None:
-            if self._uids_to_use is None:
-                raise RuntimeError("Cannot create make_batcher, you must `register_records_uids` first.")
-            self._batcher = ListBatcher(
-                epochs=self.epochs,
-                members=self.members,
-                uids=self._uids_to_use,
-                batch_size=self.batch_size
-            )
-        else:
-            logger.info("Member %s: using created make_batcher" % (self.id))
-        return self._batcher
 
     def calculate_updates(self, gradients: dict) -> dict[str, DataTensor]:
         members = [key for key in gradients.keys() if key != self.master]
 
         try:
-            master_gradient_enc = gradients[self.master]
-            members_gradients_enc = [gradients[member] for member in members]
+            master_gradient = gradients[self.master]
+            members_gradients = [gradients[member] for member in members]
         except KeyError:
             raise RuntimeError(f'Master did not pass the gradient or was not initialized ({self.master})')
 
-        # TODO decrypt
-        master_gradient = self.security_protocol.decrypt(master_gradient_enc)
-        size_list = [master_gradient.size()[0]]
+        if self.security_protocol is not None:
+            master_gradient = self.security_protocol.decrypt(master_gradient)
 
-        gradient = master_gradient.squeeze()
+        size_list = [master_gradient.size()[1]]
+        gradient = [grad.squeeze() for grad in master_gradient]
 
-        for member_gradient_enc in members_gradients_enc:
-            # TODO decrypt
-            member_gradient = self.security_protocol.decrypt(member_gradient_enc)
+        for member_gradient in members_gradients:
+            if self.security_protocol is not None:
+                member_gradient = self.security_protocol.decrypt(member_gradient)
 
-            size_list.append(member_gradient.size()[0])
-            gradient = torch.hstack((gradient, member_gradient.squeeze()))
+            size_list.append(member_gradient.size()[1])
+            for class_idx in range(self.num_classes):
+                gradient[class_idx] = torch.hstack((gradient[class_idx], member_gradient[class_idx].squeeze()))
 
         if not self._model_initialized:
-            self._init_model_parameter(sum(size_list), dtype=gradient.dtype)
+            self._init_model_parameter(sum(size_list), dtype=gradient[0].dtype)
 
-        self._optimizer_step(gradient.unsqueeze(1))
+        self._optimizer_step(torch.stack([grad.unsqueeze(1) for grad in gradient]))
         delta_gradients = self._get_delta_gradients()
 
-        splitted_grads = torch.tensor_split(delta_gradients, torch.cumsum(torch.tensor(size_list), 0)[:-1], dim=0)
-
-        deltas = {agent: splitted_grads[i] for i, agent in enumerate([self.master] + members)}
+        splitted_grads = torch.tensor_split(delta_gradients, torch.cumsum(torch.tensor(size_list), 0)[:-1], dim=1)
+        deltas = {agent: splitted_grads[i].clone().detach() for i, agent in enumerate([self.master] + members)}
 
         return deltas
 
-    def initialize(self):
-        self.security_protocol.generate_keys()
+    def initialize(self, is_infer: bool = False):
+        if self.security_protocol is not None:
+            self.security_protocol.generate_keys()
         self.is_initialized = True
 
-    def finalize(self):
+    def finalize(self, is_infer: bool = False):
         self.is_finalized = True
 
-    def register_records_uids(self, uids: List[str]):
+    def register_records_uids(self, uids: List[str], is_infer: bool = False):
         """ Register unique identifiers to be used.
 
         :param uids: List of unique identifiers.
         :return: None
         """
-        logger.info("Member %s: registering %s uids to be used." % (self.id, len(uids)))
-        self._uids_to_use = uids
+        logger.info("Agent %s: registering %s uids to be used." % (self.id, len(uids)))
+        if is_infer:
+            self._uids_to_use_test = uids
+        else:
+            self._uids_to_use = uids

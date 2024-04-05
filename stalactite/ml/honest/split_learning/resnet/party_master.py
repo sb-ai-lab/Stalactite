@@ -27,7 +27,7 @@ class HonestPartyMasterResNetSplitNN(HonestPartyMasterSplitNN):
         )
 
     def aggregate(
-            self, participating_members: List[str], party_predictions: PartyDataTensor, infer=False
+            self, participating_members: List[str], party_predictions: PartyDataTensor, is_infer: bool = False
     ) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
         self._check_if_ready()

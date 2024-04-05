@@ -67,6 +67,11 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
                             columns=["user_id", "features_part_0"], postfix_sample=sample, part_postfix="part_0",
                             dir_name_postfix=2, data_dir_path=data_dir_path)
 
+        logger.info("Save vfl dataset part 0 for arbiter...")
+        split_save_datasets(df=sbol_user_features, train_users=users_train, test_users=users_test,
+                            columns=["user_id", "features_part_0", "labels"], postfix_sample=sample,
+                            part_postfix="master_part_arbiter", dir_name_postfix=2, data_dir_path=data_dir_path)
+
     else:
         if sbol_only:
             logger.info("Save sbol only dataset for single experiments....")
@@ -75,7 +80,6 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
                                 part_postfix="part_0", dir_name_postfix="_sbol_only", data_dir_path=data_dir_path)
 
     # preparing smm user features
-
     smm_user_factors = pd.read_parquet(os.path.join(smm_path, "als_user_factors.parquet"))
     # filtering
     smm_user_factors = sbol_labels[["user_id"]].merge(smm_user_factors, on="user_id", how="inner")
@@ -103,8 +107,6 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
                 lambda x: np.concatenate(
                     (x["features_part_0"], x["features_part_1"]), axis=0
                 ), axis=1)
-
-            # single_df = single_df[["user_id", "features_part_0", "labels"]]
 
             split_save_datasets(
                 df=single_df, train_users=users_train, test_users=users_test,
