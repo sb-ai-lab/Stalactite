@@ -26,10 +26,9 @@ prerequisites:
   grafana_port: '3001'
 
 master:
-  container_host: 'node3.bdcl'
+  external_host: 'node3.bdcl'
   run_mlflow: True
   run_prometheus: True
-  host: 0.0.0.0
   port: "50051"
   logging_level: 'debug'
   disconnect_idle_client_time: 500.
@@ -42,9 +41,8 @@ member:
 
 grpc_arbiter:
   use_arbiter: True
-  host: 0.0.0.0
   port: "50052"
-  container_host: 'node3.bdcl'
+  external_host: 'node3.bdcl'
   logging_level: 'debug'
 #  security_protocol_params:
 #    he_type: paillier

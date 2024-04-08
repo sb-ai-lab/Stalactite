@@ -32,14 +32,13 @@ data:
   label_key: "label"
 
 grpc_server:
-  host: '0.0.0.0'
   port: '50051'
   max_message_size: -1
   #  server_threadpool_max_workers: 10
 
 
 master:
-  container_host: 'node3.bdcl'
+  external_host: 'node3.bdcl'
   run_mlflow: True
   run_prometheus: True
   logging_level: 'debug'

@@ -49,7 +49,7 @@ prerequisites:
 master:
   run_mlflow: True
 #  logging_level: debug
-#  container_host: 0.0.0.0
+#  external_host: 0.0.0.0
 #  run_prometheus: False
 #  disconnect_idle_client_time: 120
 #  time_between_idle_connections_checks: 3

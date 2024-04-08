@@ -32,7 +32,6 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
             self,
             world_size: int,
             master_id: str,
-            host: str,
             port: str,
             *args,
             threadpool_max_workers: int = 10,
@@ -65,7 +64,6 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         logger.setLevel(logging_level)
         self.world_size = world_size
         self.master_id = master_id
-        self.host = host
         self.port = port
         self.threadpool_max_workers = threadpool_max_workers
         self.max_message_size = max_message_size
@@ -73,6 +71,8 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         self.run_prometheus = run_prometheus
         self.experiment_label = experiment_label
         self.time_between_idle_connections_checks = time_between_idle_connections_checks
+
+        self.host = '0.0.0.0'
 
         if self.run_prometheus:
             if self.experiment_label is None:

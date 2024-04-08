@@ -39,11 +39,11 @@ def main(config_path, infer, role):
 
     arbiter_grpc_host = None
     if config.grpc_arbiter.use_arbiter:
-        arbiter_grpc_host = os.environ.get("GRPC_ARBITER_HOST", config.grpc_arbiter.container_host)
+        arbiter_grpc_host = os.environ.get("GRPC_ARBITER_HOST", config.grpc_arbiter.external_host)
 
     if role == Role.member:
         member_rank = int(os.environ.get("RANK", 0))
-        grpc_host = os.environ.get("GRPC_SERVER_HOST", config.master.container_host)
+        grpc_host = os.environ.get("GRPC_SERVER_HOST", config.master.external_host)
         comm = GRpcMemberPartyCommunicator(
             participant=get_party_member(config_path, member_rank, is_infer=infer),
             master_host=grpc_host,
@@ -66,7 +66,6 @@ def main(config_path, infer, role):
                 participant=get_party_master(config_path, is_infer=infer),
                 world_size=config.common.world_size,
                 port=config.grpc_server.port,
-                host=config.grpc_server.host,
                 server_thread_pool_size=config.grpc_server.server_threadpool_max_workers,
                 max_message_size=config.grpc_server.max_message_size,
                 logging_level=config.master.logging_level,
@@ -94,7 +93,6 @@ def main(config_path, infer, role):
             participant=get_party_arbiter(config_path, is_infer=infer),
             world_size=config.common.world_size,
             port=config.grpc_arbiter.port,
-            host=config.grpc_arbiter.host,
             server_thread_pool_size=config.grpc_server.server_threadpool_max_workers,
             max_message_size=config.grpc_arbiter.max_message_size,
             logging_level=config.grpc_arbiter.logging_level,

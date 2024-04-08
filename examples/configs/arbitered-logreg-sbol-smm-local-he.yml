@@ -23,7 +23,7 @@ prerequisites:
   mlflow_port: '5555'
 
 master:
-  container_host: 'node3.bdcl'
+  external_host: 'node3.bdcl'
   run_mlflow: True
 
 data:

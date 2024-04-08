@@ -551,7 +551,6 @@ class HonestPartyMember(PartyMember, ABC):
         :param batch_size: Size of the training batch.
         """
         logger.info("Member %s: making a make_batcher for uids" % self.id)
-        self.check_if_ready()
         if not self.is_consequently:
             return ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
         else:
@@ -633,6 +632,7 @@ class HonestPartyMember(PartyMember, ABC):
         self.initialize_model(do_load_model=is_infer)
         self.initialize_optimizer()
         self.is_initialized = True
+        self.is_finalized = False
         logger.info("Member %s: has been initialized" % self.id)
 
     def finalize(self, is_infer: bool = False) -> None:

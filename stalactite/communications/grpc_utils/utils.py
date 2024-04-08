@@ -164,8 +164,9 @@ def prepare_kwargs(
         for key, value in kwargs.other_kwargs.items():
             if isinstance(value, torch.Tensor):
                 logger.warning(
-                    f"Got kwarg {key} as the field in MethodMessage.other_kwargs, "
-                    "while it should be passed in MethodMessage.tensor_kwargs"
+                    f"Got kwarg: `{key}` as the field in MethodMessage.other_kwargs, "
+                    "while it should be passed in MethodMessage.tensor_kwargs. "
+                    "It might slow down the communication between agents."
                 )
             other_kwargs[key] = pickle.dumps(value)
 

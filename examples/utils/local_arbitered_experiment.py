@@ -20,9 +20,12 @@ from examples.utils.prepare_mnist import load_data as load_mnist
 from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
 from stalactite.helpers import reporting, run_local_agents
 
+
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 logging.getLogger('PIL').setLevel(logging.ERROR)
+logging.getLogger('fsspec').setLevel(logging.ERROR)
+logging.getLogger('git').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 

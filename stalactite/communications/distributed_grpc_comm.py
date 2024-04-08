@@ -83,7 +83,6 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             participant: Union[PartyAgent, PartyMaster],
             world_size: int,
             port: Union[int, str],
-            host: str,
             server_thread_pool_size: int = 10,
             max_message_size: int = -1,
             rendezvous_timeout: float = 3600.0,
@@ -104,7 +103,6 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         :param participant: PartyMaster instance
         :param world_size: Number of VFL member agents
         :param port: Port of the gRPC server
-        :param host: Host of the gRPC server
         :param server_thread_pool_size: Number of threadpool workers processing connections on the gRPC server
         :param max_message_size: Maximum message length that the gRPC channel can send or receive. -1 means unlimited
         :param rendezvous_timeout: Maximum time to wait until all the members are connected
@@ -118,7 +116,6 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         self.participant = participant
         self.world_size = world_size
         self.port = port
-        self.host = host
         self.server_thread_pool_size = server_thread_pool_size
         self.max_message_size = max_message_size
         self.rendezvous_timeout = rendezvous_timeout
@@ -451,7 +448,6 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
             self.servicer = GRpcCommunicatorServicer(
                 world_size=self.world_size,
                 master_id=self.participant.id,
-                host=self.host,
                 port=self.port,
                 threadpool_max_workers=self.server_thread_pool_size,
                 max_message_size=self.max_message_size,
@@ -872,7 +868,6 @@ class GRpcArbiterPartyCommunicator(GRpcMasterPartyCommunicator):
             participant: PartyArbiter,
             world_size: int,
             port: Union[int, str],
-            host: str,
             server_thread_pool_size: int = 10,
             max_message_size: int = -1,
             rendezvous_timeout: float = 3600.,
@@ -884,14 +879,12 @@ class GRpcArbiterPartyCommunicator(GRpcMasterPartyCommunicator):
         :param participant: PartyArbiter instance
         :param world_size: Number of members in the VFL setting (excluding master and arbiter)
         :param port: Port of the gRPC server
-        :param host: Host of the gRPC server
         :param server_thread_pool_size: Number of threadpool workers processing connections on the gRPC server
         :param max_message_size: Maximum message length that the gRPC channel can send or receive. -1 means unlimited
         """
         self.participant = participant
         self.world_size = world_size
         self.port = port
-        self.host = host
         self.server_thread_pool_size = server_thread_pool_size
         self.max_message_size = max_message_size
         self.rendezvous_timeout = rendezvous_timeout
@@ -904,7 +897,6 @@ class GRpcArbiterPartyCommunicator(GRpcMasterPartyCommunicator):
             participant=participant,
             world_size=world_size,
             port=port,
-            host=host,
             server_thread_pool_size=server_thread_pool_size,
             max_message_size=max_message_size,
             rendezvous_timeout=rendezvous_timeout,
@@ -997,7 +989,6 @@ class GRpcArbiterPartyCommunicator(GRpcMasterPartyCommunicator):
             self.servicer = GRpcArbiterCommunicatorServicer(
                 world_size=self.world_size,
                 arbiter_id=self.participant.id,
-                host=self.host,
                 port=self.port,
                 threadpool_max_workers=self.server_thread_pool_size,
                 max_message_size=self.max_message_size,
