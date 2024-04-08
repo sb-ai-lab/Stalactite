@@ -9,6 +9,8 @@ import logging
 import pendulum
 from datetime import timedelta
 import pickle
+from functools import partial
+import functools
 
 from stalactite.party_single_impl import (PartySingleLogregMulticlass, PartySingleLogreg, PartySingleMLP,
                                           PartySingleResNet)
@@ -16,6 +18,8 @@ from stalactite.configs import VFLConfig
 import threading
 from typing import Optional
 import datasets
+import mlflow
+import optuna
 
 from stalactite.ml import (
     HonestPartyMasterLinRegConsequently,
@@ -45,6 +49,8 @@ from stalactite.configs import VFLConfig
 from utils.prepare_mnist import load_data as load_mnist
 from utils.prepare_sbol_smm import load_data as load_sbol
 from utils.prepare_home_credit import load_data as load_home_credit
+from utils.utils import suggest_params, rsetattr, search_space, batch_search_space
+
 
 formatter = logging.Formatter(
     fmt='[%(asctime)s] [%(name)s] [%(levelname)s] > %(message)s',
@@ -217,6 +223,127 @@ def run(config: VFLConfig):
         )
 
 
+def objective_func(trial, config, grid_search: bool = False):
+    processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
+    processors, master_processor = load_processors(processors_path)
+
+    if grid_search:
+        batch_size = trial.suggest_int('batch_size', 0, 10000)
+        config.vfl_model.batch_size = batch_size
+    else:
+        suggested_params = suggest_params(trial=trial, config=config)
+        for param_name, param_val in suggested_params.items():
+            rsetattr(config, f"vfl_model.{param_name}", param_val)
+    with reporting(config):
+        shared_party_info = dict()
+        if 'logreg' in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterLogReg
+            member_class = HonestPartyMemberLogReg
+        elif "resnet" in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterResNetSplitNN
+            member_class = HonestPartyMemberResNet
+        elif "efficientnet" in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterEfficientNetSplitNN
+            member_class = HonestPartyMemberEfficientNet
+        elif "mlp" in config.vfl_model.vfl_model_name:
+            master_class = HonestPartyMasterMLPSplitNN
+            member_class = HonestPartyMemberMLP
+        else:
+            member_class = HonestPartyMemberLinReg
+            if config.vfl_model.is_consequently:
+                master_class = HonestPartyMasterLinRegConsequently
+            else:
+                master_class = HonestPartyMasterLinReg
+        master = master_class(
+            uid="master",
+            epochs=config.vfl_model.epochs,
+            report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+            report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+            processor=master_processor,
+            target_uids=master_processor.dataset[config.data.train_split][config.data.uids_key][
+                        :config.data.dataset_size],
+            inference_target_uids=master_processor.dataset[config.data.test_split][config.data.uids_key],
+            batch_size=config.vfl_model.batch_size,
+            eval_batch_size=config.vfl_model.eval_batch_size,
+            model_update_dim_size=0,
+            run_mlflow=config.master.run_mlflow,
+            do_train=config.vfl_model.do_train,
+            do_predict=config.vfl_model.do_predict,
+            model_name=config.vfl_model.vfl_model_name if
+            config.vfl_model.vfl_model_name in ["resnet", "mlp", "efficientnet"] else None,
+            model_params=config.master.master_model_params
+        )
+
+        member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
+
+        members = [
+            member_class(
+                uid=member_uid,
+                member_record_uids=processors[member_rank].dataset[config.data.train_split][config.data.uids_key],
+                member_inference_record_uids=processors[member_rank].dataset[config.data.test_split][
+                    config.data.uids_key],
+                model_name=config.vfl_model.vfl_model_name,
+                processor=processors[member_rank],
+                batch_size=config.vfl_model.batch_size,
+                eval_batch_size=config.vfl_model.eval_batch_size,
+                epochs=config.vfl_model.epochs,
+                report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+                report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+                is_consequently=config.vfl_model.is_consequently,
+                members=member_ids if config.vfl_model.is_consequently else None,
+                do_train=config.vfl_model.do_train,
+                do_predict=config.vfl_model.do_predict,
+                do_save_model=config.vfl_model.do_save_model,
+                model_path=config.vfl_model.vfl_model_path,
+                model_params=config.member.member_model_params,
+                use_inner_join=True if member_rank == 0 else False
+
+            )
+            for member_rank, member_uid in enumerate(member_ids)
+        ]
+
+        def local_master_main():
+            logger.info("Starting thread %s" % threading.current_thread().name)
+            comm = LocalMasterPartyCommunicator(
+                participant=master,
+                world_size=config.common.world_size,
+                shared_party_info=shared_party_info,
+                recv_timeout=config.master.recv_timeout,
+            )
+            comm.run()
+            logger.info("Finishing thread %s" % threading.current_thread().name)
+
+        def local_member_main(member: PartyMember):
+            logger.info("Starting thread %s" % threading.current_thread().name)
+            comm = LocalMemberPartyCommunicator(
+                participant=member,
+                world_size=config.common.world_size,
+                shared_party_info=shared_party_info,
+                recv_timeout=config.member.recv_timeout,
+            )
+            comm.run()
+            logger.info("Finishing thread %s" % threading.current_thread().name)
+
+        run_local_agents(
+            master=master, members=members, target_master_func=local_master_main, target_member_func=local_member_main
+        )
+    runs = mlflow.search_runs(experiment_names=["airflow"])
+    metrics_name = "metrics.test_roc_auc_macro"
+    metrics = runs.iloc[0][metrics_name]
+    return metrics
+
+
+def run_opt(config, grid_search: bool = False):
+    if grid_search:
+        study = optuna.create_study(sampler=optuna.samplers.GridSampler(batch_search_space), direction="maximize")
+    else:
+        study = optuna.create_study(direction="maximize")  # Create a new study.
+    objective = partial(objective_func, config=config, grid_search=grid_search)
+    study.optimize(objective, n_trials=2)  # Invoke optimization of the objective function.
+    print("Best hyperparameters:", study.best_params)
+    print("Best value:", study.best_value)
+
+
 @task
 def train_infer_single(config: VFLConfig, processors_dict_path: str):
     logger.info(f"train and infer SINGLE for {config.vfl_model.vfl_model_name}")
@@ -275,6 +402,13 @@ def train(config: VFLConfig):
 
 
 @task
+def train_opt(config: VFLConfig, grid_search: bool = False):
+    logger.info(f"train for {config.vfl_model.vfl_model_name}")
+    run_opt(config=config, grid_search=grid_search)
+    logger.info(f"train-opt for model: {config.vfl_model.vfl_model_name} SUCCESS")
+
+
+@task
 def infer(config: VFLConfig):
     logger.info(f"inference for {config.vfl_model.vfl_model_name}")
     run(config=config)
@@ -330,7 +464,9 @@ def build_dag(
                                     is_single=False)
                 data_preparators.append(make_data_preparation(config=config))
                 tasks.append(get_processor(config=config, processors_dict_path=processors_path))
-                tasks.append(train(config=config))
+                # tasks.append(train(config=config))
+                tasks.append(train_opt(config=config, grid_search=False))
+
 
         chain(*data_preparators)
         chain(*tasks)
@@ -382,19 +518,22 @@ def build_single_mode_dag(dag_id: str,
     return dag
 
 
-single_dag = build_single_mode_dag(
-    dag_id="single_dag",
-    models_names_list=["logreg", "mlp", "resnet"],
-    dataset_names_list=["mnist", "sbol_smm", "sbol", "home_credit_bureau_pos", "home_credit"]
-)
+# single_dag = build_single_mode_dag(
+#     dag_id="single_dag",
+#     models_names_list=["logreg", "mlp", "resnet"],
+#     dataset_names_list=["mnist", "sbol_smm", "sbol", "home_credit_bureau_pos", "home_credit"]
+# )
 
 
-sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="sbol_smm",
-                         world_sizes=[2])
+# sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="sbol_smm",
+#                          world_sizes=[2])
+#
+# mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="mnist",
+#                       world_sizes=[2, 3, 4])
 
-mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="mnist",
-                      world_sizes=[2, 3, 4])
+mnist_dag_logreg = build_dag(dag_id="mnist_dag_logreg", model_names=["logreg"], dataset_name="mnist",
+                      world_sizes=[2])
 
-home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
-                            dataset_name="home_credit_bureau_pos", world_sizes=[3])
+# home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
+#                             dataset_name="home_credit_bureau_pos", world_sizes=[3])
 # todo: avito dag

@@ -1,0 +1,34 @@
+import functools
+
+batch_search_space = {"batch_size": [512, 1024]}
+
+search_space = {
+    "logreg":
+        {
+            "learning_rate": {"type": "float", "args": [10e-4, 10e-2]}
+        }
+}
+
+
+def suggest_params(trial, config):
+    suggested_params = {}
+    models_search_space = search_space[config.vfl_model.vfl_model_name]
+    for param_name, param_values in models_search_space.items():
+        if param_values["type"] == "float":
+            suggested_params[param_name] = trial.suggest_float(param_name, param_values["args"][0], param_values["args"][1])
+        elif param_values["type"] == "int":
+            pass
+        elif param_values["type"] == "categorical":
+            pass
+        else:
+            ValueError(f"Unsupported type {param_values['type']}")
+    return suggested_params
+
+def rsetattr(obj, attr, val):
+    pre, _, post = attr.rpartition('.')
+    return setattr(rgetattr(obj, pre) if pre else obj, post, val)
+
+def rgetattr(obj, attr, *args):
+    def _getattr(obj, attr):
+        return getattr(obj, attr, *args)
+    return functools.reduce(_getattr, [obj] + attr.split('.'))
