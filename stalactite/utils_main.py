@@ -122,6 +122,7 @@ def build_base_image(
             decode=True,
             nocache=False,
             dockerfile=os.path.join(Path(os.path.abspath(__file__)).parent.parent, "docker", image_file_name),
+            rm=True,
         )
         for log in _logs:
             logger.debug(log.get("stream", log.get("aux", {"aux": ""}).get("ID", "")).strip())
