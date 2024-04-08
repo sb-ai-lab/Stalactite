@@ -21,7 +21,7 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         :return: Initial updates as a list of zero tensors.
         """
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
-        self._check_if_ready()
+        self.check_if_ready()
         return [torch.zeros(self._batch_size) for _ in range(world_size)]
 
     def aggregate(
@@ -36,7 +36,7 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         :return: Aggregated predictions after applying sigmoid function.
         """
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
-        self._check_if_ready()
+        self.check_if_ready()
         if not is_infer:
             for member_id, member_prediction in zip(participating_members, party_predictions):
                 self.party_predictions[member_id] = member_prediction
@@ -65,7 +65,7 @@ class HonestPartyMasterLogReg(HonestPartyMasterLinReg):
         :return: List of gradients as tensors.
         """
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
-        self._check_if_ready()
+        self.check_if_ready()
         self.iteration_counter += 1
         tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]

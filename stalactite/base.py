@@ -213,8 +213,8 @@ class PartyCommunicator(ABC):
 
 class PartyAgent(ABC):
     """ Abstract base class for the party in the VFL experiment. """
-    is_initialized: bool
-    is_finalized: bool
+    is_initialized: bool = False
+    is_finalized: bool = False
     id: str
     do_train: bool
     do_predict: bool
@@ -243,8 +243,13 @@ class PartyAgent(ABC):
         ...
 
     def check_if_ready(self):
-        if not self.is_initialized and not self.is_finalized:
-            raise RuntimeError(f"The agent {self.id} has not been initialized")
+        """ Raise a RuntimeError if the agent has not been initialized or finished.
+
+        This function can be overridden in inherited classes to check other criteria for the readiness of the agent to
+        execute main loop functions.
+        """
+        if not self.is_initialized or self.is_finalized:
+            raise RuntimeError(f"The agent {self.id} has not been initialized and/or has already been finalized.")
 
     def execute_received_task(self, task: Task) -> Optional[Union[DataTensor, List[str]]]:
         """ Execute received method on the master.

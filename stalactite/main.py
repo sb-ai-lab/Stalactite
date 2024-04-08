@@ -15,6 +15,7 @@ from docker.errors import APIError
 
 from docker import APIClient
 from stalactite.configs import VFLConfig
+from stalactite.helpers import global_logging
 from stalactite.utils_main import (
     BASE_CONTAINER_LABEL,
     BASE_MASTER_CONTAINER_NAME,
@@ -29,8 +30,11 @@ from stalactite.utils_main import (
     stop_containers, start_distributed_agent, start_multiprocess_agents, run_local_experiment,
 )
 
-logger = logging.getLogger(__name__)
+logging.getLogger('git').setLevel(logging.ERROR)
 logging.getLogger('docker').setLevel(logging.ERROR)
+logging.getLogger('fsspec').setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
+global_logging(logging_level=logging.DEBUG)
 
 
 class PrerequisitesGroup(str, enum.Enum):
@@ -183,7 +187,7 @@ def start(ctx, config_path, rank, detached, infer):
     :param infer: Run member in an inference mode (distributed VFL prediction)
     """
     start_distributed_agent(
-        config_path=config_path, role='member', rank=rank, infer=infer, detached=detached, ctx=ctx, logger=logger
+        config_path=config_path, role='member', rank=rank, infer=infer, detached=detached, ctx=ctx
     )
 
 
@@ -204,7 +208,7 @@ def stop(ctx, leave_containers):
     try:
         container_label = ctx.obj["member_container_label"]
         containers = client.containers(all=True, filters={"label": f"{KEY_CONTAINER_LABEL}={container_label}"})
-        stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
+        stop_containers(client, containers, leave_containers=leave_containers)
     except APIError as exc:
         logger.error("Error while stopping (and removing) containers", exc_info=exc)
 
@@ -227,7 +231,6 @@ def status(ctx, agent_id, rank):
     if agent_id is None and rank is None:
         get_status(
             agent_id=None,
-            logger=logger,
             containers_label=f"{KEY_CONTAINER_LABEL}={container_label}",
             docker_client=client,
         )
@@ -238,7 +241,6 @@ def status(ctx, agent_id, rank):
         container_name_or_id = ctx.obj["member_container_name"](rank)
     get_status(
         agent_id=container_name_or_id,
-        logger=logger,
         containers_label=f"{KEY_CONTAINER_LABEL}={container_label}",
         docker_client=client,
     )
@@ -305,7 +307,7 @@ def start(ctx, config_path, detached, infer):
     :param infer: Run master in an inference mode (distributed VFL prediction)
     """
     start_distributed_agent(
-        config_path=config_path, role='master', infer=infer, detached=detached, ctx=ctx, logger=logger
+        config_path=config_path, role='master', infer=infer, detached=detached, ctx=ctx
     )
 
 
@@ -329,7 +331,7 @@ def stop(ctx, leave_containers):
             if len(containers) < 1:
                 logger.warning("Found 0 containers. Skipping.")
                 return
-            stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
+            stop_containers(client, containers, leave_containers=leave_containers)
         except APIError as exc:
             logger.error("Error while stopping (and removing) master container", exc_info=exc)
 
@@ -345,7 +347,7 @@ def status(ctx):
     container_label = ctx.obj["master_container_label"]
     client = ctx.obj.get("client", APIClient())
     get_status(
-        agent_id=None, logger=logger, containers_label=f"{KEY_CONTAINER_LABEL}={container_label}", docker_client=client
+        agent_id=None, containers_label=f"{KEY_CONTAINER_LABEL}={container_label}", docker_client=client
     )
 
 
@@ -400,7 +402,7 @@ def start(ctx, config_path, detached, infer):
     :param infer: Run arbiter in an inference mode (distributed VFL prediction)
     """
     start_distributed_agent(
-        config_path=config_path, role='arbiter', infer=infer, detached=detached, ctx=ctx, logger=logger
+        config_path=config_path, role='arbiter', infer=infer, detached=detached, ctx=ctx
     )
 
 
@@ -424,7 +426,7 @@ def stop(ctx, leave_containers):
             if len(containers) < 1:
                 logger.warning("Found 0 containers. Skipping.")
                 return
-            stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
+            stop_containers(client, containers, leave_containers=leave_containers)
         except APIError as exc:
             logger.error("Error while stopping (and removing) arbiter container", exc_info=exc)
 
@@ -440,7 +442,7 @@ def status(ctx):
     container_label = ctx.obj["arbiter_container_label"]
     client = ctx.obj.get("client", APIClient())
     get_status(
-        agent_id=None, logger=logger, containers_label=f"{KEY_CONTAINER_LABEL}={container_label}", docker_client=client
+        agent_id=None, containers_label=f"{KEY_CONTAINER_LABEL}={container_label}", docker_client=client
     )
 
 
@@ -520,9 +522,9 @@ def start(ctx, config_path):
     _test = is_test_environment()
     if ctx.obj["multi_process"] and not ctx.obj["single_process"]:
         client = ctx.obj.get("client", APIClient())
-        start_multiprocess_agents(config_path, client=client, test=_test, logger=logger)
+        start_multiprocess_agents(config_path, client=client, test=_test)
     elif ctx.obj["single_process"] and not ctx.obj["multi_process"]:
-        run_local_experiment(config_path=config_path, logger=logger)
+        run_local_experiment(config_path=config_path)
 
 
 @local.command()
@@ -546,7 +548,7 @@ def stop(ctx, leave_containers):
         try:
             container_label = BASE_CONTAINER_LABEL + ("-test" if _test else "")
             containers = client.containers(all=True, filters={"label": f"{KEY_CONTAINER_LABEL}={container_label}"})
-            stop_containers(client, containers, leave_containers=leave_containers, logger=logger)
+            stop_containers(client, containers, leave_containers=leave_containers)
         except APIError as exc:
             logger.error("Error while stopping (and removing) containers", exc_info=exc)
     else:
@@ -572,7 +574,6 @@ def status(ctx, agent_id):
         client = ctx.obj.get("client", APIClient())
         get_status(
             agent_id=agent_id,
-            logger=logger,
             containers_label=f"{KEY_CONTAINER_LABEL}={container_label}",
             docker_client=client,
         )
@@ -711,7 +712,7 @@ def stop(ctx, config_path, no_tests):
             try:
                 container_label = BASE_CONTAINER_LABEL + ("-test" if _test else "")
                 containers = client.containers(all=True, filters={"label": f"{KEY_CONTAINER_LABEL}={container_label}"})
-                stop_containers(client, containers, leave_containers=False, logger=logger)
+                stop_containers(client, containers, leave_containers=False)
             except APIError as exc:
                 logger.error("Error while stopping (and removing) containers", exc_info=exc)
             return
@@ -742,7 +743,7 @@ def status(agent_id):
     """
     _test = True
     container_label = BASE_CONTAINER_LABEL + ("-test" if _test else "")
-    get_status(agent_id=agent_id, containers_label=f"{KEY_CONTAINER_LABEL}={container_label}", logger=logger)
+    get_status(agent_id=agent_id, containers_label=f"{KEY_CONTAINER_LABEL}={container_label}")
 
 
 @test.command()
@@ -792,10 +793,9 @@ def predict(multi_process, single_process, config_path):
             client=client,
             test=False,
             is_infer=True,
-            logger=logger,
         )
     elif single_process and not multi_process:
-        run_local_experiment(config_path, is_infer=True, logger=logger)
+        run_local_experiment(config_path, is_infer=True)
 
 
 @cli.group()

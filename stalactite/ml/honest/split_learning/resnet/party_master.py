@@ -30,7 +30,7 @@ class HonestPartyMasterResNetSplitNN(HonestPartyMasterSplitNN):
             self, participating_members: List[str], party_predictions: PartyDataTensor, is_infer: bool = False
     ) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
-        self._check_if_ready()
+        self.check_if_ready()
 
         for member_id, member_prediction in zip(participating_members, party_predictions):
             self.party_predictions[member_id] = member_prediction

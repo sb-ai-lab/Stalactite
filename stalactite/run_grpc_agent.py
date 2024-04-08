@@ -7,14 +7,15 @@ from stalactite.communications.distributed_grpc_comm import (
     GRpcArbiterPartyCommunicator,
     GRpcMemberPartyCommunicator,
 )
-from stalactite.helpers import reporting
+from stalactite.helpers import reporting, global_logging
 from stalactite.configs import VFLConfig
 from stalactite.ml.arbitered.base import Role
 from stalactite.data_utils import get_party_master, get_party_arbiter, get_party_member
 
 import logging
 
-logger = logging.getLogger(__name__)
+logging.getLogger('fsspec').setLevel(logging.ERROR)
+logging.getLogger('git').setLevel(logging.ERROR)
 
 
 @click.command()
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 )
 def main(config_path, infer, role):
     config = VFLConfig.load_and_validate(config_path)
+    global_logging(role=role, config=config)
+
     arbiter_grpc_host = None
     if config.grpc_arbiter.use_arbiter:
         arbiter_grpc_host = os.environ.get("GRPC_ARBITER_HOST", config.grpc_arbiter.container_host)

@@ -55,6 +55,17 @@ class CommonConfig(BaseModel):
         default=Path(__file__).parent, description="Folder for exporting tests` and experiments` reports"
     )
     rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec")
+    logging_level: Literal["debug", "info", "warning"] = Field(default="info", description="Logging level")
+
+    @model_validator(mode="after")
+    def validate_logging_level(self):
+        level = {
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "debug": logging.DEBUG,
+        }
+        self.logging_level = level.get(self.logging_level, logging.INFO)
+        return self
 
 
 class VFLModelConfig(BaseModel):
@@ -161,7 +172,6 @@ class PartyConfig(BaseModel):
         }
         self.logging_level = level.get(self.logging_level, logging.INFO)
         return self
-
 
 
 class GRpcArbiterConfig(GRpcConfig, PartyConfig):

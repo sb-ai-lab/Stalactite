@@ -17,7 +17,8 @@ from stalactite.communications.grpc_utils.generated_code import (
 from stalactite.communications.grpc_utils.utils import PrometheusMetric, Status
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logging.getLogger('asyncio').setLevel(logging.ERROR)
+logging.getLogger('grpc').setLevel(logging.ERROR)
 
 
 class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):

@@ -124,7 +124,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         :return: Batcher instance.
         """
         logger.info("Master %s: making a make_batcher for uids %s" % (self.id, len(uids)))
-        self._check_if_ready()
+        self.check_if_ready()
         batch_size = self._eval_batch_size if is_infer else self._batch_size
         epochs = 1 if is_infer else self.epochs
         if uids is None:
@@ -140,7 +140,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         :return: Initial updates as a list of tensors.
         """
         logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
-        self._check_if_ready()
+        self.check_if_ready()
         return [torch.zeros(self._batch_size) for _ in range(world_size)]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
@@ -179,7 +179,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         :return: Aggregated predictions.
         """
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
-        self._check_if_ready()
+        self.check_if_ready()
         if not is_infer:
             for member_id, member_prediction in zip(participating_members, party_predictions):
                 self.party_predictions[member_id] = member_prediction
@@ -206,7 +206,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         :return: List of updates as tensors.
         """
         logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
-        self._check_if_ready()
+        self.check_if_ready()
         self.iteration_counter += 1
         tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
         y = self.target[tensor_idx]
@@ -222,10 +222,10 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
     def finalize(self, is_infer: bool = False) -> None:
         """ Finalize the party master. """
         logger.info("Master %s: finalizing" % self.id)
-        self._check_if_ready()
+        self.check_if_ready()
         self.is_finalized = True
 
-    def _check_if_ready(self):
+    def check_if_ready(self):
         """ Check if the party master is ready for operations.
 
         Raise a RuntimeError if experiment has not been initialized or has already finished.
@@ -254,7 +254,7 @@ class HonestPartyMasterLinRegConsequently(HonestPartyMasterLinReg):
         :return: ConsecutiveListBatcher instance.
         """
         logger.info("Master %s: making a make_batcher for uids %s" % (self.id, len(uids)))
-        self._check_if_ready()
+        self.check_if_ready()
         epochs = 1 if is_infer else self.epochs
         batch_size = self._eval_batch_size if is_infer else self._batch_size
         if uids is None:
