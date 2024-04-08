@@ -139,6 +139,7 @@ class PartyArbiterLogReg(PartyArbiter):
         if self.security_protocol is not None:
             self.security_protocol.generate_keys()
         self.is_initialized = True
+        self.is_finalized = False
 
     def finalize(self, is_infer: bool = False):
         self.is_finalized = True

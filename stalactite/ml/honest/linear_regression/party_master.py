@@ -109,6 +109,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             self.initialize_model()
             self.initialize_optimizer()
         self.is_initialized = True
+        self.is_finalized = False
 
     def make_batcher(
             self,

@@ -29,6 +29,8 @@ from stalactite.helpers import reporting, run_local_agents
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 logging.getLogger('PIL').setLevel(logging.ERROR)
+logging.getLogger('fsspec').setLevel(logging.ERROR)
+logging.getLogger('git').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 

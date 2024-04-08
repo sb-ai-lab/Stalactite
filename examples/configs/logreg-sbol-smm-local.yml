@@ -24,7 +24,7 @@ prerequisites:
   mlflow_port: '9876'
 
 master:
-  container_host: 'node16.bdcl'
+  external_host: 'node16.bdcl'
   run_mlflow: True
 
 member:

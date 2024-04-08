@@ -27,7 +27,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "",
+      "description": "Time of the iteration on master in seconds",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -376,7 +376,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "You can change the message sender id to see the stats for it by going to the Query-Builder -> Label filters and choosing another client_id value",
+      "description": "You can change the message sender id to see the stats for it by going to the `Query-Builder` -> `Label filters` and choosing another `client_id` value",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -453,7 +453,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": ".95 quantile\n\nTo check other task types, go to the Query-builder -> Label filters and change the task_type to desired task type\nTo see other quantiles values, change the `Histogram quantile` at the Operations section to desired value.\n",
+      "description": ".95 quantile\n\nTo check other task types, go to the `Query-builder` -> `Label filters` and change the `task_type` to desired task type\nTo see other quantiles values, change the `Histogram quantile` at the Operations section to desired value.\n",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -527,7 +527,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "To check other task types, go to the Query-builder -> Label filters and change the task_type to desired task type",
+      "description": "To check other task types, go to the `Query-builder` -> `Label filters` and change the `task_type` to desired task type",
       "fieldConfig": {
         "defaults": {
           "custom": {
