@@ -81,6 +81,7 @@ class VFLModelConfig(BaseModel):
     learning_rate: float = Field(default=0.01, description='Learning rate')
     l2_alpha: Optional[float] = Field(default=None, description='Alpha used for L2 regularization')
     momentum: Optional[float] = Field(default=0, description='Optimizer momentum')
+    weight_decay: Optional[float] = Field(default=0.01, description='Optimizer weight decay')
     do_train: bool = Field(default=True, description='Whether to run a training loop.')
     do_predict: bool = Field(default=True, description='Whether to run an inference loop.')
     do_save_model: bool = Field(default=True, description='Whether to save the model after training.')

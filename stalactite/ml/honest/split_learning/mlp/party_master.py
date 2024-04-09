@@ -22,7 +22,9 @@ class HonestPartyMasterMLPSplitNN(HonestPartyMasterSplitNN):
             {"params": self._model.parameters()},
         ],
             lr=self._common_params.learning_rate,
-            momentum=self._common_params.momentum
+            momentum=self._common_params.momentum,
+            weight_decay=self._common_params.weight_decay,
+
         )
 
     def aggregate(
