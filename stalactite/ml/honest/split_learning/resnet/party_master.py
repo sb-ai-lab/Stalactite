@@ -23,14 +23,16 @@ class HonestPartyMasterResNetSplitNN(HonestPartyMasterSplitNN):
             {"params": self._model.parameters()},
         ],
             lr=self._common_params.learning_rate,
-            momentum=self._common_params.momentum
+            momentum=self._common_params.momentum,
+            weight_decay=self._common_params.weight_decay,
+
         )
 
     def aggregate(
             self, participating_members: List[str], party_predictions: PartyDataTensor, is_infer: bool = False
     ) -> DataTensor:
         logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
-        self._check_if_ready()
+        self.check_if_ready()
 
         for member_id, member_prediction in zip(participating_members, party_predictions):
             self.party_predictions[member_id] = member_prediction

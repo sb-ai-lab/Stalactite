@@ -55,6 +55,17 @@ class CommonConfig(BaseModel):
         default=Path(__file__).parent, description="Folder for exporting tests` and experiments` reports"
     )
     rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec")
+    logging_level: Literal["debug", "info", "warning"] = Field(default="info", description="Logging level")
+
+    @model_validator(mode="after")
+    def validate_logging_level(self):
+        level = {
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "debug": logging.DEBUG,
+        }
+        self.logging_level = level.get(self.logging_level, logging.INFO)
+        return self
 
 
 class VFLModelConfig(BaseModel):
@@ -70,6 +81,7 @@ class VFLModelConfig(BaseModel):
     learning_rate: float = Field(default=0.01, description='Learning rate')
     l2_alpha: Optional[float] = Field(default=None, description='Alpha used for L2 regularization')
     momentum: Optional[float] = Field(default=0, description='Optimizer momentum')
+    weight_decay: Optional[float] = Field(default=0.01, description='Optimizer weight decay')
     do_train: bool = Field(default=True, description='Whether to run a training loop.')
     do_predict: bool = Field(default=True, description='Whether to run an inference loop.')
     do_save_model: bool = Field(default=True, description='Whether to save the model after training.')
@@ -117,7 +129,6 @@ class PrerequisitesConfig(BaseModel):
 class GRpcConfig(BaseModel):
     """gRPC base parameters config."""
 
-    host: str = Field(default="0.0.0.0", description="Host of the gRPC server and servicer")
     port: str = Field(default="50051", description="Port of the gRPC server")
     max_message_size: int = Field(
         default=-1, description="Maximum message length that the gRPC channel can send or receive. -1 means unlimited"
@@ -163,10 +174,12 @@ class PartyConfig(BaseModel):
         return self
 
 
-
 class GRpcArbiterConfig(GRpcConfig, PartyConfig):
     """gRPC arbiter server and servicer parameters config."""
-    container_host: str = Field(default="0.0.0.0", description="Host of the container with gRPC arbiter service")
+    external_host: str = Field(
+        default="0.0.0.0",
+        description="Host of the node with the container with gRPC arbiter service"
+    )
     use_arbiter: bool = Field(default=False, description="Whether to include arbiter for VFL with HE")
     grpc_operations_timeout: float = Field(default=300, description="Timeout of the unary calls to gRPC arbiter server")
     security_protocol_params: Optional[PaillierSPParams] = Field(default=None)
@@ -175,7 +188,10 @@ class GRpcArbiterConfig(GRpcConfig, PartyConfig):
 class MasterConfig(PartyConfig):
     """VFL master party`s parameters config."""
 
-    container_host: str = Field(default="0.0.0.0", description="Host of the master container with gRPC server.")
+    external_host: str = Field(
+        default="0.0.0.0",
+        description="Host of the node with the master container with gRPC server."
+    )
     run_mlflow: bool = Field(default=False, description="Whether to log metrics to MlFlow")
     run_prometheus: bool = Field(default=False, description="Whether to log heartbeats to Prometheus")
     disconnect_idle_client_time: float = Field(
@@ -238,10 +254,7 @@ class VFLConfig(BaseModel):
             )
 
         if self.grpc_arbiter.use_arbiter and self.common.use_grpc:
-            if (
-                    f"{self.grpc_arbiter.host}:{self.grpc_arbiter.port}"
-                    == f"{self.grpc_server.host}:{self.grpc_server.port}"
-            ):
+            if str(self.grpc_arbiter.port) == str(self.grpc_server.port):
                 raise ValueError(
                     f"Arbiter port {self.grpc_arbiter.port} is the same to "
                     f"gRPC master server port {self.grpc_server.port}"

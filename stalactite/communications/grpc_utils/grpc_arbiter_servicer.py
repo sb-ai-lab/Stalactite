@@ -12,24 +12,26 @@ from stalactite.communications.grpc_utils.utils import Status
 from stalactite.ml.arbitered.base import Role
 
 logger = logging.getLogger(__name__)
+logging.getLogger('asyncio').setLevel(logging.ERROR)
+logging.getLogger('grpc').setLevel(logging.ERROR)
 
 
 class GRpcArbiterCommunicatorServicer(arbitered_communicator_pb2_grpc.ArbiteredCommunicatorServicer):
     def __init__(
             self,
             arbiter_id: str,
-            host: str,
             port: str,
             world_size: int,
             threadpool_max_workers: int = 10,
             max_message_size: int = -1
     ):
         self.arbiter_id = arbiter_id
-        self.host = host
         self.port = port
         self.world_size = world_size
         self.threadpool_max_workers = threadpool_max_workers
         self.max_message_size = max_message_size
+
+        self.host = '0.0.0.0'
 
         self._received_tasks = defaultdict(dict)
         self._tasks_to_send_queues = defaultdict(dict)

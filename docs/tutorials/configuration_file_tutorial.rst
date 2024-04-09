@@ -9,7 +9,32 @@ An example of configuration file can be found at the ``configs/config-test.yml``
 All the path parameters (``reports_export_folder``, ``host_path_data_dir``, ``docker_compose_path``) should be either
 absolute paths to the directories, or are resolved relatively to the path of the configuration file.
 
+The logging in the module is also defined via configuration files. We use standard Python logger and you can set the
+logging level to ``info``, ``debug`` or ``warning`` using the following instruction.
+
+.. code-block:: yaml
+
+    # general logging level of the Stalactite, applied if you use Stalactite CLI in local or distributed experiments
+    common:
+      logging_level: # 'info', 'debug' or 'warning'
+
+    # Agent level logging is applicable in distributed multi-process and multi-host regimes - you can set different
+    # levels to different agents by customizing the following fields:
+    master:
+      logging_level: # 'info', 'debug' or 'warning': Logging level of the master (in master container)
+    member:
+      logging_level: # 'info', 'debug' or 'warning': Logging level of the member (in member container)
+    grpc_arbiter:
+      logging_level: # 'info', 'debug' or 'warning': Logging level of the arbiter (in arbiter container)
+
+
 Common parameters are required in any experiment and define general experimental specifics.
+
+.. note::
+    Note, that ``common.world_size`` parameter identifies number of **member** agents in an experiment. So, if you run
+    an *honest* experiment, number of agents (threads in *local* or containers in *distributed* case) will be
+    ``common.world_size + 1``: ``common.world_size`` members and 1 master. In case of an ``arbitered`` experiment,
+    number of agents will be ``common.world_size + 2``, where 1 is launched for the master, and 1 more - for an arbiter.
 
 .. code-block:: yaml
 
@@ -20,6 +45,7 @@ Common parameters are required in any experiment and define general experimental
       experiment_label: # Label of the experiment
       reports_export_folder: # Path to export tests logs and reports
       rendezvous_timeout: # If master and members do not finish rendezvous in a given time, TimeoutError is raised
+      logging_level: # 'info', 'debug' or 'warning' - general logging level of the Stalactite
 
 VFL model are training and model specific parameters also used in any experiment.
 
@@ -101,7 +127,7 @@ the homomorphic encryption in the process.
 .. code-block:: yaml
 
     master:
-      container_host: # Host of the master container, which can be accessed by the members
+      external_host: # Host of the master container, which can be accessed by the members
       disconnect_idle_client_time: # Master will disconnect a member which has not sent any pings for `disconnect_idle_client_time`
       time_between_idle_connections_checks: # How often master should check disconnected members
 
@@ -109,15 +135,13 @@ the homomorphic encryption in the process.
       heartbeat_interval: # Interval of the heartbeat messages sent to master
 
     grpc_server:
-      host: 0.0.0.0 # Which host is used inside the container to launch the gRPC server
       port: # Which port is used to launch and access gRPC server
       max_message_size: -1 # Maximum message size in bytes, -1 means no limits are applied
       server_threadpool_max_workers: # When running the gRPC servicer the threadpool workers are used
 
     grpc_arbiter:
-      host: 0.0.0.0 # Which host is used inside the container to launch the gRPC server of the arbiter
       port: # Which port is used to launch and access gRPC server !must be different from ``grpc_server.port``
-      container_host: # Host of the arbiter container, which can be accessed by the members and master
+      external_host: # Host of the arbiter container, which can be accessed by the members and master
 
     docker:
       # When containers are launched the built image depends on whether the GPU is available

@@ -6,13 +6,14 @@ common:
   reports_export_folder: "../../reports"
 
 vfl_model:
-  epochs: 5
-  batch_size: 250
+  epochs: 1
+  batch_size: 2500
   eval_batch_size: 200
   vfl_model_name: logreg
   is_consequently: False
   use_class_weights: True
   learning_rate: 0.05
+  weight_decay: 0.02
   do_train: True
   do_predict: True
   do_save_model: True
@@ -24,7 +25,7 @@ prerequisites:
   mlflow_port: '9876'
 
 master:
-  container_host: 'node16.bdcl'
+  external_host: 'node16.bdcl'
   run_mlflow: True
 
 member:

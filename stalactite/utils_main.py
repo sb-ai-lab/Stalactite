@@ -14,7 +14,7 @@ from stalactite.communications.local import ArbiteredLocalPartyCommunicator, Loc
     LocalMemberPartyCommunicator
 from stalactite.configs import VFLConfig, raise_path_not_exist
 from stalactite.data_utils import get_party_arbiter, get_party_master, get_party_member
-from stalactite.helpers import run_local_agents, reporting
+from stalactite.helpers import run_local_agents, reporting, global_logging
 from stalactite.ml.arbitered.base import Role
 
 BASE_CONTAINER_LABEL = "grpc-experiment"
@@ -27,10 +27,11 @@ BASE_IMAGE_FILE_CPU = "grpc-base-cpu.dockerfile"
 BASE_IMAGE_TAG = "grpc-base:latest"
 PREREQUISITES_NETWORK = "prerequisites_vfl-network"  # Do not change this value
 
+logger = logging.getLogger(__name__)
 logging.getLogger('docker').setLevel(logging.ERROR)
 
 
-def validate_int(value: Any, logger: logging.Logger = logging.getLogger("__main__")):
+def validate_int(value: Any):
     try:
         value = int(value)
     except ValueError:
@@ -57,7 +58,6 @@ def is_test_environment() -> bool:
 def run_subprocess_command(
         command: str,
         logger_err_info: str,
-        logger: logging.Logger = logging.getLogger("__main__"),
         **cmd_kwargs,
 ):
     process = subprocess.run(
@@ -74,7 +74,6 @@ def run_subprocess_command(
 def get_status(
         agent_id: Optional[str],
         containers_label: str,
-        logger: logging.Logger,
         docker_client: APIClient = APIClient(),
 ):
     try:
@@ -96,7 +95,6 @@ def get_logs(
         tail: str = "all",
         follow: bool = False,
         docker_client: APIClient = APIClient(),
-        logger: logging.Logger = logging.getLogger("__main__"),
 ):
     if tail != "all":
         tail = validate_int(tail)
@@ -113,7 +111,6 @@ def get_logs(
 
 def build_base_image(
         docker_client: APIClient,
-        logger: logging.Logger = logging.getLogger("__main__"),
         use_gpu: bool = False
 ):
     image_file_name = BASE_IMAGE_FILE if use_gpu else BASE_IMAGE_FILE_CPU
@@ -125,6 +122,7 @@ def build_base_image(
             decode=True,
             nocache=False,
             dockerfile=os.path.join(Path(os.path.abspath(__file__)).parent.parent, "docker", image_file_name),
+            rm=True,
         )
         for log in _logs:
             logger.debug(log.get("stream", log.get("aux", {"aux": ""}).get("ID", "")).strip())
@@ -137,7 +135,6 @@ def stop_containers(
         docker_client: APIClient,
         containers: list,
         leave_containers: bool = False,
-        logger: logging.Logger = logging.getLogger("__main__"),
 ):
     if not len(containers):
         logger.info("No containers to stop.")
@@ -163,7 +160,6 @@ def create_and_start_container(
         command: Optional[List[str]] = None,
         network_config: Optional[dict] = None,
         ports: Optional[list] = None,
-        logger: logging.Logger = logging.getLogger("__main__"),
 ):
     logger.info(f"Starting gRPC {role} container")
     if command is None:
@@ -196,7 +192,6 @@ def start_distributed_agent(
         infer: bool,
         detached: bool,
         ctx,
-        logger: logging.Logger = logging.getLogger("__main__"),
         rank: int = None,
 ):
     config = VFLConfig.load_and_validate(config_path)
@@ -212,7 +207,7 @@ def start_distributed_agent(
     logger.info(f"Building an image for the {role} container. If build for the first time, it may take a while...")
 
     try:
-        build_base_image(client, logger=logger, use_gpu=config.docker.use_gpu)
+        build_base_image(client, use_gpu=config.docker.use_gpu)
 
         configs_path = os.path.dirname(os.path.abspath(config_path))
 
@@ -274,7 +269,6 @@ def start_distributed_agent(
             config_path=config_path,
             hostname=None,
             command=command,
-            logger=logger,
         )
 
         if not detached:
@@ -294,13 +288,12 @@ def start_multiprocess_agents(
         config_path: str,
         client: APIClient,
         test: bool,
-        is_infer: bool = False,
-        logger: logging.Logger = logging.getLogger("__main__")
+        is_infer: bool = False
 ):
     config = VFLConfig.load_and_validate(config_path)
     logger.info("Starting multi-process single-node experiment")
     logger.info("Building an image of the agent. If build for the first time, it may take a while...")
-    build_base_image(client, logger=logger, use_gpu=config.docker.use_gpu)
+    build_base_image(client, use_gpu=config.docker.use_gpu)
 
     if networks := client.networks(names=[PREREQUISITES_NETWORK]):
         network = networks.pop()["Name"]
@@ -360,7 +353,6 @@ def start_multiprocess_agents(
                 role='arbiter',
                 config_path=config_path,
                 hostname=grpc_arbiter_host,
-                logger=logger,
                 command=command_arbiter,
             )
 
@@ -382,7 +374,6 @@ def start_multiprocess_agents(
             role='master',
             config_path=config_path,
             hostname=grpc_server_host,
-            logger=logger,
             command=command_master,
         )
 
@@ -415,7 +406,6 @@ def start_multiprocess_agents(
                 role='member',
                 config_path=config_path,
                 hostname=None,
-                logger=logger,
                 command=member_command,
             )
 
@@ -429,9 +419,9 @@ def start_multiprocess_agents(
         raise
 
 
-def run_local_experiment(config_path: str, is_infer: bool = False,
-                         logger: logging.Logger = logging.getLogger("__main__")):
+def run_local_experiment(config_path: str, is_infer: bool = False):
     config = VFLConfig.load_and_validate(config_path)
+    global_logging(logging_level=config.common.logging_level)
     arbiter = get_party_arbiter(config_path, is_infer=is_infer) if config.grpc_arbiter.use_arbiter else None
     master = get_party_master(config_path, is_infer=is_infer)
     members = [

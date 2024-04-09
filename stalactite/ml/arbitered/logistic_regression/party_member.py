@@ -94,4 +94,5 @@ class ArbiteredPartyMemberLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMember
         self.initialize_model(do_load_model=is_infer)
 
         self.is_initialized = True
+        self.is_finalized = False
         logger.info("Member %s: has been initialized" % self.id)

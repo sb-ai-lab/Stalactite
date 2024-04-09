@@ -6,8 +6,8 @@ common:
   reports_export_folder: "../../reports"
 
 vfl_model:
-  epochs: 5
-  batch_size: 2500
+  epochs: 1
+  batch_size: 250
   eval_batch_size: 2000
   vfl_model_name: resnet
   is_consequently: False
@@ -24,7 +24,7 @@ prerequisites:
   mlflow_port: '9876'
 
 master:
-  container_host: 'node16.bdcl'
+  external_host: 'node16.bdcl'
   run_mlflow: True
   master_model_params: {
     input_dim: 1356,
@@ -41,7 +41,7 @@ member:
 
 data:
   random_seed: 0
-  dataset_size: 8500
+  dataset_size: 850
   dataset: 'sbol_smm'
   host_path_data_dir:  ../../data/sber_ds_vfl/multilabel_sber_sample10000_parts2
   dataset_part_prefix: 'part_'

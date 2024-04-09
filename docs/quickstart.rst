@@ -251,7 +251,6 @@ file we add new sections and fields (in comparison to the local example):
 
     grpc_server:
       # Those are default gRPC server settings, the gRPC server will be launched in the VFL master
-      host: '0.0.0.0'
       port: '50051'
       # -1 means no limits are applied to the size of the send/recv message
       max_message_size: -1
@@ -325,7 +324,7 @@ including:
       prometheus_host: <master_host_public_ip>
 
     master:
-      container_host: <master_host_public_ip>
+      external_host: <master_host_public_ip>
 
 Nevertheless, the paths on different machines can differ, therefore, if you saved your data in different from
 ``vfl-benchmark/data`` folder, than duplicate the configuration files and change the following fields accordingly:

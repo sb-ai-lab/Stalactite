@@ -1,4 +1,0 @@
-data:
-  random_seed: 0
-  dataset_size: 1000
-  host_path_data_dir: ../data #"/Users/anastasiazaharova/Desktop/vfl-benchmark/data"

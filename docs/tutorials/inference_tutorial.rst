@@ -25,6 +25,10 @@ When you start the Python process(es) from the script(s), you can do training an
 experiment (with the `do_train` and `do_predict` set to ``True``). It will firstly train the model, then save it to the
 model path, load it for the inference and report the metrics.
 
+Depending on the experiment you run, two main types of the Master agent could be initialized. It is either Master, which
+trains its own VFL model, or Master, which only aggregates the members results. In current tutorial, the master holding
+the model is identified by the variable ``master_with_model``, and master without trainable model: ``master_no_model``
+
 In the inference process, independently from the VFL type you run (arbitered / honest), the inference process is run
 on the master and member:
 

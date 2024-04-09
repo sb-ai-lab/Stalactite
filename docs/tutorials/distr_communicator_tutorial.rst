@@ -253,13 +253,13 @@ For the master, member and arbiter communicators the following script is used (`
             # and pass the container hostname as the environmental variable,
             # Otherwise, in the multihost environment we need to pass the arbiter container host explicitly through
             # the config
-            arbiter_grpc_host = os.environ.get("GRPC_ARBITER_HOST", config.grpc_arbiter.container_host)
+            arbiter_grpc_host = os.environ.get("GRPC_ARBITER_HOST", config.grpc_arbiter.external_host)
 
         if role == Role.member:
             # We pass the rank as the env variable to the container
             member_rank = int(os.environ.get("RANK", 0))
             # Same to the arbiter host logic is applied to the master container host variable.
-            grpc_host = os.environ.get("GRPC_SERVER_HOST", config.master.container_host)
+            grpc_host = os.environ.get("GRPC_SERVER_HOST", config.master.external_host)
             # GRpcMemberPartyCommunicator requires additional keyword args to act as the gRPC client to the
             # server on master
             comm = GRpcMemberPartyCommunicator(
@@ -284,7 +284,6 @@ For the master, member and arbiter communicators the following script is used (`
                     participant=get_party_master(config_path, is_infer=infer),
                     world_size=config.common.world_size,
                     port=config.grpc_server.port,
-                    host=config.grpc_server.host,
                     server_thread_pool_size=config.grpc_server.server_threadpool_max_workers,
                     max_message_size=config.grpc_server.max_message_size,
                     logging_level=config.master.logging_level,
@@ -311,7 +310,6 @@ For the master, member and arbiter communicators the following script is used (`
                 participant=get_party_arbiter(config_path, is_infer=infer),
                 world_size=config.common.world_size,
                 port=config.grpc_arbiter.port,
-                host=config.grpc_arbiter.host,
                 server_thread_pool_size=config.grpc_server.server_threadpool_max_workers,
                 max_message_size=config.grpc_arbiter.max_message_size,
                 logging_level=config.grpc_arbiter.logging_level,
