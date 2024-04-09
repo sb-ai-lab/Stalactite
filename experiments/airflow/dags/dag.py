@@ -223,16 +223,12 @@ def run(config: VFLConfig):
         )
 
 
-def objective_func(trial, config, grid_search: bool = False):
+def objective_func(trial, config):
     processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
     processors, master_processor = load_processors(processors_path)
 
-    if grid_search:
-        batch_size = trial.suggest_int('batch_size', 0, 10000)
-        config.vfl_model.batch_size = batch_size
-    else:
-        suggested_params = suggest_params(trial=trial, config=config)
-        for param_name, param_val in suggested_params.items():
+    suggested_params = suggest_params(trial=trial, config=config)
+    for param_name, param_val in suggested_params.items():
             rsetattr(config, f"vfl_model.{param_name}", param_val)
     with reporting(config):
         shared_party_info = dict()
@@ -328,18 +324,15 @@ def objective_func(trial, config, grid_search: bool = False):
             master=master, members=members, target_master_func=local_master_main, target_member_func=local_member_main
         )
     runs = mlflow.search_runs(experiment_names=["airflow"])
-    metrics_name = "metrics.test_roc_auc_macro"
+    metrics_name = "metrics.test_roc_auc_macro" #todo: determine optimization metrics
     metrics = runs.iloc[0][metrics_name]
     return metrics
 
 
-def run_opt(config, grid_search: bool = False):
-    if grid_search:
-        study = optuna.create_study(sampler=optuna.samplers.GridSampler(batch_search_space), direction="maximize")
-    else:
-        study = optuna.create_study(direction="maximize")  # Create a new study.
-    objective = partial(objective_func, config=config, grid_search=grid_search)
-    study.optimize(objective, n_trials=2)  # Invoke optimization of the objective function.
+def run_opt(config, n_trials: int):
+    study = optuna.create_study(direction="maximize")
+    objective = partial(objective_func, config=config)
+    study.optimize(objective, n_trials=n_trials)
     print("Best hyperparameters:", study.best_params)
     print("Best value:", study.best_value)
 
@@ -402,9 +395,9 @@ def train(config: VFLConfig):
 
 
 @task
-def train_opt(config: VFLConfig, grid_search: bool = False):
+def train_opt(config: VFLConfig, n_trials: int):
     logger.info(f"train for {config.vfl_model.vfl_model_name}")
-    run_opt(config=config, grid_search=grid_search)
+    run_opt(config=config, n_trials=n_trials)
     logger.info(f"train-opt for model: {config.vfl_model.vfl_model_name} SUCCESS")
 
 
@@ -445,7 +438,8 @@ def build_dag(
         dag_id: str,
         model_names: List[str],
         dataset_name: str,
-        world_sizes: List[int]
+        world_sizes: List[int],
+        n_trials: int = None
 ):
     with DAG(
             dag_id=dag_id,
@@ -465,7 +459,7 @@ def build_dag(
                 data_preparators.append(make_data_preparation(config=config))
                 tasks.append(get_processor(config=config, processors_dict_path=processors_path))
                 # tasks.append(train(config=config))
-                tasks.append(train_opt(config=config, grid_search=False))
+                tasks.append(train_opt(config=config, n_trials=n_trials))
 
 
         chain(*data_preparators)
@@ -532,7 +526,7 @@ def build_single_mode_dag(dag_id: str,
 #                       world_sizes=[2, 3, 4])
 
 mnist_dag_logreg = build_dag(dag_id="mnist_dag_logreg", model_names=["logreg"], dataset_name="mnist",
-                      world_sizes=[2])
+                             world_sizes=[2], n_trials=3)
 
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
 #                             dataset_name="home_credit_bureau_pos", world_sizes=[3])

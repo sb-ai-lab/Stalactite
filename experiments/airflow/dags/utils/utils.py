@@ -5,7 +5,9 @@ batch_search_space = {"batch_size": [512, 1024]}
 search_space = {
     "logreg":
         {
-            "learning_rate": {"type": "float", "args": [10e-4, 10e-2]}
+            "batch_size": {"type": "cat", "args": [32, 64, 128, 256, 512, 1024, 2048, 4096]},
+            "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
+            "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
         }
 }
 
@@ -14,12 +16,14 @@ def suggest_params(trial, config):
     suggested_params = {}
     models_search_space = search_space[config.vfl_model.vfl_model_name]
     for param_name, param_values in models_search_space.items():
+        border_min, border_max = param_values["args"][0], param_values["args"][1]
         if param_values["type"] == "float":
-            suggested_params[param_name] = trial.suggest_float(param_name, param_values["args"][0], param_values["args"][1])
+            suggested_params[param_name] = trial.suggest_float(param_name, border_min. border_max)
         elif param_values["type"] == "int":
-            pass
-        elif param_values["type"] == "categorical":
-            pass
+            suggested_params[param_name] = trial.suggest_int(param_name, border_min. border_max)
+        elif param_values["type"] == "cat":
+            suggested_params[param_name] = trial.suggest_categorical(param_name, param_values["args"])
+
         else:
             ValueError(f"Unsupported type {param_values['type']}")
     return suggested_params

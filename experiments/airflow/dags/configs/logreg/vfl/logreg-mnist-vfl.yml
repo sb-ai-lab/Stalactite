@@ -16,7 +16,7 @@ vfl_model:
   do_train: True
   do_predict: False
   do_save_model: False
-  vfl_model_path:  /opt/airflow/data/saved_models/logreg_model
+  vfl_model_path: /opt/airflow/data/saved_models/logreg_model
 
 data:
   random_seed: 0
