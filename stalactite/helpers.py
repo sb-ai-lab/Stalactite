@@ -66,6 +66,7 @@ def reporting(config: VFLConfig):
             "is_consequently": config.vfl_model.is_consequently,
             "model_name": config.vfl_model.vfl_model_name,
             "learning_rate": config.vfl_model.learning_rate,
+            "weight_decay": config.vfl_model.weight_decay,
             "dataset": config.data.dataset,
 
         }
