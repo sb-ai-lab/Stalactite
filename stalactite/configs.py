@@ -55,6 +55,7 @@ class CommonConfig(BaseModel):
         default=Path(__file__).parent, description="Folder for exporting tests` and experiments` reports"
     )
     rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec")
+    seed: int = Field(default=42, description="Initial random seed")
     logging_level: Literal["debug", "info", "warning"] = Field(default="info", description="Logging level")
 
     @model_validator(mode="after")
@@ -81,6 +82,7 @@ class VFLModelConfig(BaseModel):
     learning_rate: float = Field(default=0.01, description='Learning rate')
     l2_alpha: Optional[float] = Field(default=None, description='Alpha used for L2 regularization')
     momentum: Optional[float] = Field(default=0, description='Optimizer momentum')
+    weight_decay: Optional[float] = Field(default=0.01, description='Optimizer weight decay')
     do_train: bool = Field(default=True, description='Whether to run a training loop.')
     do_predict: bool = Field(default=True, description='Whether to run an inference loop.')
     do_save_model: bool = Field(default=True, description='Whether to save the model after training.')
@@ -93,11 +95,7 @@ class VFLModelConfig(BaseModel):
 class DataConfig(BaseModel):
     """Experimental data parameters config."""
 
-    random_seed: int = Field(
-        default=0,
-        description="Experiment data random seed (including random, numpy, torch)"
-    )
-    dataset_size: int = Field(default=1000, description="Number of dataset rows to use")
+    dataset_size: int = Field(default=100, description="Number of dataset rows to use")
     host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
     dataset: Literal[
         'mnist', 'sbol', 'sbol_smm', 'home_credit', 'home_credit_bureau_pos', 'avito', 'avito_texts_images'] = Field(

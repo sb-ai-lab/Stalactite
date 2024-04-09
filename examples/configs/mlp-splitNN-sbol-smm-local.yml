@@ -4,6 +4,7 @@ common:
   world_size: 2
   experiment_label: experiment-mlp-sbol-smm-local
   reports_export_folder: "../../reports"
+  seed: 22
 
 vfl_model:
   epochs: 1
@@ -11,7 +12,7 @@ vfl_model:
   eval_batch_size: 200
   vfl_model_name: mlp
   is_consequently: False
-  use_class_weights: False
+  use_class_weights: True
   learning_rate: 0.01
   do_train: True
   do_predict: False

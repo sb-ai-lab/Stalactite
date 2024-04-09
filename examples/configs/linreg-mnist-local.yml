@@ -4,6 +4,7 @@ common:
   world_size: 2
   experiment_label: test-experiment-mnist-local
   reports_export_folder: ../../reports
+  seed: 22
 
 vfl_model:
   epochs: 2
@@ -19,7 +20,6 @@ vfl_model:
   vfl_model_path: ../../saved_models/linreg_model
 
 data:
-  random_seed: 0
   dataset_size: 5000
   dataset: 'mnist'
   host_path_data_dir:  ../../data/sber_ds_vfl/mnist_vfl_parts2

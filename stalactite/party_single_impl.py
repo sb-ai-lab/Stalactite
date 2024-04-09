@@ -167,9 +167,7 @@ class PartySingle:
 
         self._dataset = self.processor.fit_transform()
         self.x_train = self._dataset[self.processor.data_params.train_split][self.processor.data_params.features_key]
-        a = torch.isnan(self.x_train).any()  # todo: remove
         self.x_test = self._dataset[self.processor.data_params.test_split][self.processor.data_params.features_key]
-        b = torch.isnan(self.x_test).any()  # todo: remove
         self.target = self._dataset[self.processor.data_params.train_split][self.processor.data_params.label_key]
         self.test_target = self._dataset[self.processor.data_params.test_split][self.processor.data_params.label_key]
 

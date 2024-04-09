@@ -28,7 +28,7 @@ def split_save_datasets(df, train_users, test_users, columns, postfix_sample, di
     )
 
 
-def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, sbol_only: bool = False):
+def load_data(data_dir_path: str, parts_num: int = 2, sbol_only: bool = False):
     sbol_path = os.path.join(data_dir_path, "sbol")
     smm_path = os.path.join(data_dir_path, "smm")
 
@@ -44,7 +44,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
         sbol_labels[["user_id"]], shuffle=True, random_state=seed, test_size=0.15
     )
 
-    if not is_single:
+    if parts_num != 1:
         logger.info("Save vfl dataset labels part...")
         split_save_datasets(df=sbol_labels, train_users=users_train, test_users=users_test,
                             columns=["user_id", "labels"], postfix_sample=sample, part_postfix="master_part",
@@ -61,7 +61,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
         lambda x: list(x), axis=1)
     sbol_user_features = sbol_user_features[["user_id", "features_part_0", "labels"]]
 
-    if not is_single:
+    if parts_num != 1:
         logger.info("Save vfl dataset part 0...")
         split_save_datasets(df=sbol_user_features, train_users=users_train, test_users=users_test,
                             columns=["user_id", "features_part_0"], postfix_sample=sample, part_postfix="part_0",
@@ -85,7 +85,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
     smm_user_factors = sbol_labels[["user_id"]].merge(smm_user_factors, on="user_id", how="inner")
     smm_user_factors.rename(columns={"user_factors": "features_part_1"}, inplace=True)
 
-    if not is_single:
+    if parts_num != 1:
         logger.info("Save vfl dataset part 1...")
         split_save_datasets(df=smm_user_factors, train_users=users_train, test_users=users_test,
                             columns=["user_id", "features_part_1"], postfix_sample=sample, part_postfix="part_1",

@@ -233,10 +233,12 @@ class PartyAgent(ABC):
             party_members: Optional[List[str]] = None,
             is_infer: bool = False
     ) -> Batcher:
-        """ Make a make_batcher for training.
+        """ Make a make_batcher for training or inference.
 
         :param uids: List of unique identifiers of dataset records.
         :param party_members: List of party members` identifiers.
+        :param is_infer: Flag indicating whether to use inference mode.
+         Inference mode means that the batcher will have only one epoch and use eval_batch_size.
 
         :return: Batcher instance.
         """

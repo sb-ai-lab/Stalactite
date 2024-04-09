@@ -11,6 +11,7 @@ from stalactite.party_single_impl import PartySingleLinreg, PartySingleLogreg
 from examples.utils.prepare_mnist import load_data as load_mnist
 from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
 from stalactite.helpers import reporting
+from stalactite.utils import seed_all
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -23,7 +24,7 @@ def load_processors(config_path: str):
     if config.data.dataset.lower() == "mnist":
 
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_mnist(config.data.host_path_data_dir, parts_num=1, is_single=True, binary=True)
+            load_mnist(Path(config.data.host_path_data_dir), parts_num=1,  binary=True)
 
         dataset = {0: datasets.load_from_disk(
             os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
@@ -36,7 +37,7 @@ def load_processors(config_path: str):
     elif config.data.dataset.lower() == "sbol_smm":
 
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1, is_single=True, sbol_only=False)
+            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=1, sbol_only=False)
 
         dataset = {0: datasets.load_from_disk(
             os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
@@ -59,6 +60,7 @@ def run(config_path: Optional[str] = None):
             os.path.join(Path(__file__).parent.parent.parent, 'configs/linreg-mnist-local.yml')
         )
     config = VFLConfig.load_and_validate(config_path)
+    seed_all(config.common.seed)
     model_name = config.vfl_model.vfl_model_name
 
     with reporting(config):

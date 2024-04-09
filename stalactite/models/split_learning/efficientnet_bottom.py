@@ -10,6 +10,8 @@ from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig
 from torchvision.utils import _log_api_usage_once
 from torchvision.ops.misc import Conv2dNormActivation
 
+from stalactite.utils import seed_all
+
 
 def _efficientnet_conf(
     width_mult: float,
@@ -38,7 +40,8 @@ class EfficientNetBottom(nn.Module):
         depth_mult: float = 1.0,
         stochastic_depth_prob: float = 0.2,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
-        init_weights: float = None
+        init_weights: float = None,
+        seed: int = None,
     ) -> None:
         """
         EfficientNet V1 and V2 main class
@@ -49,7 +52,7 @@ class EfficientNetBottom(nn.Module):
         """
         super().__init__()
         _log_api_usage_once(self)
-
+        self.seed = seed
         inverted_residual_setting, last_channel = _efficientnet_conf(width_mult=width_mult, depth_mult=depth_mult)
 
         if norm_layer is None:
@@ -108,6 +111,7 @@ class EfficientNetBottom(nn.Module):
                 if init_weights:
                     nn.init.constant_(m.weight, init_weights)
                 else:
+                    seed_all(self.seed)
                     nn.init.kaiming_normal_(m.weight, mode="fan_out")
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)

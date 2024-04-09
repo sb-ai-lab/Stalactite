@@ -1,12 +1,12 @@
 import logging
-import math
 from typing import Callable, List, Optional
-
 
 import torch
 from torch import nn, Tensor
 
 from torchvision.utils import _log_api_usage_once
+
+from stalactite.utils import init_linear_np
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +22,13 @@ class MLPBottom(nn.Module):
         dropout: float = 0.0,
         multilabel: bool = True,
         init_weights: float = None,
-        class_weights: torch.Tensor = None
+        class_weights: torch.Tensor = None,
+        seed: int = None,
     ) -> None:
 
         super().__init__()
         _log_api_usage_once(self)
-
+        self.seed = seed
         if multilabel:
             self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
 
@@ -48,8 +49,7 @@ class MLPBottom(nn.Module):
                 if init_weights:
                     nn.init.constant_(m.weight, init_weights)
                 else:
-                    init_range = 1.0 / math.sqrt(m.out_features)
-                    nn.init.uniform_(m.weight, -init_range, init_range)
+                    init_linear_np(m, seed=self.seed)
                 nn.init.zeros_(m.bias)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
