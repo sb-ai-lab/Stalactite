@@ -98,7 +98,7 @@ class DataConfig(BaseModel):
         default=0,
         description="Experiment data random seed (including random, numpy, torch)"
     )
-    dataset_size: int = Field(default=int(1e10), description="Number of dataset rows to use")
+    dataset_size: int = Field(default=100, description="Number of dataset rows to use")
     host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
     dataset: Literal[
         'mnist', 'sbol', 'sbol_smm', 'home_credit', 'home_credit_bureau_pos', 'avito', 'avito_texts_images'] = Field(
