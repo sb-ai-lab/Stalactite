@@ -1,11 +1,9 @@
 import functools
 
-batch_search_space = {"batch_size": [512, 1024]}
-
 search_space = {
     "logreg":
         {
-            "batch_size": {"type": "cat", "args": [1024, 2048]}, #32, 64, 128, 256, 512, , 4096
+            "batch_size": {"type": "cat", "args": [512, 1024, 2048]}, #32, 64, 128, 256, 512, , 4096
             "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
             "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
         }
