@@ -43,7 +43,7 @@ def load_processors(config: VFLConfig):
     """
     if config.data.dataset.lower() == "mnist":
 
-        binary = False if config.vfl_model.vfl_model_name == "efficientnet" else True
+        binary = False if config.vfl_model.vfl_model_name in ["efficientnet", "logreg"] else True
 
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
             load_mnist(config.data.host_path_data_dir, config.common.world_size, binary=binary)
@@ -97,6 +97,8 @@ def run(config_path: Optional[str] = None):
 
     config = VFLConfig.load_and_validate(config_path)
     master_processor, processors = load_processors(config)
+    if config.data.dataset_size == -1:
+        config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
 
     with reporting(config):
         shared_party_info = dict()
