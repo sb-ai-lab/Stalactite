@@ -20,7 +20,7 @@ vfl_model:
 
 data:
   random_seed: 0
-  dataset_size: 5000
+#  dataset_size: 5000
   dataset: 'mnist'
   use_smm: False
   host_path_data_dir:  /opt/airflow/data/mnist_vfl_parts

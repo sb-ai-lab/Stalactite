@@ -526,7 +526,7 @@ def build_single_mode_dag(dag_id: str,
 #                       world_sizes=[2, 3, 4])
 
 mnist_dag_logreg = build_dag(dag_id="mnist_dag_logreg", model_names=["logreg"], dataset_name="mnist",
-                             world_sizes=[2], n_trials=5)
+                             world_sizes=[2], n_trials=3)
 
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
 #                             dataset_name="home_credit_bureau_pos", world_sizes=[3])
