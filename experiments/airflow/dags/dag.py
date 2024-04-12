@@ -1,7 +1,8 @@
 import os
+import random
 import sys
 import pickle
-
+import uuid
 from typing import List
 import sys
 import logging
@@ -20,6 +21,8 @@ from typing import Optional
 import datasets
 import mlflow
 import optuna
+from optuna.study import MaxTrialsCallback
+from optuna.trial import TrialState
 
 from stalactite.ml import (
     HonestPartyMasterLinRegConsequently,
@@ -49,7 +52,8 @@ from stalactite.configs import VFLConfig
 from utils.prepare_mnist import load_data as load_mnist
 from utils.prepare_sbol_smm import load_data as load_sbol
 from utils.prepare_home_credit import load_data as load_home_credit
-from utils.utils import suggest_params, rsetattr
+from utils.utils import (suggest_params, rsetattr, change_master_model_param, change_member_model_param,
+                         compute_hidden_layers)
 
 
 formatter = logging.Formatter(
@@ -95,7 +99,7 @@ def make_data_preparation(config: VFLConfig):
 
 
 @task
-def get_processor(config: VFLConfig, processors_dict_path: str):
+def dump_processor(config: VFLConfig, processors_dict_path: str):
     dataset = {}
     for m in range(config.common.world_size):
         dataset[m] = datasets.load_from_disk(
@@ -226,10 +230,27 @@ def run(config: VFLConfig):
 def objective_func(trial, config):
     processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
     processors, master_processor = load_processors(processors_path)
-
+    if config.data.dataset_size == -1:
+        config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
     suggested_params = suggest_params(trial=trial, config=config)
+
     for param_name, param_val in suggested_params.items():
+        if param_name in ["batch_size", "learning_rate", "weight_decay"]:
             rsetattr(config, f"vfl_model.{param_name}", param_val)
+        elif param_name == "dropout":
+            change_member_model_param(config=config, model_param_name=param_name, new_value=param_val)
+
+        elif param_name == "first_hidden_coef":
+            assert type(suggested_params["layers_num"]) is int
+            hidden_layers = compute_hidden_layers(config=config, suggested_params=suggested_params, param_val=param_val)
+            change_member_model_param(config=config, model_param_name="hidden_channels", new_value=hidden_layers)
+            change_master_model_param(config=config, model_param_name="input_dim", new_value=hidden_layers[-1])
+
+        else:
+            ValueError(f"Unsupported param type: {param_name}")
+
+    # for param_name, param_val in suggested_params.items():
+    #         rsetattr(config, f"vfl_model.{param_name}", param_val)
     with reporting(config):
         shared_party_info = dict()
         if 'logreg' in config.vfl_model.vfl_model_name:
@@ -323,10 +344,14 @@ def objective_func(trial, config):
         run_local_agents(
             master=master, members=members, target_master_func=local_master_main, target_member_func=local_member_main
         )
-    runs = mlflow.search_runs(experiment_names=["airflow"])
-    metrics_name = "metrics.test_roc_auc_macro" #todo: determine optimization metrics
-    metrics = runs.iloc[0][metrics_name]
-    return metrics
+
+        # current_run = mlflow.active_run()
+        # metrics_name = "metrics.test_roc_auc_macro"
+        # runs = mlflow.search_runs(experiment_names=["airflow"])
+        # metric = runs[runs["run_id"] == str(current_run.info.run_id)].iloc[0][metrics_name]
+        metric = random.random() #todo: remove
+
+    return metric
 
 
 def run_opt(config, n_trials: int):
@@ -336,6 +361,18 @@ def run_opt(config, n_trials: int):
     print("Best hyperparameters:", study.best_params)
     print("Best value:", study.best_value)
 
+
+def run_opt_parallel(config, n_trials: int, study_uid: str):
+    study = optuna.create_study(direction="maximize",
+                                study_name=study_uid,
+                                storage="postgresql+psycopg2://dmitriy:dmitriy@postgres2/dmitriy",
+                                load_if_exists=True
+                                )
+    objective = partial(objective_func, config=config)
+    study.optimize(objective, n_trials=n_trials,
+                   callbacks=[MaxTrialsCallback(n_trials, states=(TrialState.COMPLETE,))],)
+    print("Best hyperparameters:", study.best_params)
+    print("Best value:", study.best_value)
 
 @task
 def train_infer_single(config: VFLConfig, processors_dict_path: str):
@@ -402,6 +439,14 @@ def train_opt(config: VFLConfig, n_trials: int):
 
 
 @task
+def train_opt_parallel(config: VFLConfig, n_trials: int, study_uid: str):
+    logger.info(f"train for {config.vfl_model.vfl_model_name}")
+    study_uid = get_study_uuid(model_name="logreg", dataset_name="mnist", world_size=2)
+    run_opt_parallel(config=config, n_trials=n_trials, study_uid=study_uid)
+    logger.info(f"train-opt for model: {config.vfl_model.vfl_model_name} SUCCESS")
+
+
+@task
 def infer(config: VFLConfig):
     logger.info(f"inference for {config.vfl_model.vfl_model_name}")
     run(config=config)
@@ -432,6 +477,19 @@ def get_config(dataset_name: str, model_name: str, is_single: bool = False, memb
 #     config.common.world_size = members
 #     config.data.host_path_data_dir = config.data.host_path_data_dir + str(members)
 #     return config
+@task
+def dump_study_uuid(model_name: str, dataset_name: str, world_size: int):
+    pickle_path = f"/opt/airflow/dags/dags_data/{model_name}_{dataset_name}_{world_size}.pkl"
+    study_uid = str(uuid.uuid4())
+    with open(pickle_path, 'wb') as f:
+        pickle.dump({"uid": study_uid}, f)
+
+
+def get_study_uuid(model_name: str, dataset_name: str, world_size: int):
+    pickle_path = f"/opt/airflow/dags/dags_data/{model_name}_{dataset_name}_{world_size}.pkl"
+    with open(pickle_path, 'rb') as f:
+        data = pickle.load(f)
+    return data["uid"]
 
 
 def build_dag(
@@ -439,7 +497,8 @@ def build_dag(
         model_names: List[str],
         dataset_name: str,
         world_sizes: List[int],
-        n_trials: int = None
+        n_trials: int = None,
+        n_jobs: int = 1,
 ):
     with DAG(
             dag_id=dag_id,
@@ -449,24 +508,45 @@ def build_dag(
     ) as dag:
 
         processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
-
-        data_preparators, tasks = [], []
+        data_preparators, get_processor_tasks, study_uids_task, train_tasks = [], [], [], []
 
         for model_name in model_names:
             for world_size in world_sizes:
                 config = get_config(dataset_name=dataset_name, model_name=model_name, members=world_size,
                                     is_single=False)
                 data_preparators.append(make_data_preparation(config=config))
-                tasks.append(get_processor(config=config, processors_dict_path=processors_path))
+                get_processor_tasks.append(dump_processor(config=config, processors_dict_path=processors_path))
                 # tasks.append(train(config=config))
-                tasks.append(train_opt(config=config, n_trials=n_trials))
+                study_uids_task.append(dump_study_uuid(
+                    model_name=model_name, dataset_name=dataset_name, world_size=world_size)
+                )
+                # study_uid = get_study_uuid(
+                #     model_name=model_name, dataset_name=dataset_name, world_size=world_size
+                # )
 
+                # print(study_uid)
+                # tasks.append(train_opt(config=config, n_trials=n_trials))
+                model_ds_train_tasks = []
+                for job in range(n_jobs):
+                    model_ds_train_tasks.append(
+                        train_opt_parallel(config=config, n_trials=n_trials, study_uid="0")
+                    )
+                train_tasks.append(model_ds_train_tasks)
 
-        chain(*data_preparators)
-        chain(*tasks)
+        seq_num = len(model_names)*len(world_sizes)
+        for i in range(seq_num):
+            if i == seq_num - 1:
+                data_preparators[i] >> get_processor_tasks[i] >> study_uids_task[i] >> train_tasks[i]
+            else:
+                data_preparators[i] >> get_processor_tasks[i] >> study_uids_task[i] >> train_tasks[i] >> data_preparators[i+1]
 
-        data_preparators[-1] >> tasks[0]
+        #
+        # chain(*data_preparators)
+        # chain(*tasks)
+        # # todo: parallel task
+        # data_preparators[-1] >> tasks[0]
 
+    # task_start >> [task_get_users, task_get_posts, task_get_comments, task_get_todos]
     return dag
 
 
@@ -496,7 +576,7 @@ def build_single_mode_dag(dag_id: str,
             for dataset_name in dataset_names_list:
                 config = get_config(dataset_name=dataset_name, model_name=model_name, is_single=True)
                 # save processor
-                tasks.append(get_processor(
+                tasks.append(dump_processor(
                     config=config,
                     processors_dict_path=processors_path))
                 # load processor and do train-infer
@@ -526,7 +606,11 @@ def build_single_mode_dag(dag_id: str,
 #                       world_sizes=[2, 3, 4])
 
 mnist_dag_logreg = build_dag(dag_id="mnist_dag_logreg", model_names=["logreg"], dataset_name="mnist",
-                             world_sizes=[2], n_trials=3)
+                             world_sizes=[2], n_trials=2, n_jobs=2)
+
+mnist_dag_mlp = build_dag(dag_id="mnist_dag_mlp", model_names=["mlp"], dataset_name="mnist",
+                             world_sizes=[2], n_trials=2, n_jobs=2)
+
 
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
 #                             dataset_name="home_credit_bureau_pos", world_sizes=[3])

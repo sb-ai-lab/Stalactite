@@ -1,7 +1,7 @@
 common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 1
+  world_size: 2
   experiment_label: airflow
   reports_export_folder: ../../reports
 
@@ -20,10 +20,10 @@ vfl_model:
 
 data:
   random_seed: 0
-#  dataset_size: 5000
+  dataset_size: 2500
   dataset: 'mnist'
   use_smm: False
-  host_path_data_dir:  /opt/airflow/data/mnist_vfl_parts
+  host_path_data_dir: /opt/airflow/data/mnist_vfl_parts #/opt/airflow/data
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
@@ -48,7 +48,7 @@ prerequisites:
 #  use_arbiter: False
 
 master:
-  run_mlflow: True
+  run_mlflow: False
 #  logging_level: debug
 #  container_host: 0.0.0.0
 #  run_prometheus: False

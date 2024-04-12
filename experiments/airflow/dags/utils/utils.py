@@ -6,9 +6,38 @@ search_space = {
             "batch_size": {"type": "cat", "args": [512, 1024, 2048]}, #32, 64, 128, 256, 512, , 4096
             "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
             "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
-        }
+        },
+    "mlp":
+        {
+            # размер 1 слоя в отношении к размеру входа [0.5-2]
+            # кол-вл слоев [1-3] - равномерно понижать размер
+            # lr
+            # dropuot
+            # weights_decay
+            "first_hidden_coef": {"type": "float", "args": [0.5, 2]},
+            "layers_num": {"type": "int", "args": [1, 3]},
+            "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
+            "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
+            "dropout": {"type": "float", "args": [0.05, 0.2]},
+
+        },
+    "resnet":
+        {
+            # кол-во resnet блоковб
+            # lr
+            # dropuot
+            # weights_decay
+
+
+        },
 }
 
+ds_features_count = {
+    "mnist_2": 28*28/2,
+    "mnist_3": 28*28/3,
+    "mnist_4": 28*28/4,
+    "mnist_5": 28*28/5,
+}
 
 def suggest_params(trial, config):
     suggested_params = {}
@@ -33,3 +62,26 @@ def rgetattr(obj, attr, *args):
     def _getattr(obj, attr):
         return getattr(obj, attr, *args)
     return functools.reduce(_getattr, [obj] + attr.split('.'))
+
+
+def compute_hidden_layers(config, suggested_params, param_val):
+    hidden_layers = []
+    avg_features_count = ds_features_count[f"{config.data.dataset}_{config.common.world_size}"]
+    hidden_layers.append(int(param_val * avg_features_count))
+    if suggested_params["layers_num"] > 1:
+        delta = hidden_layers[0] - config.master.master_model_params["output_dim"]
+        diff = int(delta / suggested_params["layers_num"])
+        for _ in range(suggested_params["layers_num"] - 1):
+            hidden_layers.append(hidden_layers[-1] - diff)
+    return hidden_layers
+
+def change_member_model_param(config, model_param_name, new_value):
+    member_model_params = config.member.member_model_params
+    member_model_params[model_param_name] = new_value
+    rsetattr(config, f"member.member_model_params", member_model_params)
+
+
+def change_master_model_param(config, model_param_name, new_value):
+    master_model_params = config.master.master_model_params
+    master_model_params[model_param_name] = new_value
+    rsetattr(config, f"master.master_model_params", master_model_params)

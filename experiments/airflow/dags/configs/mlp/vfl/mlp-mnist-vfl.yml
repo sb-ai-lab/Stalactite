@@ -1,13 +1,13 @@
 common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 4
+  world_size: 2
   experiment_label: airflow
   reports_export_folder: "../../reports"
 
 vfl_model:
-  epochs: 2
-  batch_size: 2500
+  epochs: 1
+  batch_size: 250
   eval_batch_size: 200
   vfl_model_name: mlp
   is_consequently: False
@@ -25,7 +25,7 @@ prerequisites:
 
 master:
   container_host: 'node16.bdcl'
-  run_mlflow: True
+  run_mlflow: False
   master_model_params: {
     input_dim: 100,
     output_dim: 10,
@@ -36,13 +36,13 @@ master:
 member:
   member_model_params: {
     hidden_channels:[1000, 300, 100],
-    output_dim: 10,
+#    output_dim: 10,
     #    init_weights: 0.005
   }
 
 data:
   random_seed: 0
-  dataset_size: 8500
+  dataset_size: 850
   dataset: 'mnist'
   host_path_data_dir:  /opt/airflow/data/mnist_vfl_parts
   dataset_part_prefix: 'part_'
