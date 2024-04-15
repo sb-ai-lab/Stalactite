@@ -107,7 +107,7 @@ services:
   postgres2:
     image: postgres:13
     ports:
-      - "5433:5432"
+      - "5434:5432"
     environment:
       POSTGRES_USER: dmitriy
       POSTGRES_PASSWORD: dmitriy

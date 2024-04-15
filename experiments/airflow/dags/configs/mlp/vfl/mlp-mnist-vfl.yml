@@ -25,7 +25,7 @@ prerequisites:
 
 master:
   container_host: 'node16.bdcl'
-  run_mlflow: False
+  run_mlflow: True
   master_model_params: {
     input_dim: 100,
     output_dim: 10,
@@ -42,7 +42,7 @@ member:
 
 data:
   random_seed: 0
-  dataset_size: 850
+  dataset_size: 10000
   dataset: 'mnist'
   host_path_data_dir:  /opt/airflow/data/mnist_vfl_parts
   dataset_part_prefix: 'part_'

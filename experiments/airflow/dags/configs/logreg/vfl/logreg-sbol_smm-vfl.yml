@@ -6,8 +6,8 @@ common:
   reports_export_folder: ../../reports
 
 vfl_model:
-  epochs: 1
-  batch_size: 1000
+  epochs: 10
+  batch_size: 100
   eval_batch_size: 200
   vfl_model_name: logreg
   is_consequently: False
@@ -20,10 +20,10 @@ vfl_model:
 
 data:
   random_seed: 0
-  dataset_size: 5000
+  dataset_size: -1
   dataset: 'sbol_smm'
   use_smm: False
-  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample10000_parts
+  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample190439_parts
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split

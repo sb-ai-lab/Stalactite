@@ -238,9 +238,11 @@ def main(data_dir: str, num_rows: int = None):
 
 
 def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, application_only: bool = False):
-    sample = 10_000
+    sample = None #15_000
     parent_dir = os.path.dirname(data_dir_path)
     homecredit_data, bureau, pos = main(data_dir=parent_dir, num_rows=sample)
+    if sample is None:
+        sample = homecredit_data.shape[0]
     scores = ['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']  # add these to other sources and remove from
     other_sources_df = homecredit_data[["SK_ID_CURR", *scores]].copy()
     homecredit_data.drop(scores, axis=1, inplace=True)

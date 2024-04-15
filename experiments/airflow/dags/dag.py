@@ -53,7 +53,7 @@ from utils.prepare_mnist import load_data as load_mnist
 from utils.prepare_sbol_smm import load_data as load_sbol
 from utils.prepare_home_credit import load_data as load_home_credit
 from utils.utils import (suggest_params, rsetattr, change_master_model_param, change_member_model_param,
-                         compute_hidden_layers)
+                         compute_hidden_layers, metrics_to_opt_dict)
 
 
 formatter = logging.Formatter(
@@ -237,6 +237,13 @@ def objective_func(trial, config):
     for param_name, param_val in suggested_params.items():
         if param_name in ["batch_size", "learning_rate", "weight_decay"]:
             rsetattr(config, f"vfl_model.{param_name}", param_val)
+            if param_name == "batch_size":
+                # do eval every 0.2 epoch
+                report_metrics_iteration = config.data.dataset_size // config.vfl_model.batch_size // 5
+                if report_metrics_iteration < 1:
+                    report_metrics_iteration = 1
+                rsetattr(config, f"common.report_train_metrics_iteration", report_metrics_iteration)
+                rsetattr(config, f"common.report_test_metrics_iteration", report_metrics_iteration)
         elif param_name == "dropout":
             change_member_model_param(config=config, model_param_name=param_name, new_value=param_val)
 
@@ -246,8 +253,14 @@ def objective_func(trial, config):
             change_member_model_param(config=config, model_param_name="hidden_channels", new_value=hidden_layers)
             change_master_model_param(config=config, model_param_name="input_dim", new_value=hidden_layers[-1])
 
+        elif param_name == "hidden_factor":
+            assert type(suggested_params["resnet_block_num"]) is int
+            hid_factor = [param_val for _ in range(suggested_params["resnet_block_num"])]
+            change_member_model_param(config=config, model_param_name="hid_factor", new_value=hid_factor)
+        elif param_name in ["layers_num", "resnet_block_num"]:
+            pass
         else:
-            ValueError(f"Unsupported param type: {param_name}")
+            raise ValueError(f"Unsupported param type: {param_name}")
 
     # for param_name, param_val in suggested_params.items():
     #         rsetattr(config, f"vfl_model.{param_name}", param_val)
@@ -345,11 +358,11 @@ def objective_func(trial, config):
             master=master, members=members, target_master_func=local_master_main, target_member_func=local_member_main
         )
 
-        # current_run = mlflow.active_run()
-        # metrics_name = "metrics.test_roc_auc_macro"
-        # runs = mlflow.search_runs(experiment_names=["airflow"])
-        # metric = runs[runs["run_id"] == str(current_run.info.run_id)].iloc[0][metrics_name]
-        metric = random.random() #todo: remove
+        metrics_to_optimize = metrics_to_opt_dict[config.data.dataset]
+        current_run = mlflow.active_run()
+        runs = mlflow.search_runs(experiment_names=["airflow"])
+        metric = runs[runs["run_id"] == str(current_run.info.run_id)].iloc[0][metrics_to_optimize]
+        # metric = random.random() #todo: remove
 
     return metric
 
@@ -439,9 +452,13 @@ def train_opt(config: VFLConfig, n_trials: int):
 
 
 @task
-def train_opt_parallel(config: VFLConfig, n_trials: int, study_uid: str):
+def train_opt_parallel(config: VFLConfig, n_trials: int):
     logger.info(f"train for {config.vfl_model.vfl_model_name}")
-    study_uid = get_study_uuid(model_name="logreg", dataset_name="mnist", world_size=2)
+    study_uid = get_study_uuid(
+        model_name=config.vfl_model.vfl_model_name,
+        dataset_name=config.data.dataset,
+        world_size=config.common.world_size
+    )
     run_opt_parallel(config=config, n_trials=n_trials, study_uid=study_uid)
     logger.info(f"train-opt for model: {config.vfl_model.vfl_model_name} SUCCESS")
 
@@ -510,8 +527,8 @@ def build_dag(
         processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
         data_preparators, get_processor_tasks, study_uids_task, train_tasks = [], [], [], []
 
-        for model_name in model_names:
-            for world_size in world_sizes:
+        for world_size in world_sizes:
+            for model_name in model_names:
                 config = get_config(dataset_name=dataset_name, model_name=model_name, members=world_size,
                                     is_single=False)
                 data_preparators.append(make_data_preparation(config=config))
@@ -520,16 +537,12 @@ def build_dag(
                 study_uids_task.append(dump_study_uuid(
                     model_name=model_name, dataset_name=dataset_name, world_size=world_size)
                 )
-                # study_uid = get_study_uuid(
-                #     model_name=model_name, dataset_name=dataset_name, world_size=world_size
-                # )
 
-                # print(study_uid)
                 # tasks.append(train_opt(config=config, n_trials=n_trials))
                 model_ds_train_tasks = []
                 for job in range(n_jobs):
                     model_ds_train_tasks.append(
-                        train_opt_parallel(config=config, n_trials=n_trials, study_uid="0")
+                        train_opt_parallel(config=config, n_trials=n_trials)
                     )
                 train_tasks.append(model_ds_train_tasks)
 
@@ -540,13 +553,6 @@ def build_dag(
             else:
                 data_preparators[i] >> get_processor_tasks[i] >> study_uids_task[i] >> train_tasks[i] >> data_preparators[i+1]
 
-        #
-        # chain(*data_preparators)
-        # chain(*tasks)
-        # # todo: parallel task
-        # data_preparators[-1] >> tasks[0]
-
-    # task_start >> [task_get_users, task_get_posts, task_get_comments, task_get_todos]
     return dag
 
 
@@ -605,11 +611,33 @@ def build_single_mode_dag(dag_id: str,
 # mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="mnist",
 #                       world_sizes=[2, 3, 4])
 
-mnist_dag_logreg = build_dag(dag_id="mnist_dag_logreg", model_names=["logreg"], dataset_name="mnist",
-                             world_sizes=[2], n_trials=2, n_jobs=2)
+# mnist_dag_logreg = build_dag(dag_id="mnist_dag_logreg", model_names=["logreg"], dataset_name="mnist",
+#                              world_sizes=[2], n_trials=2, n_jobs=2)
+#
+# mnist_dag_mlp = build_dag(dag_id="mnist_dag_mlp", model_names=["mlp"], dataset_name="mnist",
+#                              world_sizes=[2], n_trials=2, n_jobs=2)
+#
+# mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="mnist",
+#                              world_sizes=[2], n_trials=30, n_jobs=10)
+mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp"], dataset_name="mnist",
+                             world_sizes=[2, 3], n_trials=2, n_jobs=2)
 
-mnist_dag_mlp = build_dag(dag_id="mnist_dag_mlp", model_names=["mlp"], dataset_name="mnist",
-                             world_sizes=[2], n_trials=2, n_jobs=2)
+# sbol_smm_dag_logreg = build_dag(dag_id="sbol_smm_dag_logreg", model_names=["logreg"], dataset_name="sbol_smm",
+#                              world_sizes=[2], n_trials=2, n_jobs=2)
+#
+# sbol_smm_dag_mlp = build_dag(dag_id="sbol_smm_dag_mlp", model_names=["mlp"], dataset_name="sbol_smm",
+#                              world_sizes=[2], n_trials=2, n_jobs=2)
+#
+# sbol_smm_dag_resnet = build_dag(dag_id="sbol_smm_dag_resnet", model_names=["resnet"], dataset_name="sbol_smm",
+#                              world_sizes=[2], n_trials=2, n_jobs=2)
+
+sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "resnet"],
+                         dataset_name="sbol_smm", world_sizes=[2], n_trials=30, n_jobs=4)
+
+
+home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
+                            dataset_name="home_credit_bureau_pos", world_sizes=[3], n_trials=30, n_jobs=4)
+
 
 
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],

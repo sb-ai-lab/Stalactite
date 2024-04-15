@@ -70,6 +70,14 @@ def reporting(config: VFLConfig):
             "dataset": config.data.dataset,
 
         }
+        if config.vfl_model.vfl_model_name == "mlp":
+            log_params["hidden_channels"] = config.member.member_model_params["hidden_channels"]
+            log_params["dropout"] = config.member.member_model_params["dropout"]
+
+        if config.vfl_model.vfl_model_name == "resnet":
+            log_params["hid_factor"] = config.member.member_model_params["hid_factor"]
+            log_params["dropout"] = config.member.member_model_params["dropout"]
+
         mlflow.log_params(log_params)
     try:
         yield

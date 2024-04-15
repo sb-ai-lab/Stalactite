@@ -34,11 +34,14 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
     smm_path = os.path.join(os.path.dirname(data_dir_path), "smm")
 
     features_count = 1345
-    sample = 10_000
+    sample = -1 #5_000 #10_000
     seed = 22
 
     # preparing labels
     sbol_labels = pd.read_parquet(os.path.join(sbol_path, "sbol_multilabels.parquet"))
+    if sample == -1:
+        sample = sbol_labels.shape[0] #190439
+
     sbol_labels = sbol_labels.iloc[:sample]
 
     users_train, users_test = train_test_split(

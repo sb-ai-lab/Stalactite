@@ -20,7 +20,7 @@ vfl_model:
 
 data:
   random_seed: 0
-  dataset_size: 2500
+  dataset_size: 10000
   dataset: 'mnist'
   use_smm: False
   host_path_data_dir: /opt/airflow/data/mnist_vfl_parts #/opt/airflow/data
@@ -48,7 +48,7 @@ prerequisites:
 #  use_arbiter: False
 
 master:
-  run_mlflow: False
+  run_mlflow: True
 #  logging_level: debug
 #  container_host: 0.0.0.0
 #  run_prometheus: False
