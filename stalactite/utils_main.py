@@ -26,6 +26,7 @@ BASE_IMAGE_FILE = "grpc-base.dockerfile"
 BASE_IMAGE_FILE_CPU = "grpc-base-cpu.dockerfile"
 BASE_IMAGE_TAG = "grpc-base:latest"
 PREREQUISITES_NETWORK = "prerequisites_vfl-network"  # Do not change this value
+MLFLOW_NETWORK = "stalactite-mlflow_default"
 
 logger = logging.getLogger(__name__)
 logging.getLogger('docker').setLevel(logging.ERROR)
@@ -186,6 +187,30 @@ def create_and_start_container(
     return container
 
 
+def get_mlflow_endpoint(config: VFLConfig) -> str:
+    mlflow_host = config.prerequisites.mlflow_host
+    if mlflow_host in ['0.0.0.0', 'localhost']:
+        logger.info('Searching the MlFlow container locally')
+        client = APIClient()
+        try:
+            container_info = client.inspect_container('stalactite-mlflow-mlflow-vfl-1')
+        except NotFound as exc:
+            logger.error(
+                'Could not find the `stalactite-mlflow-mlflow-vfl-1` container locally. Are you sure, that you have '
+                'started prerequisites group `mlflow` on current machine?'
+            )
+            raise exc
+        try:
+            mlflow_host = container_info['NetworkSettings']['Networks'][MLFLOW_NETWORK]['Gateway']
+        except KeyError:
+            raise ValueError(
+                'MlFlow container does not configured via `stalactite prerequisites`, rerun the command or use'
+                ' host machine IP address in the `config.prerequisites.mlflow_host` configuration parameter'
+            )
+        logger.info(f'Found MlFlow at {mlflow_host}')
+    return mlflow_host
+
+
 def start_distributed_agent(
         config_path: str,
         role: str,
@@ -240,6 +265,7 @@ def start_distributed_agent(
             port_binds = {config.grpc_server.port: config.grpc_server.port}
             ports = [config.grpc_server.port]
             name = ctx.obj["master_container_name"] + ("-predict" if infer else "")
+            env_vars['STALACTITE_MLFLOW_HOST'] = get_mlflow_endpoint(config)
         elif role == Role.arbiter:
             ports = [config.grpc_arbiter.port]
             port_binds = {config.grpc_arbiter.port: config.grpc_arbiter.port}
@@ -362,11 +388,12 @@ def start_multiprocess_agents(
             "--infer",
             "--role", "master"
         ] if is_infer else None
+
         create_and_start_container(
             client=client,
             image=BASE_IMAGE_TAG,
             container_label=container_label,
-            environment={"GRPC_ARBITER_HOST": grpc_arbiter_host},
+            environment={"GRPC_ARBITER_HOST": grpc_arbiter_host, 'STALACTITE_MLFLOW_HOST': get_mlflow_endpoint(config)},
             volumes=volumes,
             host_config=mounts_host_config,
             network_config=networking_config,
