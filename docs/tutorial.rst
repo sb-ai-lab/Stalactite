@@ -19,5 +19,7 @@ And to launch distributed multinode or multiprocess experiment go to :ref:`distr
     tutorials/local_communicator_tutorial
     tutorials/distr_communicator_tutorial
     tutorials/inference_tutorial
+    tutorials/batching_tutorial
+
 
 

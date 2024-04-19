@@ -4,6 +4,7 @@ common:
   world_size: 2
   experiment_label: experiment-efficientnet-mnist-local
   reports_export_folder: "../../reports"
+  seed: 22
 
 vfl_model:
   epochs: 1

@@ -25,6 +25,7 @@ from stalactite.configs import VFLConfig
 from examples.utils.prepare_mnist import load_data as load_mnist
 from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
 from stalactite.helpers import reporting, run_local_agents
+from stalactite.utils import seed_all
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -43,10 +44,12 @@ def load_processors(config: VFLConfig):
     """
     if config.data.dataset.lower() == "mnist":
 
-        binary = False if config.vfl_model.vfl_model_name == "efficientnet" else True
+        binary = False if config.vfl_model.vfl_model_name in ["efficientnet", "logreg"] else True
 
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_mnist(config.data.host_path_data_dir, config.common.world_size, binary=binary)
+            load_mnist(
+                save_path=Path(config.data.host_path_data_dir), parts_num=config.common.world_size, binary=binary
+            )
 
         dataset = {}
         for m in range(config.common.world_size):
@@ -96,7 +99,10 @@ def run(config_path: Optional[str] = None):
         )
 
     config = VFLConfig.load_and_validate(config_path)
+    seed_all(config.common.seed)
     master_processor, processors = load_processors(config)
+    if config.data.dataset_size == -1:
+        config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
 
     with reporting(config):
         shared_party_info = dict()
@@ -134,7 +140,8 @@ def run(config_path: Optional[str] = None):
             do_predict=config.vfl_model.do_predict,
             model_name=config.vfl_model.vfl_model_name if
             config.vfl_model.vfl_model_name in ["resnet", "mlp", "efficientnet"] else None,
-            model_params=config.master.master_model_params
+            model_params=config.master.master_model_params,
+            seed=config.common.seed
         )
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
@@ -158,7 +165,8 @@ def run(config_path: Optional[str] = None):
                 do_save_model=config.vfl_model.do_save_model,
                 model_path=config.vfl_model.vfl_model_path,
                 model_params=config.member.member_model_params,
-                use_inner_join=True if member_rank == 0 else False
+                use_inner_join=True if member_rank == 0 else False,
+                seed=config.common.seed
 
             )
             for member_rank, member_uid in enumerate(member_ids)

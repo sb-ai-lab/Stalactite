@@ -116,11 +116,8 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
                 participating_members=titer.participating_members,
             )
 
-            ordered_gather = sorted(party.gather(update_predict_tasks, recv_results=True),
-                                    key=lambda x: int(x.from_id.split('-')[-1]))
-
             party_members_predictions = [
-                task.result for task in ordered_gather
+                task.result for task in party.gather(update_predict_tasks, recv_results=True)
             ]
 
             agg_members_predictions = self.aggregate(titer.participating_members, party_members_predictions)
@@ -147,9 +144,9 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
                     participating_members=titer.participating_members,
                 )
 
-                ordered_gather = sorted(party.gather(predict_tasks, recv_results=True),
-                                        key=lambda x: int(x.from_id.split('-')[-1]))
-                party_members_predictions = [task.result for task in ordered_gather]
+                party_members_predictions = [
+                    task.result for task in party.gather(predict_tasks, recv_results=True)
+                ]
 
                 agg_members_predictions = self.aggregate(party.members, party_members_predictions, is_infer=True)
                 master_predictions = self.predict(x=agg_members_predictions, use_activation=True)
@@ -170,10 +167,10 @@ class HonestPartyMasterSplitNN(HonestPartyMasterLinReg):
                     method_kwargs=MethodKwargs(other_kwargs={"uids": None, "is_infer": True}),
                     participating_members=titer.participating_members,
                 )
-                ordered_gather = sorted(party.gather(predict_test_tasks, recv_results=True),
-                                        key=lambda x: int(x.from_id.split('-')[-1]))
 
-                party_members_predictions = [task.result for task in ordered_gather]
+                party_members_predictions = [
+                    task.result for task in party.gather(predict_test_tasks, recv_results=True)
+                ]
                 agg_members_predictions = self.aggregate(party.members, party_members_predictions, is_infer=True)
                 master_predictions = self.predict(x=agg_members_predictions, use_activation=True)
                 self.report_metrics(

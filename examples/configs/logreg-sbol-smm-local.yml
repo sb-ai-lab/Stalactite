@@ -13,6 +13,7 @@ vfl_model:
   is_consequently: False
   use_class_weights: True
   learning_rate: 0.05
+  weight_decay: 0.02
   do_train: True
   do_predict: True
   do_save_model: True
