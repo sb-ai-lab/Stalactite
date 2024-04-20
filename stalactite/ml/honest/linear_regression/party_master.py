@@ -36,7 +36,8 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             do_train: bool = True,
             do_predict: bool = False,
             model_name: str = None,
-            model_params: dict = None
+            model_params: dict = None,
+            seed: int = None
     ) -> None:
         """ Initialize PartyMaster.
 
@@ -73,6 +74,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         self._model_name = model_name
         self.aggregated_output = None
         self._model_params = model_params
+        self.seed = seed
 
         self.uid2tensor_idx = None
         self.uid2tensor_idx_test = None

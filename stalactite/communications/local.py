@@ -198,10 +198,11 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
         return tasks
 
     def gather(self, tasks: List[Task], recv_results: bool = False) -> List[Task]:
-        _recv_futures = [
-            RecvFuture(method_name=task.method_name, receive_from_id=task.from_id if not recv_results else task.to_id)
-            for task in tasks
-        ]
+        receive_from_ids, _recv_futures = [], []
+        for task in tasks:
+            rfi = task.from_id if not recv_results else task.to_id
+            receive_from_ids.append(rfi)
+            _recv_futures.append(RecvFuture(method_name=task.method_name, receive_from_id=rfi))
 
         for recv_f in _recv_futures:
             threading.Thread(target=self._get_from_recv, args=(recv_f,), daemon=True).start()
@@ -209,7 +210,12 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
 
         if number_to := len(pending_tasks):
             raise TimeoutError(f"{self.participant.id} could not gather tasks from {number_to} members.")
-        return [task.result() for task in done_tasks]
+
+        results = {}
+        for task in done_tasks:
+            results[task.receive_from_id] = task.result()
+
+        return [results[idx] for idx in receive_from_ids]
 
     def raise_if_not_ready(self):
         """Raise an exception if the communicator was not initialized properly."""

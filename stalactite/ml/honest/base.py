@@ -331,7 +331,8 @@ class HonestPartyMember(PartyMember, ABC):
             do_predict: bool = False,
             do_save_model: bool = False,
             use_inner_join: bool = False,
-            model_params: dict = None
+            model_params: dict = None,
+            seed: int = None
     ) -> None:
         """
         Initialize PartyMemberImpl.
@@ -371,6 +372,7 @@ class HonestPartyMember(PartyMember, ABC):
         self.do_save_model = do_save_model
         self._optimizer = None
         self.use_inner_join = use_inner_join
+        self.seed = seed
 
         if self.is_consequently:
             if self.members is None:

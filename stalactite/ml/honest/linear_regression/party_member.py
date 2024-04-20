@@ -2,12 +2,16 @@ import logging
 import os
 from abc import ABC
 from typing import Optional, Any
+import math
 
 import torch
+from torch import nn
+import numpy as np
 
 from stalactite.base import RecordsBatch, DataTensor
 from stalactite.ml.honest.base import HonestPartyMember
 from stalactite.models import LinearRegressionBatch
+from stalactite.utils import init_linear_np
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,9 @@ class HonestPartyMemberLinReg(HonestPartyMember):
                 input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
                 **self._model_params
             )
+
+            init_linear_np(self._model.linear, seed=self.seed)
+
 
     def initialize_optimizer(self) -> None:
         pass
