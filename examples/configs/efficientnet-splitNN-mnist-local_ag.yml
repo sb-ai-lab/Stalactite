@@ -1,0 +1,53 @@
+common:
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  experiment_label: experiment-efficientnet-mnist-local
+  reports_export_folder: /Users/alexgrig/stalactite_data/reports
+
+vfl_model:
+  epochs: 1
+  batch_size: 250
+  eval_batch_size: 200
+  vfl_model_name: efficientnet
+  is_consequently: False
+  use_class_weights: True
+  learning_rate: 0.01
+  do_train: True
+  do_predict: True
+  do_save_model: True
+  vfl_model_path: /Users/alexgrig/stalactite_data/models/efficientnet_model
+
+
+prerequisites:
+  mlflow_host: '0.0.0.0'
+  mlflow_port: '9876'
+
+master:
+  external_host: '0.0.0.0'
+  run_mlflow: True
+  master_model_params: {
+    input_dim: 128,
+    dropout: 0.2,
+    num_classes: 10,
+    #    init_weights: 0.005
+  }
+
+member:
+  member_model_params: {
+    width_mult: 0.1,
+    depth_mult: 0.1,
+    #    init_weights: 0.005
+  }
+
+data:
+  random_seed: 0
+  dataset_size: 750
+  dataset: 'mnist'
+  host_path_data_dir: ../../data/sber_ds_vfl/mnist_efficientnet_multiclass
+  dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
+  train_split: "train_train" # name of the train split
+  test_split: "train_val" # name of the test split
+  features_key: "image_part_"
+  label_key: "label"
+  uids_key: "image_idx"
