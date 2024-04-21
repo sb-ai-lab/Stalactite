@@ -4,6 +4,7 @@ common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
+  seed: 42
 
 vfl_model:
   epochs: 2

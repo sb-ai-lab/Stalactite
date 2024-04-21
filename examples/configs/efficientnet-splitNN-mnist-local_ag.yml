@@ -22,6 +22,9 @@ vfl_model:
 prerequisites:
   mlflow_host: '0.0.0.0'
   mlflow_port: '9876'
+  prometheus_host: '0.0.0.0'
+  prometheus_port: "9090"
+  grafana_port: "3000"
 
 master:
   external_host: '0.0.0.0'
@@ -44,10 +47,10 @@ data:
   random_seed: 0
   dataset_size: 750
   dataset: 'mnist'
-  host_path_data_dir: ../../data/sber_ds_vfl/mnist_efficientnet_multiclass
+  host_path_data_dir: /Users/alexgrig/stalactite_data/sbol_smm_data/multilabel_sber_sample10000_parts2
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
   features_key: "image_part_"
   label_key: "label"
-  uids_key: "image_idx"
+  uids_key: "user_id"
