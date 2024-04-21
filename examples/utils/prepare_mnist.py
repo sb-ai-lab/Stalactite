@@ -199,6 +199,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     save_path = Path(args.save_path).absolute() / ('mnist_binary38_parts_' + str(args.members_no))
+    save_path.mkdir(parents=True, exist_ok=True)
 
     load_data(save_path, args.members_no)
 
