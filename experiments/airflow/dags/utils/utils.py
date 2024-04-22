@@ -37,6 +37,7 @@ ds_features_count = {
     "mnist_4": 28*28/4,
     "mnist_5": 28*28/5,
     "sbol_smm_2": 1354/2,
+    "sbol_smm_zvuk_3": 1365/3, #1364
     'home_credit_bureau_pos_3': (90 + 15 + 231) / 2
 
 }
@@ -44,6 +45,7 @@ ds_features_count = {
 metrics_to_opt_dict = {
     "mnist": "metrics.test_roc_auc_macro",
     "sbol_smm": "metrics.test_roc_auc_micro",
+    "sbol_smm_zvuk": "metrics.test_roc_auc_micro",
     "home_credit_bureau_pos": "metrics.test_roc_auc_macro",
 }
 

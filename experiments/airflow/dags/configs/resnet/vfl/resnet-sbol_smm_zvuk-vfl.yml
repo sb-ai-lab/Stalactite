@@ -1,0 +1,51 @@
+common:
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 3
+  experiment_label: airflow
+  reports_export_folder: "../../reports"
+
+vfl_model:
+  epochs: 10
+  batch_size: 250
+  eval_batch_size: 200
+  vfl_model_name: resnet
+  is_consequently: False
+  use_class_weights: True
+  learning_rate: 0.2
+  do_train: True
+  do_predict: False
+  do_save_model: False
+  vfl_model_path: ../../saved_models/mlp_model
+
+
+prerequisites:
+  mlflow_host: 'node16.bdcl'
+  mlflow_port: '9876'
+
+master:
+  container_host: 'node16.bdcl'
+  run_mlflow: True
+  master_model_params: {
+    input_dim: 1367,
+    output_dim: 19,
+    use_bn: True,
+    #    init_weights: 0.005
+  }
+
+member:
+  member_model_params: {
+    hid_factor: [1, 1],
+#    init_weights: 0.005
+  }
+
+data:
+  random_seed: 0
+  dataset_size: -1
+  dataset: 'sbol_smm_zvuk'
+  host_path_data_dir: /opt/airflow/data/multilabel_sber_sample190439_parts
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
+  features_key: "features_part_"
+  label_key: "labels"

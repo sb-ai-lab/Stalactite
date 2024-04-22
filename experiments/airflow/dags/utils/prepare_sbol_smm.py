@@ -29,12 +29,15 @@ def split_save_datasets(df, train_users, test_users, columns, postfix_sample, di
     )
 
 
-def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, sbol_only: bool = False):
+def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, sbol_only: bool = False,
+              use_smm: bool = False,):
+
     sbol_path = os.path.join(os.path.dirname(data_dir_path), "sbol")
     smm_path = os.path.join(os.path.dirname(data_dir_path), "smm")
+    zvuk_path = os.path.join(os.path.dirname(data_dir_path), "zvuk")
 
     features_count = 1345
-    sample = -1 #5_000 #10_000
+    sample = -1 #5_000 #10_000 # -1
     seed = 22
 
     # preparing labels
@@ -52,7 +55,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
         logger.info("Save vfl dataset labels part...")
         split_save_datasets(df=sbol_labels, train_users=users_train, test_users=users_test,
                             columns=["user_id", "labels"], postfix_sample=sample, part_postfix="master_part",
-                            dir_name_postfix=2, data_dir_path=data_dir_path)
+                            dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
     # preparing sbol user features
     sbol_user_features = pd.read_parquet(os.path.join(sbol_path, "user_features.parquet"))
@@ -69,7 +72,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
         logger.info("Save vfl dataset part 0...")
         split_save_datasets(df=sbol_user_features, train_users=users_train, test_users=users_test,
                             columns=["user_id", "features_part_0"], postfix_sample=sample, part_postfix="part_0",
-                            dir_name_postfix=2, data_dir_path=data_dir_path)
+                            dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
     else:
         if sbol_only:
@@ -79,7 +82,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
                                 part_postfix="part_0", dir_name_postfix="_sbol_only", data_dir_path=data_dir_path)
 
     # preparing smm user features
-
+    #todo: add sbol + zvuk
     smm_user_factors = pd.read_parquet(os.path.join(smm_path, "als_user_factors.parquet"))
     # filtering
     smm_user_factors = sbol_labels[["user_id"]].merge(smm_user_factors, on="user_id", how="inner")
@@ -89,7 +92,7 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
         logger.info("Save vfl dataset part 1...")
         split_save_datasets(df=smm_user_factors, train_users=users_train, test_users=users_test,
                             columns=["user_id", "features_part_1"], postfix_sample=sample, part_postfix="part_1",
-                            dir_name_postfix=2, data_dir_path=data_dir_path)
+                            dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
     else:
         if not sbol_only:
@@ -114,3 +117,15 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
                 df=single_df, train_users=users_train, test_users=users_test,
                 columns=["user_id", "features_part_0", "labels"], postfix_sample=sample, dir_name_postfix="_single",
                 data_dir_path=data_dir_path, part_postfix="part_0")
+
+    if parts_num == 3:
+        # preparing zvuk user features
+        zvuk_user_factors = pd.read_parquet(os.path.join(zvuk_path, "als_user_factors_zvuk.parquet"))
+        # filtering
+        zvuk_user_factors = sbol_labels[["user_id"]].merge(zvuk_user_factors, on="user_id", how="inner")
+        zvuk_user_factors.rename(columns={"user_factors": "features_part_2"}, inplace=True)
+
+        logger.info("Save vfl dataset part 2...")
+        split_save_datasets(df=zvuk_user_factors, train_users=users_train, test_users=users_test,
+                            columns=["user_id", "features_part_2"], postfix_sample=sample, part_postfix="part_2",
+                            dir_name_postfix=parts_num, data_dir_path=data_dir_path)

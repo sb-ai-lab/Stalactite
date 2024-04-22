@@ -3,7 +3,7 @@ import random
 import sys
 import pickle
 import uuid
-from typing import List
+from typing import List, Callable
 import sys
 import logging
 
@@ -86,7 +86,7 @@ def make_data_preparation(config: VFLConfig):
         return
     if config.data.dataset.lower() == "mnist":
         load_mnist(config.data.host_path_data_dir, config.common.world_size, binary=False, is_single=is_single)
-    elif config.data.dataset.lower() in ["sbol", "sbol_smm"]:
+    elif config.data.dataset.lower() in ["sbol", "sbol_smm", "sbol_smm_zvuk"]:
         sbol_only = config.data.dataset.lower() == "sbol"
         load_sbol(config.data.host_path_data_dir, config.common.world_size, is_single=is_single, sbol_only=sbol_only)
     elif config.data.dataset.lower() in ["home_credit_bureau_pos", "home_credit"]:
@@ -367,6 +367,45 @@ def objective_func(trial, config):
     return metric
 
 
+def objective_func_single(trial, config):
+    #todo: make similar to obj func
+    processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
+    processors, master_processor = load_processors(processors_path)
+    if config.data.dataset_size == -1:
+        config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
+    suggested_params = suggest_params(trial=trial, config=config)
+
+    with (reporting(config)):
+        if 'logreg' in config.vfl_model.vfl_model_name:
+            if config.data.dataset.lower() == "mnist":
+                single_party_class = PartySingleLogregMulticlass
+
+            elif config.data.dataset.lower() in ["sbol", "sbol_smm", "home_credit_bureau_pos", "home_credit"]:
+                single_party_class = PartySingleLogreg
+            else:
+                raise ValueError(f"unknown dataset: {config.data.dataset.lower()} for logreg model")
+
+        elif "mlp" in config.vfl_model.vfl_model_name:
+            single_party_class = PartySingleMLP
+        elif "resnet" in config.vfl_model.vfl_model_name:
+            single_party_class = PartySingleResNet
+        else:
+            raise ValueError("Unknown vfl model %s" % config.vfl_model.vfl_model_name)
+
+        party = single_party_class(
+            processor=processors[0],
+            batch_size=config.vfl_model.batch_size,
+            epochs=config.vfl_model.epochs,
+            report_train_metrics_iteration=config.common.report_train_metrics_iteration,
+            report_test_metrics_iteration=config.common.report_test_metrics_iteration,
+            use_mlflow=config.master.run_mlflow,
+            target_uids=processors[0].dataset[config.data.train_split][config.data.uids_key][
+                        :config.data.dataset_size],
+            model_params=config.member.member_model_params
+        )
+
+        party.run()
+
 def run_opt(config, n_trials: int):
     study = optuna.create_study(direction="maximize")
     objective = partial(objective_func, config=config)
@@ -375,17 +414,19 @@ def run_opt(config, n_trials: int):
     print("Best value:", study.best_value)
 
 
-def run_opt_parallel(config, n_trials: int, study_uid: str):
+
+def run_opt_parallel(config, n_trials: int, study_uid: str, obj_func: Callable):
     study = optuna.create_study(direction="maximize",
                                 study_name=study_uid,
                                 storage="postgresql+psycopg2://dmitriy:dmitriy@postgres2/dmitriy",
                                 load_if_exists=True
                                 )
-    objective = partial(objective_func, config=config)
+    objective = partial(obj_func, config=config)
     study.optimize(objective, n_trials=n_trials,
                    callbacks=[MaxTrialsCallback(n_trials, states=(TrialState.COMPLETE,))],)
     print("Best hyperparameters:", study.best_params)
     print("Best value:", study.best_value)
+
 
 @task
 def train_infer_single(config: VFLConfig, processors_dict_path: str):
@@ -437,6 +478,7 @@ def run_single(config: VFLConfig, processors_dict_path: str):
         party.run()
 
 
+
 @task
 def train(config: VFLConfig):
     logger.info(f"train for {config.vfl_model.vfl_model_name}")
@@ -452,14 +494,14 @@ def train_opt(config: VFLConfig, n_trials: int):
 
 
 @task
-def train_opt_parallel(config: VFLConfig, n_trials: int):
+def train_opt_parallel(config: VFLConfig, n_trials: int, obj_func: Callable):
     logger.info(f"train for {config.vfl_model.vfl_model_name}")
     study_uid = get_study_uuid(
         model_name=config.vfl_model.vfl_model_name,
         dataset_name=config.data.dataset,
         world_size=config.common.world_size
     )
-    run_opt_parallel(config=config, n_trials=n_trials, study_uid=study_uid)
+    run_opt_parallel(config=config, n_trials=n_trials, study_uid=study_uid, obj_func=obj_func)
     logger.info(f"train-opt for model: {config.vfl_model.vfl_model_name} SUCCESS")
 
 
@@ -542,7 +584,7 @@ def build_dag(
                 model_ds_train_tasks = []
                 for job in range(n_jobs):
                     model_ds_train_tasks.append(
-                        train_opt_parallel(config=config, n_trials=n_trials)
+                        train_opt_parallel(config=config, n_trials=n_trials, obj_func=objective_func)
                     )
                 train_tasks.append(model_ds_train_tasks)
 
@@ -558,7 +600,10 @@ def build_dag(
 
 def build_single_mode_dag(dag_id: str,
                           models_names_list: List,
-                          dataset_names_list: List):
+                          dataset_names_list: List,
+                          n_trials: int = None,
+                          n_jobs: int = 1,
+                          ):
     with DAG(
             dag_id=dag_id,
             schedule=timedelta(days=10086),
@@ -568,32 +613,52 @@ def build_single_mode_dag(dag_id: str,
 
 
         processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
-        data_preparators = []
+        data_preparators, get_processor_tasks, study_uids_task, train_tasks = [], [], [], []
 
         # make data preparation for each dataset, saving preprocessed dataset
-        for dataset_name in set(dataset_names_list):
-            data_preparators.append(make_data_preparation(
-                config=get_config(dataset_name=dataset_name, model_name="logreg", is_single=True))  # model_name here is not matter
-            )
+        # for dataset_name in set(dataset_names_list):
+        #     data_preparators.append(make_data_preparation(
+        #         config=get_config(dataset_name=dataset_name, model_name="logreg", is_single=True))  # model_name here is not matter
+        #     )
 
         # add processor and train-infer for each model
-        tasks = []
+        # tasks = []
         for model_name in models_names_list:
             for dataset_name in dataset_names_list:
+
                 config = get_config(dataset_name=dataset_name, model_name=model_name, is_single=True)
-                # save processor
-                tasks.append(dump_processor(
-                    config=config,
-                    processors_dict_path=processors_path))
-                # load processor and do train-infer
-                tasks.append(train_infer_single(
-                    config=config,
-                    processors_dict_path=processors_path))
+                data_preparators.append(make_data_preparation(config=config))
+                get_processor_tasks.append(dump_processor(config=config, processors_dict_path=processors_path))
+                # tasks.append(train(config=config))
+                study_uids_task.append(dump_study_uuid(
+                    model_name=model_name, dataset_name=dataset_name, world_size=1)
+                )
 
-        chain(*data_preparators)
-        chain(*tasks)
+                model_ds_train_tasks = []
+                for job in range(n_jobs):
+                    model_ds_train_tasks.append(
+                        train_opt_parallel(config=config, n_trials=n_trials, obj_func=objective_func_single)
+                    )
+                train_tasks.append(model_ds_train_tasks)
+                # data_preparators.append(make_data_preparation(config=config))
+                #
+                # config = get_config(dataset_name=dataset_name, model_name=model_name, is_single=True)
+                # # save processor
+                # tasks.append(dump_processor(
+                #     config=config,
+                #     processors_dict_path=processors_path))
+                # # load processor and do train-infer
+                # tasks.append(train_infer_single(
+                #     config=config,
+                #     processors_dict_path=processors_path))
 
-        data_preparators[-1] >> tasks[0]
+        seq_num = len(models_names_list) * len(dataset_names_list)
+        for i in range(seq_num):
+            if i == seq_num - 1:
+                data_preparators[i] >> get_processor_tasks[i] >> study_uids_task[i] >> train_tasks[i]
+            else:
+                data_preparators[i] >> get_processor_tasks[i] >> study_uids_task[i] >> train_tasks[i] >> \
+                data_preparators[i + 1]
 
     return dag
 
@@ -634,11 +699,17 @@ mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp"], dataset
 sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "resnet"],
                          dataset_name="sbol_smm", world_sizes=[2], n_trials=30, n_jobs=4)
 
+sbol_smm_zvuk_dag = build_dag(dag_id="sbol_smm_zvuk_dag", model_names=["logreg", "mlp", "resnet"],
+                         dataset_name="sbol_smm_zvuk", world_sizes=[3], n_trials=30, n_jobs=4)
 
 home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
                             dataset_name="home_credit_bureau_pos", world_sizes=[3], n_trials=30, n_jobs=4)
 
-
+single_dag = build_single_mode_dag(
+    dag_id="single_dag",
+    models_names_list=["logreg"], #, "mlp", "resnet"],
+    dataset_names_list=["sbol"]
+)
 
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
 #                             dataset_name="home_credit_bureau_pos", world_sizes=[3])
