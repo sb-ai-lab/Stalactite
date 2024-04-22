@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 
 from stalactite.models.resnet import ResNetBlock
+from stalactite.utils import init_linear_np
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class ResNetBottom(nn.Module):
         use_noise: bool = False,
         device: torch.device = torch.device("cpu"),
         init_weights: float = None,
+        seed: int = None,
         **kwargs,
     ):
         super(ResNetBottom, self).__init__()
@@ -52,7 +54,7 @@ class ResNetBottom(nn.Module):
             assert (
                 len(drop_rate) == len(hid_factor) and len(drop_rate[0]) == 2
             ), "Wrong number hidden_sizes/drop_rates. Must be equal."
-
+        self.seed = seed
         num_features = input_dim if num_init_features is None else num_init_features
         self.dense0 = nn.Linear(input_dim, num_features) if num_init_features is not None else nn.Identity()
         self.features1 = nn.Sequential(OrderedDict([]))
@@ -75,6 +77,8 @@ class ResNetBottom(nn.Module):
             if isinstance(m, nn.Linear):
                 if init_weights:
                     nn.init.constant_(m.weight, init_weights)
+                else:
+                    init_linear_np(m, seed=self.seed)
                 nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

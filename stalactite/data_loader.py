@@ -60,11 +60,11 @@ class DataPreprocessor:
         self._search_and_fill_preprocessor_params()
         if len(self.preprocessors_params) != 0:
             train_split_data, preprocessors_dict = self._preprocess_split(
-                self.dataset[self.member_id][train_split_key], self.preprocessors_params  # #todo: refactor
+                self.dataset[self.member_id][train_split_key], self.preprocessors_params
             )
             test_split_data, _ = self._preprocess_split(
                 self.dataset[self.member_id][test_split_key],
-                self.preprocessors_params,  # todo: refactor
+                self.preprocessors_params,
                 preprocessors_dict=preprocessors_dict,
             )
 

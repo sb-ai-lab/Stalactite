@@ -5,6 +5,8 @@ from typing import Optional
 import torch
 from torch import nn, Tensor
 
+from stalactite.utils import init_linear_np
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,12 +35,13 @@ class ResNetTop(nn.Module):
         num_init_features: Optional[int] = None,
         use_bn: bool = True,
         init_weights: float = None,
+        seed: int = None,
         **kwargs,
     ):
         super(ResNetTop, self).__init__()
 
         num_features = input_dim if num_init_features is None else num_init_features
-
+        self.seed = seed
         self.features = nn.Sequential(OrderedDict([]))
         if use_bn:
             self.features.add_module("norm", nn.BatchNorm1d(num_features))
@@ -50,6 +53,8 @@ class ResNetTop(nn.Module):
             if isinstance(m, nn.Linear):
                 if init_weights:
                     nn.init.constant_(m.weight, init_weights)
+                else:
+                    init_linear_np(m, seed=self.seed)
                 nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
