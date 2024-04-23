@@ -4,7 +4,7 @@ from torch.optim import SGD
 
 from stalactite.ml.honest.linear_regression.party_member import HonestPartyMemberLinReg
 from stalactite.models import LogisticRegressionBatch
-
+from stalactite.utils import init_linear_np
 
 class HonestPartyMemberLogReg(HonestPartyMemberLinReg):
     def initialize_model_from_params(self, **model_params) -> Any:
@@ -19,6 +19,7 @@ class HonestPartyMemberLogReg(HonestPartyMemberLinReg):
                 input_dim=self._dataset[self._data_params.train_split][self._data_params.features_key].shape[1],
                 **self._model_params
             )
+            init_linear_np(self._model.linear, seed=self.seed)
 
     def initialize_optimizer(self) -> None:
         self._optimizer = SGD([

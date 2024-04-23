@@ -496,6 +496,9 @@ def run_local_experiment(config_path: str, is_infer: bool = False):
         comm.run()
         logger.info("Finishing thread %s" % threading.current_thread().name)
 
+    if config.data.dataset_size == -1:
+        config.data.dataset_size = len(master.target_uids)
+
     with reporting(config):
         run_local_agents(
             master=master,

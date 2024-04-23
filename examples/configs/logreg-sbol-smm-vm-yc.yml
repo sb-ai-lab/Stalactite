@@ -50,6 +50,9 @@ member:
   logging_level: 'info'
   heartbeat_interval: 2.
   sent_task_timout: 3600
+  member_model_params: {
+      output_dim: 19,
+    }
 
 grpc_arbiter:
   use_arbiter: False
