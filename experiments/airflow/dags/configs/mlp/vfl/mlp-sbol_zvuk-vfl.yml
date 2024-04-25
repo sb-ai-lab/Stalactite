@@ -1,18 +1,18 @@
 common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 1
+  world_size: 2
   experiment_label: airflow
   reports_export_folder: "../../reports"
   seed: 22
 
 vfl_model:
-  epochs: 2
-  batch_size: 2500
+  epochs: 1
+  batch_size: 250
   eval_batch_size: 200
-  vfl_model_name: resnet
+  vfl_model_name: mlp
   is_consequently: False
-  use_class_weights: False
+  use_class_weights: True
   learning_rate: 0.2
   do_train: True
   do_predict: False
@@ -26,24 +26,27 @@ prerequisites:
 
 master:
   container_host: 'node16.bdcl'
-  run_mlflow: False
+  run_mlflow: True
+  master_model_params: {
+    input_dim: 100,
+    output_dim: 19,
+    multilabel: True,
+#    init_weights: 0.005
+  }
 
 member:
   member_model_params: {
-    output_dim: 10,
-    use_bn: True,
-    hid_factor: [ 1, 1 ],
-    #    init_weights: 0.005
+    hidden_channels:[1000, 300, 100],
+#    init_weights: 0.005
   }
 
 data:
   random_seed: 0
-  dataset_size: 8500
-  dataset: 'mnist'
-  host_path_data_dir:  /opt/airflow/data/mnist_single
+  dataset_size: 1000
+  dataset: 'sbol_zvuk'
+  host_path_data_dir: /opt/airflow/data/multilabel_sber_sample5000_zvuk_parts
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"
-  features_key: "image_part_"
-  label_key: "label"
-  uids_key: "image_idx"
+  features_key: "features_part_"
+  label_key: "labels"

@@ -101,10 +101,10 @@ class DataConfig(BaseModel):
     dataset_size: int = Field(default=100, description="Number of dataset rows to use")
     host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
     dataset: Literal[
-        'mnist', 'sbol', 'sbol_smm', 'sbol_smm_zvuk', 'home_credit', 'home_credit_bureau_pos', 'avito', 'avito_texts_images',
+        'mnist', 'sbol', 'sbol_smm', 'sbol_zvuk', 'sbol_smm_zvuk', 'home_credit', 'home_credit_bureau_pos', 'avito', 'avito_texts_images',
     ] = Field(
         default='mnist',
-        description='Dataset type. One of `mnist`, `sbol`, `sbol_smm`, `sbol_smm_zvuk`, `home_credit`,  `home_credit_bureau_pos`,'
+        description='Dataset type. One of `mnist`, `sbol`, `sbol_smm`, `sbol_zvuk`, `sbol_smm_zvuk`, `home_credit`,  `home_credit_bureau_pos`,'
                     ' `avito`, `avito_texts_images`'
     )
     dataset_part_prefix: str = Field(default='part_')

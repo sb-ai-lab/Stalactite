@@ -86,9 +86,11 @@ def make_data_preparation(config: VFLConfig):
         return
     if config.data.dataset.lower() == "mnist":
         load_mnist(config.data.host_path_data_dir, config.common.world_size, binary=False, is_single=is_single)
-    elif config.data.dataset.lower() in ["sbol", "sbol_smm", "sbol_smm_zvuk"]:
-        sbol_only = config.data.dataset.lower() == "sbol"
-        load_sbol(config.data.host_path_data_dir, config.common.world_size, is_single=is_single, sbol_only=sbol_only)
+    elif config.data.dataset.lower() in ["sbol", "sbol_smm", "sbol_zvuk", "sbol_smm_zvuk"]:
+        # sbol_only = config.data.dataset.lower() == "sbol"
+        use_smm = True if config.data.dataset.lower() == "sbol_smm" else False
+        load_sbol(data_dir_path=config.data.host_path_data_dir, parts_num=config.common.world_size, use_smm=use_smm,
+                  sample=config.data.dataset_size, seed=config.common.seed)
     elif config.data.dataset.lower() in ["home_credit_bureau_pos", "home_credit"]:
         applications_only = config.data.dataset.lower() == "home_credit"
         load_home_credit(config.data.host_path_data_dir, config.common.world_size, is_single=is_single,
@@ -670,37 +672,20 @@ def build_single_mode_dag(dag_id: str,
 # )
 
 
-# sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="sbol_smm",
-#                          world_sizes=[2])
-#
-# mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="mnist",
-#                       world_sizes=[2, 3, 4])
-
-# mnist_dag_logreg = build_dag(dag_id="mnist_dag_logreg", model_names=["logreg"], dataset_name="mnist",
-#                              world_sizes=[2], n_trials=2, n_jobs=2)
-#
-# mnist_dag_mlp = build_dag(dag_id="mnist_dag_mlp", model_names=["mlp"], dataset_name="mnist",
-#                              world_sizes=[2], n_trials=2, n_jobs=2)
-#
-# mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp", "resnet"], dataset_name="mnist",
-#                              world_sizes=[2], n_trials=30, n_jobs=10)
 mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp"], dataset_name="mnist",
                              world_sizes=[2, 3], n_trials=2, n_jobs=2)
 
-# sbol_smm_dag_logreg = build_dag(dag_id="sbol_smm_dag_logreg", model_names=["logreg"], dataset_name="sbol_smm",
-#                              world_sizes=[2], n_trials=2, n_jobs=2)
-#
-# sbol_smm_dag_mlp = build_dag(dag_id="sbol_smm_dag_mlp", model_names=["mlp"], dataset_name="sbol_smm",
-#                              world_sizes=[2], n_trials=2, n_jobs=2)
-#
-# sbol_smm_dag_resnet = build_dag(dag_id="sbol_smm_dag_resnet", model_names=["resnet"], dataset_name="sbol_smm",
-#                              world_sizes=[2], n_trials=2, n_jobs=2)
 
 sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "resnet"],
                          dataset_name="sbol_smm", world_sizes=[2], n_trials=30, n_jobs=4)
 
+sbol_zvuk_dag = build_dag(dag_id="sbol_zvuk_dag", model_names=["logreg", "mlp", "resnet"],
+                          dataset_name="sbol_zvuk", world_sizes=[2], n_trials=1, n_jobs=1)
+
+
 sbol_smm_zvuk_dag = build_dag(dag_id="sbol_smm_zvuk_dag", model_names=["logreg", "mlp", "resnet"],
                          dataset_name="sbol_smm_zvuk", world_sizes=[3], n_trials=30, n_jobs=4)
+
 
 home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
                             dataset_name="home_credit_bureau_pos", world_sizes=[3], n_trials=30, n_jobs=4)

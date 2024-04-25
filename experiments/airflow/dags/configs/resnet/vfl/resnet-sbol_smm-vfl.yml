@@ -4,6 +4,7 @@ common:
   world_size: 2
   experiment_label: airflow
   reports_export_folder: "../../reports"
+  seed: 22
 
 vfl_model:
   epochs: 10
@@ -43,7 +44,7 @@ data:
   random_seed: 0
   dataset_size: -1
   dataset: 'sbol_smm'
-  host_path_data_dir: /opt/airflow/data/multilabel_sber_sample190439_parts
+  host_path_data_dir: /opt/airflow/data/multilabel_sber_sample190439_smm_parts
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"

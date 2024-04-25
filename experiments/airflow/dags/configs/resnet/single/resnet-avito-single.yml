@@ -4,6 +4,7 @@ common:
   world_size: 1
   experiment_label: airflow
   reports_export_folder: ../../reports
+  seed: 22
 
 vfl_model:
   epochs: 10

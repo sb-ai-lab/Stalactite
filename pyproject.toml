@@ -28,6 +28,9 @@ pydantic = "^2.5.3"
 #tenseal = "^0.3.14"
 phe = "^1.5.0"
 torchsummary = "^1.5.1"
+optuna = "^3.6.1"
+pendulum = "^3.0.0"
+apache-airflow = "^2.9.0"
 
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.59.3"

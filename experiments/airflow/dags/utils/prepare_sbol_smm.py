@@ -4,6 +4,7 @@ import logging
 import pandas as pd
 import datasets
 import numpy as np
+from datasets import DatasetDict
 
 from sklearn.model_selection import train_test_split
 
@@ -29,21 +30,24 @@ def split_save_datasets(df, train_users, test_users, columns, postfix_sample, di
     )
 
 
-def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, sbol_only: bool = False,
-              use_smm: bool = False,):
-
+def load_data(data_dir_path: str, parts_num: int, sample: int, seed: int, use_smm: bool = False):
     sbol_path = os.path.join(os.path.dirname(data_dir_path), "sbol")
     smm_path = os.path.join(os.path.dirname(data_dir_path), "smm")
     zvuk_path = os.path.join(os.path.dirname(data_dir_path), "zvuk")
 
     features_count = 1345
-    sample = -1 #5_000 #10_000 # -1
-    seed = 22
+    # sample = 5_000  #10_000 # -1
+    # seed = 22
+    postfix_sample = sample
+    if parts_num == 2 and use_smm:
+        postfix_sample = f"{sample}_smm"
+    if parts_num == 2 and not use_smm:
+        postfix_sample = f"{sample}_zvuk"
 
     # preparing labels
     sbol_labels = pd.read_parquet(os.path.join(sbol_path, "sbol_multilabels.parquet"))
     if sample == -1:
-        sample = sbol_labels.shape[0] #190439
+        sample = sbol_labels.shape[0]  #190439
 
     sbol_labels = sbol_labels.iloc[:sample]
 
@@ -51,10 +55,10 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
         sbol_labels[["user_id"]], shuffle=True, random_state=seed, test_size=0.15
     )
 
-    if not is_single:
+    if parts_num > 1:
         logger.info("Save vfl dataset labels part...")
         split_save_datasets(df=sbol_labels, train_users=users_train, test_users=users_test,
-                            columns=["user_id", "labels"], postfix_sample=sample, part_postfix="master_part",
+                            columns=["user_id", "labels"], postfix_sample=postfix_sample, part_postfix="master_part",
                             dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
     # preparing sbol user features
@@ -68,64 +72,53 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, s
         lambda x: list(x), axis=1)
     sbol_user_features = sbol_user_features[["user_id", "features_part_0", "labels"]]
 
-    if not is_single:
+    if parts_num == 1:
+        logger.info("Save sbol only dataset for single experiments....")
+        split_save_datasets(df=sbol_user_features, train_users=users_train, test_users=users_test,
+                            columns=["user_id", "features_part_0", "labels"], postfix_sample=postfix_sample,
+                            part_postfix="part_0", dir_name_postfix=parts_num, data_dir_path=data_dir_path)
+    else:
         logger.info("Save vfl dataset part 0...")
         split_save_datasets(df=sbol_user_features, train_users=users_train, test_users=users_test,
-                            columns=["user_id", "features_part_0"], postfix_sample=sample, part_postfix="part_0",
+                            columns=["user_id", "features_part_0"], postfix_sample=postfix_sample, part_postfix="part_0",
                             dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
-    else:
-        if sbol_only:
-            logger.info("Save sbol only dataset for single experiments....")
-            split_save_datasets(df=sbol_user_features, train_users=users_train, test_users=users_test,
-                                columns=["user_id", "features_part_0", "labels"], postfix_sample=sample,
-                                part_postfix="part_0", dir_name_postfix="_sbol_only", data_dir_path=data_dir_path)
-
-    # preparing smm user features
-    #todo: add sbol + zvuk
-    smm_user_factors = pd.read_parquet(os.path.join(smm_path, "als_user_factors.parquet"))
-    # filtering
-    smm_user_factors = sbol_labels[["user_id"]].merge(smm_user_factors, on="user_id", how="inner")
-    smm_user_factors.rename(columns={"user_factors": "features_part_1"}, inplace=True)
-
-    if not is_single:
+    if (parts_num == 2 and use_smm) or parts_num == 3:
+        # preparing smm user features
+        smm_user_factors = pd.read_parquet(os.path.join(smm_path, "als_user_factors.parquet"))
+        # filtering
+        smm_user_factors = sbol_labels[["user_id"]].merge(smm_user_factors, on="user_id", how="inner")
+        smm_user_factors.rename(columns={"user_factors": "features_part_1"}, inplace=True)
         logger.info("Save vfl dataset part 1...")
         split_save_datasets(df=smm_user_factors, train_users=users_train, test_users=users_test,
-                            columns=["user_id", "features_part_1"], postfix_sample=sample, part_postfix="part_1",
+                            columns=["user_id", "features_part_1"], postfix_sample=postfix_sample,
+                            part_postfix="part_1",
                             dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
-    else:
-        if not sbol_only:
-            logger.info("Save dataset for single experiments....")
-            single_df = sbol_user_features.merge(smm_user_factors, on="user_id", how="left")
-            single_df["has_uf"] = ~single_df["features_part_1"].isna()
-            single_df["has_uf"] = single_df["has_uf"].astype(int)
-            single_df["features_part_1"] = single_df.apply(
-                lambda x: np.zeros(10) if x["has_uf"] == 0 else x["features_part_1"], axis=1
-            )
-            single_df["features_part_1"] = single_df.apply(
-                lambda x: np.concatenate((x["features_part_1"], np.array([x["has_uf"]])), axis=0), axis=1)
-
-            single_df["features_part_0"] = single_df.apply(
-                lambda x: np.concatenate(
-                    (x["features_part_0"], x["features_part_1"]), axis=0
-                ), axis=1)
-
-            # single_df = single_df[["user_id", "features_part_0", "labels"]]
-
-            split_save_datasets(
-                df=single_df, train_users=users_train, test_users=users_test,
-                columns=["user_id", "features_part_0", "labels"], postfix_sample=sample, dir_name_postfix="_single",
-                data_dir_path=data_dir_path, part_postfix="part_0")
-
-    if parts_num == 3:
+    if (parts_num == 2 and not use_smm) or parts_num == 3:
         # preparing zvuk user features
         zvuk_user_factors = pd.read_parquet(os.path.join(zvuk_path, "als_user_factors_zvuk.parquet"))
         # filtering
         zvuk_user_factors = sbol_labels[["user_id"]].merge(zvuk_user_factors, on="user_id", how="inner")
-        zvuk_user_factors.rename(columns={"user_factors": "features_part_2"}, inplace=True)
+        features_part_number = 2 if parts_num == 3 else 1
 
-        logger.info("Save vfl dataset part 2...")
+        zvuk_user_factors.rename(columns={"user_factors": f"features_part_{features_part_number}"}, inplace=True)
+
+        logger.info(f"Save vfl dataset part {features_part_number}...")
         split_save_datasets(df=zvuk_user_factors, train_users=users_train, test_users=users_test,
-                            columns=["user_id", "features_part_2"], postfix_sample=sample, part_postfix="part_2",
+                            columns=["user_id", f"features_part_{features_part_number}"], postfix_sample=postfix_sample,
+                            part_postfix=f"part_{features_part_number}",
                             dir_name_postfix=parts_num, data_dir_path=data_dir_path)
+
+
+if __name__ == "__main__":
+    # load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/",
+    #           parts_num=1, use_smm=True)
+    ds = datasets.load_from_disk(
+        os.path.join(
+            "/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/multilabel_sber_sample5000_parts3/part_2"
+        )
+    )
+    print(ds["train_val"])
+    print(len(ds["train_val"]["features_part_2"][0]))
+    print(ds["train_val"]["features_part_2"][0][:10])
