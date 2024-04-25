@@ -19,7 +19,7 @@ from stalactite.configs import VFLConfig
 from examples.utils.prepare_mnist import load_data as load_mnist
 from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
 from stalactite.helpers import reporting, run_local_agents
-
+from stalactite.utils import seed_all
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -90,6 +90,7 @@ def run(config_path: Optional[str] = None):
         )
 
     config = VFLConfig.load_and_validate(config_path)
+    seed_all(config.common.seed)
     master_processor, processors = load_processors(config)
 
     with reporting(config):

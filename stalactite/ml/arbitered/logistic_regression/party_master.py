@@ -39,6 +39,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
             do_save_model: bool = False,
             processor=None,
             run_mlflow: bool = False,
+            seed: int = None
 
     ) -> None:
         """ Initialize ArbiteredPartyMasterLinReg.
@@ -78,6 +79,7 @@ class ArbiteredPartyMasterLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMaster
         self.do_predict = do_predict
         self.do_save_model = do_save_model
         self.model_path = model_path
+        self.seed = seed
 
         self.uid2tensor_idx = None
         self.uid2tensor_idx_test = None

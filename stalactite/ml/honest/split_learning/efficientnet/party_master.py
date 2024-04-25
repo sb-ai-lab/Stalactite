@@ -18,7 +18,7 @@ class HonestPartyMasterEfficientNetSplitNN(HonestPartyMasterSplitNN):
 
     def initialize_model(self, do_load_model: bool = False) -> None:
         """ Initialize the model based on the specified model name. """
-        self._model = EfficientNetTop(**self._model_params)
+        self._model = EfficientNetTop(**self._model_params, seed=self.seed)
         class_weights = None if self.class_weights is None else self.class_weights.type(torch.FloatTensor)
         self._criterion = nn.CrossEntropyLoss(weight=class_weights)
         self._activation = nn.Softmax(dim=1)

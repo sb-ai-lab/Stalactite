@@ -55,6 +55,7 @@ class CommonConfig(BaseModel):
         default=Path(__file__).parent, description="Folder for exporting tests` and experiments` reports"
     )
     rendezvous_timeout: float = Field(default=3600, description="Initial agents rendezvous timeout in sec")
+    seed: int = Field(default=42, description="Initial random seed")
     logging_level: Literal["debug", "info", "warning"] = Field(default="info", description="Logging level")
 
     @model_validator(mode="after")
@@ -94,10 +95,6 @@ class VFLModelConfig(BaseModel):
 class DataConfig(BaseModel):
     """Experimental data parameters config."""
 
-    random_seed: int = Field(
-        default=0,
-        description="Experiment data random seed (including random, numpy, torch)"
-    )
     dataset_size: int = Field(default=100, description="Number of dataset rows to use")
     host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
     dataset: Literal[

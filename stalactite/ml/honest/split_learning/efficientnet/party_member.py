@@ -13,7 +13,7 @@ class HonestPartyMemberEfficientNet(HonestPartyMemberLinReg):
         if do_load_model:
             self._model = self.load_model()
         else:
-            self._model = EfficientNetBottom(**self._model_params)
+            self._model = EfficientNetBottom(**self._model_params, seed=self.seed)
 
     def initialize_optimizer(self) -> None:
         self._optimizer = SGD([

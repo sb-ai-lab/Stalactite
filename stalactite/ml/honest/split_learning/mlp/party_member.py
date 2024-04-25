@@ -12,7 +12,7 @@ class HonestPartyMemberMLP(HonestPartyMemberLinReg):
         if do_load_model:
             self._model = self.load_model()
         else:
-            self._model = MLPBottom(input_dim=input_dim, **self._model_params)
+            self._model = MLPBottom(input_dim=input_dim, **self._model_params, seed=self.seed)
 
     def initialize_optimizer(self) -> None:
         self._optimizer = SGD([

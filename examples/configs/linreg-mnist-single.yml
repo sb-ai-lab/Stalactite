@@ -1,7 +1,7 @@
 common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 2
+  world_size: 1
   experiment_label: experiment-mnist-centralized
   reports_export_folder: "../../reports"
 

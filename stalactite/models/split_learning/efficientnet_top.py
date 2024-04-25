@@ -3,10 +3,13 @@ from functools import partial
 from typing import Optional, Sequence, Union, Tuple
 
 import torch
+import numpy as np
 from torch import nn, Tensor
 
 from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig
 from torchvision.utils import _log_api_usage_once
+
+from stalactite.utils import init_linear_np
 
 
 def _efficientnet_conf(
@@ -33,9 +36,10 @@ class EfficientNetTop(nn.Module):
     def __init__(
         self,
         dropout: float = 0.1,
-        input_dim=None,  # todo: get it somewhere
+        input_dim=None,
         num_classes: int = 1000,
-        init_weights: float = None
+        init_weights: float = None,
+        seed: int = None,
 
     ) -> None:
         """
@@ -51,7 +55,7 @@ class EfficientNetTop(nn.Module):
         _log_api_usage_once(self)
 
         self.criterion = torch.nn.CrossEntropyLoss()
-
+        self.seed = seed
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Sequential(
             nn.Dropout(p=dropout, inplace=True),
@@ -63,8 +67,7 @@ class EfficientNetTop(nn.Module):
                 if init_weights:
                     nn.init.constant_(m.weight, init_weights)
                 else:
-                    init_range = 1.0 / math.sqrt(m.out_features)
-                    nn.init.uniform_(m.weight, -init_range, init_range)
+                    init_linear_np(m, seed=self.seed)
                 nn.init.zeros_(m.bias)
 
     def _forward_impl(self, x: Tensor) -> Tensor:

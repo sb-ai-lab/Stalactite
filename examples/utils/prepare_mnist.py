@@ -136,14 +136,13 @@ def save_splitted_dataset(ds_list, path, part_dir_name='part_', clean_dir=False)
         ds.save_to_disk(part_path)
 
 
-def load_data(save_path, parts_num, binary: bool = True, is_single: bool = False):
+def load_data(save_path: Path, parts_num: int, binary: bool = True):
     """
 
     The input is the original MNIST dataset.
     1. Labels filtered and replaced so that the task is binary.
 
     """
-
     make_validation = True
     test_size = 0.15
     stratify_by_column = 'label'
@@ -170,7 +169,7 @@ def load_data(save_path, parts_num, binary: bool = True, is_single: bool = False
     if make_validation:
         train_train, train_val = make_train_val_split(mnist['train'], test_size=test_size,
                                                       stratify_by_column=stratify_by_column, shuffle=shuffle, seed=seed)
-        if not is_single:
+        if parts_num != 1:
 
             train_train_labels = train_train.select_columns(["image_idx", "label"])
             train_val_labels = train_val.select_columns(["image_idx", "label"])
