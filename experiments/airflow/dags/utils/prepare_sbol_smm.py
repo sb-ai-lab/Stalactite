@@ -38,16 +38,17 @@ def load_data(data_dir_path: str, parts_num: int, sample: int, seed: int, use_sm
     features_count = 1345
     # sample = 5_000  #10_000 # -1
     # seed = 22
-    postfix_sample = sample
-    if parts_num == 2 and use_smm:
-        postfix_sample = f"{sample}_smm"
-    if parts_num == 2 and not use_smm:
-        postfix_sample = f"{sample}_zvuk"
 
     # preparing labels
     sbol_labels = pd.read_parquet(os.path.join(sbol_path, "sbol_multilabels.parquet"))
     if sample == -1:
         sample = sbol_labels.shape[0]  #190439
+
+    postfix_sample = sample
+    if parts_num == 2 and use_smm:
+        postfix_sample = f"{sample}_smm"
+    if parts_num == 2 and not use_smm:
+        postfix_sample = f"{sample}_zvuk"
 
     sbol_labels = sbol_labels.iloc[:sample]
 
@@ -112,13 +113,13 @@ def load_data(data_dir_path: str, parts_num: int, sample: int, seed: int, use_sm
 
 
 if __name__ == "__main__":
-    # load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/",
-    #           parts_num=1, use_smm=True)
-    ds = datasets.load_from_disk(
-        os.path.join(
-            "/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/multilabel_sber_sample5000_parts3/part_2"
-        )
-    )
-    print(ds["train_val"])
-    print(len(ds["train_val"]["features_part_2"][0]))
-    print(ds["train_val"]["features_part_2"][0][:10])
+    load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/",
+              parts_num=1, use_smm=True, seed=22, sample=5000)
+    # ds = datasets.load_from_disk(
+    #     os.path.join(
+    #         "/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/multilabel_sber_sample5000_parts3/part_2"
+    #     )
+    # )
+    # print(ds["train_val"])
+    # print(len(ds["train_val"]["features_part_2"][0]))
+    # print(ds["train_val"]["features_part_2"][0][:10])

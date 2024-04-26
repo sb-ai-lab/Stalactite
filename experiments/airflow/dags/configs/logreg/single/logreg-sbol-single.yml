@@ -2,7 +2,7 @@ common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 1
-  experiment_label: airflow
+  experiment_label: airflow2
   reports_export_folder: ../../reports
   seed: 22
 
@@ -14,9 +14,9 @@ vfl_model:
   is_consequently: False
   use_class_weights: True
   learning_rate: 0.2
-  do_train: False
-  do_predict: True
-  do_save_model: True
+  do_train: True
+  do_predict: False
+  do_save_model: False
   vfl_model_path: ../../saved_models/logreg_model
 
 data:
@@ -24,7 +24,7 @@ data:
   dataset_size: 5000
   dataset: 'sbol'
   use_smm: False
-  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample10000_parts_sbol_only
+  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample5000_parts1
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split

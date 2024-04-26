@@ -31,6 +31,7 @@ torchsummary = "^1.5.1"
 optuna = "^3.6.1"
 pendulum = "^3.0.0"
 apache-airflow = "^2.9.0"
+psycopg2-binary = "^2.9.9"
 
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.59.3"

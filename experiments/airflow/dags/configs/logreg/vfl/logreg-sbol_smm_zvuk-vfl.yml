@@ -21,10 +21,10 @@ vfl_model:
 
 data:
   random_seed: 0
-  dataset_size: -1
+  dataset_size: 5000
   dataset: 'sbol_smm_zvuk'
   use_smm: False
-  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample190439_parts
+  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample5000_parts
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split

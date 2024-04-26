@@ -7,7 +7,7 @@ common:
   seed: 22
 
 vfl_model:
-  epochs: 1
+  epochs: 10
   batch_size: 250
   eval_batch_size: 200
   vfl_model_name: mlp
@@ -42,9 +42,9 @@ member:
 
 data:
   random_seed: 0
-  dataset_size: 1000
+  dataset_size: -1
   dataset: 'sbol_zvuk'
-  host_path_data_dir: /opt/airflow/data/multilabel_sber_sample5000_zvuk_parts
+  host_path_data_dir: /opt/airflow/data/multilabel_sber_sample190439_zvuk_parts
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"

@@ -303,7 +303,8 @@ def objective_func(trial, config):
             do_predict=config.vfl_model.do_predict,
             model_name=config.vfl_model.vfl_model_name if
             config.vfl_model.vfl_model_name in ["resnet", "mlp", "efficientnet"] else None,
-            model_params=config.master.master_model_params
+            model_params=config.master.master_model_params,
+            seed=config.common.seed
         )
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
@@ -328,7 +329,8 @@ def objective_func(trial, config):
                 do_save_model=config.vfl_model.do_save_model,
                 model_path=config.vfl_model.vfl_model_path,
                 model_params=config.member.member_model_params,
-                use_inner_join=True if member_rank == 0 else False
+                use_inner_join=True if member_rank == 0 else False,
+                seed=config.common.seed
 
             )
             for member_rank, member_uid in enumerate(member_ids)
@@ -376,6 +378,34 @@ def objective_func_single(trial, config):
     if config.data.dataset_size == -1:
         config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
     suggested_params = suggest_params(trial=trial, config=config)
+    # todo: revise it
+    for param_name, param_val in suggested_params.items():
+        if param_name in ["batch_size", "learning_rate", "weight_decay"]:
+            rsetattr(config, f"vfl_model.{param_name}", param_val)
+            if param_name == "batch_size":
+                # do eval every 0.2 epoch
+                report_metrics_iteration = config.data.dataset_size // config.vfl_model.batch_size // 5
+                if report_metrics_iteration < 1:
+                    report_metrics_iteration = 1
+                rsetattr(config, f"common.report_train_metrics_iteration", report_metrics_iteration)
+                rsetattr(config, f"common.report_test_metrics_iteration", report_metrics_iteration)
+        elif param_name == "dropout":
+            change_member_model_param(config=config, model_param_name=param_name, new_value=param_val)
+
+        elif param_name == "first_hidden_coef":
+            assert type(suggested_params["layers_num"]) is int
+            hidden_layers = compute_hidden_layers(config=config, suggested_params=suggested_params, param_val=param_val)
+            change_member_model_param(config=config, model_param_name="hidden_channels", new_value=hidden_layers)
+            change_master_model_param(config=config, model_param_name="input_dim", new_value=hidden_layers[-1])
+
+        elif param_name == "hidden_factor":
+            assert type(suggested_params["resnet_block_num"]) is int
+            hid_factor = [param_val for _ in range(suggested_params["resnet_block_num"])]
+            change_member_model_param(config=config, model_param_name="hid_factor", new_value=hid_factor)
+        elif param_name in ["layers_num", "resnet_block_num"]:
+            pass
+        else:
+            raise ValueError(f"Unsupported param type: {param_name}")
 
     with (reporting(config)):
         if 'logreg' in config.vfl_model.vfl_model_name:
@@ -407,6 +437,12 @@ def objective_func_single(trial, config):
         )
 
         party.run()
+
+        metrics_to_optimize = metrics_to_opt_dict[config.data.dataset]
+        current_run = mlflow.active_run()
+        runs = mlflow.search_runs(experiment_names=["airflow2"])
+        metric = runs[runs["run_id"] == str(current_run.info.run_id)].iloc[0][metrics_to_optimize]
+        return metric
 
 def run_opt(config, n_trials: int):
     study = optuna.create_study(direction="maximize")
@@ -613,7 +649,6 @@ def build_single_mode_dag(dag_id: str,
             catchup=False,
     ) as dag:
 
-
         processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
         data_preparators, get_processor_tasks, study_uids_task, train_tasks = [], [], [], []
 
@@ -680,7 +715,7 @@ sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "r
                          dataset_name="sbol_smm", world_sizes=[2], n_trials=30, n_jobs=4)
 
 sbol_zvuk_dag = build_dag(dag_id="sbol_zvuk_dag", model_names=["logreg", "mlp", "resnet"],
-                          dataset_name="sbol_zvuk", world_sizes=[2], n_trials=1, n_jobs=1)
+                          dataset_name="sbol_zvuk", world_sizes=[2], n_trials=30, n_jobs=4)
 
 
 sbol_smm_zvuk_dag = build_dag(dag_id="sbol_smm_zvuk_dag", model_names=["logreg", "mlp", "resnet"],
@@ -690,10 +725,10 @@ sbol_smm_zvuk_dag = build_dag(dag_id="sbol_smm_zvuk_dag", model_names=["logreg",
 home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
                             dataset_name="home_credit_bureau_pos", world_sizes=[3], n_trials=30, n_jobs=4)
 
-single_dag = build_single_mode_dag(
-    dag_id="single_dag",
-    models_names_list=["logreg"], #, "mlp", "resnet"],
-    dataset_names_list=["sbol"]
+single_sbol_dag = build_single_mode_dag(
+    dag_id="single_sbol_dag",
+    models_names_list=["logreg", "mlp", "resnet"],
+    dataset_names_list=["sbol"], n_trials=4, n_jobs=2
 )
 
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
