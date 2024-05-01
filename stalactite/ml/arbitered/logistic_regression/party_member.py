@@ -33,6 +33,7 @@ class ArbiteredPartyMemberLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMember
             do_save_model: bool = False,
             processor=None,
             use_inner_join: bool = True,
+            seed: int = None
     ) -> None:
         self.id = uid
         self.epochs = epochs
@@ -52,6 +53,7 @@ class ArbiteredPartyMemberLogReg(ArbiteredPartyAgentLogReg, ArbiteredPartyMember
         self.do_save_model = do_save_model
         self.model_path = model_path
         self.use_inner_join = use_inner_join
+        self.seed = seed
 
     def predict_partial(self, uids: RecordsBatch) -> DataTensor:
         logger.info(f'{self.id} makes partial predictions')

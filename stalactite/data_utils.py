@@ -3,6 +3,7 @@ from stalactite.base import PartyMaster, PartyMember
 from stalactite.ml.arbitered.base import PartyArbiter
 from stalactite.ml import (
     HonestPartyMasterLinReg,
+    HonestPartyMasterLinRegConsequently,
     HonestPartyMemberLogReg,
     HonestPartyMemberResNet,
     HonestPartyMemberEfficientNet,
@@ -32,6 +33,8 @@ def get_party_master(config_path: str, is_infer: bool = False) -> PartyMaster:
     if config.grpc_arbiter.use_arbiter:
         master_processor, processors = load_processors_arbitered(config)
         master_processor = master_processor if config.data.dataset.lower() == "sbol_smm" else processors[0]
+        if config.data.dataset_size == -1:
+            config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
         master_class = ArbiteredPartyMasterLogReg
         if config.grpc_arbiter.security_protocol_params is not None:
             if config.grpc_arbiter.security_protocol_params.he_type == 'paillier':
@@ -59,10 +62,13 @@ def get_party_master(config_path: str, is_infer: bool = False) -> PartyMaster:
             do_train=not is_infer,
             do_save_model=config.vfl_model.do_save_model,
             model_path=config.vfl_model.vfl_model_path,
+            seed=config.common.seed
         )
 
     else:
         master_processor, processors = load_processors_honest(config)
+        if config.data.dataset_size == -1:
+            config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
         if 'logreg' in config.vfl_model.vfl_model_name:
             master_class = HonestPartyMasterLogReg
         elif "resnet" in config.vfl_model.vfl_model_name:
@@ -72,7 +78,10 @@ def get_party_master(config_path: str, is_infer: bool = False) -> PartyMaster:
         elif "mlp" in config.vfl_model.vfl_model_name:
             master_class = HonestPartyMasterMLPSplitNN
         else:
-            master_class = HonestPartyMasterLinReg
+            if config.vfl_model.is_consequently:
+                master_class = HonestPartyMasterLinRegConsequently
+            else:
+                master_class = HonestPartyMasterLinReg
         return master_class(
             uid="master",
             epochs=config.vfl_model.epochs,
@@ -90,7 +99,8 @@ def get_party_master(config_path: str, is_infer: bool = False) -> PartyMaster:
             do_train=not is_infer,
             model_name=config.vfl_model.vfl_model_name if
             config.vfl_model.vfl_model_name in ["resnet", "mlp", "efficientnet"] else None,
-            model_params=config.master.master_model_params
+            model_params=config.master.master_model_params,
+            seed=config.common.seed
         )
 
 
@@ -124,7 +134,8 @@ def get_party_member(config_path: str, member_rank: int, is_infer: bool = False)
             do_train=not is_infer,
             do_save_model=config.vfl_model.do_save_model,
             model_path=config.vfl_model.vfl_model_path,
-            use_inner_join=False
+            use_inner_join=False,
+            seed=config.common.seed
         )
 
     else:
@@ -140,6 +151,7 @@ def get_party_member(config_path: str, member_rank: int, is_infer: bool = False)
         else:
             member_class = HonestPartyMemberLinReg
 
+        member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
         return member_class(
             uid=f"member-{member_rank}",
             member_record_uids=processors[member_rank].dataset[config.data.train_split][config.data.uids_key],
@@ -152,13 +164,14 @@ def get_party_member(config_path: str, member_rank: int, is_infer: bool = False)
             report_train_metrics_iteration=config.common.report_train_metrics_iteration,
             report_test_metrics_iteration=config.common.report_test_metrics_iteration,
             is_consequently=config.vfl_model.is_consequently,
-            members=None,
+            members=member_ids if config.vfl_model.is_consequently else None,
             do_predict=is_infer,
             do_train=not is_infer,
             do_save_model=config.vfl_model.do_save_model,
             model_path=config.vfl_model.vfl_model_path,
             model_params=config.member.member_model_params,
-            use_inner_join=True if member_rank == 0 else False
+            use_inner_join=True if member_rank == 0 else False,
+            seed=config.common.seed
         )
 
 

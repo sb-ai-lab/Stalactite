@@ -11,6 +11,7 @@ from stalactite.helpers import reporting, global_logging
 from stalactite.configs import VFLConfig
 from stalactite.ml.arbitered.base import Role
 from stalactite.data_utils import get_party_master, get_party_arbiter, get_party_member
+from stalactite.utils import seed_all
 
 import logging
 
@@ -36,7 +37,7 @@ logging.getLogger('git').setLevel(logging.ERROR)
 def main(config_path, infer, role):
     config = VFLConfig.load_and_validate(config_path)
     global_logging(role=role, config=config)
-
+    seed_all(config.common.seed)
     arbiter_grpc_host = None
     if config.grpc_arbiter.use_arbiter:
         arbiter_grpc_host = os.environ.get("GRPC_ARBITER_HOST", config.grpc_arbiter.external_host)
@@ -61,9 +62,12 @@ def main(config_path, infer, role):
         comm.run()
 
     elif role == Role.master:
+        master = get_party_master(config_path, is_infer=infer)
+        if config.data.dataset_size == -1:
+            config.data.dataset_size = len(master.target_uids)
         with reporting(config):
             comm = GRpcMasterPartyCommunicator(
-                participant=get_party_master(config_path, is_infer=infer),
+                participant=master,
                 world_size=config.common.world_size,
                 port=config.grpc_server.port,
                 server_thread_pool_size=config.grpc_server.server_threadpool_max_workers,
