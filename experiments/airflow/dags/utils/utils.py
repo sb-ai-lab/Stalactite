@@ -1,34 +1,31 @@
 import functools
 
-# search_space = {
-#     "logreg":
-#         {
-#             "batch_size": {"type": "cat", "args": [1024, 2048, 4096]}, #128, 256, 512,
-#             "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
-#             "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
-#         },
-#     "mlp":
-#         {
-#             "batch_size": {"type": "cat", "args": [1024, 2048, 4096]}, #128, 256, 512,
-#             "first_hidden_coef": {"type": "float", "args": [0.5, 2]},
-#             "layers_num": {"type": "int", "args": [1, 3]},
-#             "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
-#             "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
-#             "dropout": {"type": "float", "args": [0.05, 0.2]},
-#         },
-#     "resnet":
-#         {
-#             "batch_size": {"type": "cat", "args": [1024, 2048, 4096]}, #128, 256, 512,
-#             "hidden_factor": {"type": "float", "args": [0.5, 2]},
-#             "resnet_block_num": {"type": "int", "args": [1, 3]},
-#             "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
-#             "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
-#             "dropout": {"type": "float", "args": [0.05, 0.2]},
-#         },
-# }
-
-
-
+search_space = {
+    "logreg":
+        {
+            "batch_size": {"type": "cat", "args": [1024, 2048, 4096]}, #128, 256, 512,
+            "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
+            "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
+        },
+    "mlp":
+        {
+            "batch_size": {"type": "cat", "args": [1024, 2048, 4096]}, #128, 256, 512,
+            "first_hidden_coef": {"type": "float", "args": [0.5, 2]},
+            "layers_num": {"type": "int", "args": [1, 3]},
+            "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
+            "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
+            "dropout": {"type": "float", "args": [0.05, 0.2]},
+        },
+    "resnet":
+        {
+            "batch_size": {"type": "cat", "args": [1024, 2048, 4096]}, #128, 256, 512,
+            "hidden_factor": {"type": "float", "args": [0.5, 2]},
+            "resnet_block_num": {"type": "int", "args": [1, 3]},
+            "learning_rate": {"type": "float", "args": [1e-4, 1e-2]},
+            "weight_decay": {"type": "float", "args": [1e-3, 1e-1]},
+            "dropout": {"type": "float", "args": [0.05, 0.2]},
+        },
+}
 
 
 ds_features_count = {
@@ -40,6 +37,9 @@ ds_features_count = {
     "sbol_smm_2": 1354/2,
     "sbol_zvuk_2": 1354/2,
     "sbol_smm_zvuk_3": 1365/3, #1364
+    'home_credit_1': 90 / 2,
+    'home_credit_bureau_2': (90 + 15 + 1) / 2,
+    'home_credit_pos_2': (90 + 231 + 1) / 2,
     'home_credit_bureau_pos_3': (90 + 15 + 231) / 2
 
 }
@@ -50,6 +50,9 @@ metrics_to_opt_dict = {
     "sbol_smm": "metrics.test_roc_auc_macro",
     "sbol_zvuk": "metrics.test_roc_auc_macro",
     "sbol_smm_zvuk": "metrics.test_roc_auc_macro",
+    "home_credit": "metrics.test_roc_auc_macro",
+    "home_credit_bureau": "metrics.test_roc_auc_macro",
+    "home_credit_pos": "metrics.test_roc_auc_macro",
     "home_credit_bureau_pos": "metrics.test_roc_auc_macro",
 }
 

@@ -237,11 +237,11 @@ def main(data_dir: str, num_rows: int = None):
     return df, bureau, pos
 
 
-def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, application_only: bool = False):
-    sample = None #15_000
+def load_data(data_dir_path: str, parts_num: int, sample: int, seed: int, use_bureau: bool = False):
     parent_dir = os.path.dirname(data_dir_path)
-    homecredit_data, bureau, pos = main(data_dir=parent_dir, num_rows=sample)
-    if sample is None:
+    homecredit_data, bureau, pos = main(data_dir=parent_dir,
+                                        num_rows=sample if sample != -1 else None)
+    if sample == -1:
         sample = homecredit_data.shape[0]
     scores = ['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']  # add these to other sources and remove from
     other_sources_df = homecredit_data[["SK_ID_CURR", *scores]].copy()
@@ -249,104 +249,75 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, a
 
     df_labels = homecredit_data[["SK_ID_CURR", "TARGET"]]
 
+    postfix_sample = sample
+    if parts_num == 2 and use_bureau:
+        postfix_sample = f"{sample}_bureau"
+    if parts_num == 2 and not use_bureau:
+        postfix_sample = f"{sample}_pos"
+
     appid_train, appid_test = train_test_split(
-        df_labels[["SK_ID_CURR"]], shuffle=True, random_state=22, test_size=0.15, stratify=df_labels[["TARGET"]]
+        df_labels[["SK_ID_CURR"]], shuffle=True, random_state=seed, test_size=0.15, stratify=df_labels[["TARGET"]]
     )
 
-    if not is_single:
+    if parts_num > 1:
         logger.info("Save vfl dataset labels part...")
         split_save_datasets(df=df_labels, train_appid=appid_train, test_appid=appid_test,
-                            columns=["SK_ID_CURR", "TARGET"], postfix_sample=sample, part_postfix="master_part",
-                            dir_name_postfix=3, data_dir_path=data_dir_path)
+                            columns=["SK_ID_CURR", "TARGET"], postfix_sample=postfix_sample, part_postfix="master_part",
+                            dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
-    # todo: check target distr in train-test split
     # # preparing applications dataframe
-
     homecredit_data = fillna_func(df=homecredit_data, df_name="Applications")
     cols_to_concat = [c for c in homecredit_data.columns if c not in ["SK_ID_CURR", "TARGET"]]
     homecredit_data["features_part_0"] = homecredit_data[cols_to_concat].apply(
         lambda x: list(x), axis=1)
     homecredit_data = homecredit_data[["SK_ID_CURR", "features_part_0", "TARGET"]]
 
-    if not is_single:
+    if parts_num == 1:
+        logger.info("Save applications only dataset for single experiments....")
+        split_save_datasets(df=homecredit_data, train_appid=appid_train, test_appid=appid_test,
+                            columns=["SK_ID_CURR", "features_part_0", "TARGET"], postfix_sample=postfix_sample,
+                            part_postfix="part_0", dir_name_postfix=parts_num, data_dir_path=data_dir_path)
+
+    else:
         logger.info("Save vfl dataset part 0...")
         split_save_datasets(df=homecredit_data, train_appid=appid_train, test_appid=appid_test,
-                            columns=["SK_ID_CURR", "features_part_0"], postfix_sample=sample, part_postfix="part_0",
-                            dir_name_postfix=3, data_dir_path=data_dir_path)
+                            columns=["SK_ID_CURR", "features_part_0"], postfix_sample=postfix_sample,
+                            part_postfix="part_0", dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
-    else:
-        if application_only:
-            logger.info("Save sbol only dataset for single experiments....")
-            split_save_datasets(df=homecredit_data, train_appid=appid_train, test_appid=appid_test,
-                                columns=["SK_ID_CURR", "features_part_0", "TARGET"], postfix_sample=sample,
-                                part_postfix="part_0", dir_name_postfix="_applications_only",
-                                data_dir_path=data_dir_path)
+    if (parts_num == 2 and use_bureau) or parts_num == 3:
 
-    # preparing bureau dataframe
-    bureau = bureau.merge(other_sources_df, on="SK_ID_CURR", how="left")
-    bureau = fillna_func(df=bureau, df_name="Bureau")
-    cols_to_concat = [c for c in bureau.columns if c not in ["SK_ID_CURR"]]
-    bureau["features_part_1"] = bureau[cols_to_concat].apply(
-        lambda x: list(x), axis=1)
-    bureau = bureau[["SK_ID_CURR", "features_part_1"]]
 
-    if not is_single:
+        # preparing bureau dataframe
+        bureau = bureau.merge(other_sources_df, on="SK_ID_CURR", how="left")
+        bureau = fillna_func(df=bureau, df_name="Bureau")
+        cols_to_concat = [c for c in bureau.columns if c not in ["SK_ID_CURR"]]
+        bureau["features_part_1"] = bureau[cols_to_concat].apply(
+            lambda x: list(x), axis=1)
+        bureau = bureau[["SK_ID_CURR", "features_part_1"]]
         logger.info("Save vfl dataset part 1...")
         split_save_datasets(df=bureau,  train_appid=appid_train, test_appid=appid_test,
-                            columns=["SK_ID_CURR", "features_part_1"], postfix_sample=sample, part_postfix="part_1",
-                            dir_name_postfix=3, data_dir_path=data_dir_path)
+                            columns=["SK_ID_CURR", "features_part_1"], postfix_sample=postfix_sample,
+                            part_postfix="part_1", dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
-    # preparing pos balance dataframe
-    pos = fillna_func(df=pos, df_name="POS Balance")
-    cols_to_concat = [c for c in pos.columns if c not in ["SK_ID_CURR"]]
-    pos["features_part_2"] = pos[cols_to_concat].apply(
-        lambda x: list(x), axis=1)
-    pos = pos[["SK_ID_CURR", "features_part_2"]]
+    if (parts_num == 2 and not use_bureau) or parts_num == 3:
 
-    if not is_single:
-        logger.info("Save vfl dataset part 2...")
+        # preparing pos balance dataframe
+        pos = fillna_func(df=pos, df_name="POS Balance")
+        cols_to_concat = [c for c in pos.columns if c not in ["SK_ID_CURR"]]
+        features_part_number = 2 if parts_num == 3 else 1
+        pos[f"features_part_{features_part_number}"] = pos[cols_to_concat].apply(
+            lambda x: list(x), axis=1)
+        pos = pos[["SK_ID_CURR", f"features_part_{features_part_number}"]]
+
+        logger.info(f"Save vfl dataset part {features_part_number}...")
         split_save_datasets(df=pos, train_appid=appid_train, test_appid=appid_test,
-                            columns=["SK_ID_CURR", "features_part_2"], postfix_sample=sample, part_postfix="part_2",
-                            dir_name_postfix=3, data_dir_path=data_dir_path)
+                            columns=["SK_ID_CURR", f"features_part_{features_part_number}"],
+                            postfix_sample=postfix_sample, part_postfix=f"part_{features_part_number}",
+                            dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
-    else:
-        if not application_only:
-            logger.info("Save dataset for single experiments....")
-            # join bureau
-            single_df = homecredit_data.merge(bureau, on="SK_ID_CURR", how="left")
-            single_df["has_f1"] = ~single_df["features_part_1"].isna()
-            single_df["has_f1"] = single_df["has_f1"].astype(int)
-            fill_shape = len(bureau["features_part_1"][0])
-            single_df["features_part_1"] = single_df.apply(
-                lambda x: np.zeros(fill_shape) if x["has_f1"] == 0 else x["features_part_1"],
-                axis=1
-            )
-            single_df["features_part_1"] = single_df.apply(
-                lambda x: np.concatenate((x["features_part_1"], np.array([x["has_f1"]])), axis=0), axis=1)
 
-            # join pos balance
-            single_df = single_df.merge(pos, on="SK_ID_CURR", how="left")
-            single_df["has_f2"] = ~single_df["features_part_2"].isna()
-            single_df["has_f2"] = single_df["has_f2"].astype(int)
-            fill_shape = len(pos["features_part_2"][0])
-            single_df["features_part_2"] = single_df.apply(
-                lambda x: np.zeros(fill_shape) if x["has_f2"] == 0 else x["features_part_2"],
-                axis=1
-            )
-            single_df["features_part_2"] = single_df.apply(
-                lambda x: np.concatenate((x["features_part_2"], np.array([x["has_f2"]])), axis=0), axis=1)
-
-            single_df["features_part_0"] = single_df.apply(
-                lambda x: np.concatenate(
-                    (x["features_part_0"], x["features_part_1"], x["features_part_2"]), axis=0
-                ), axis=1)
-
-            single_df = single_df[["SK_ID_CURR", "features_part_0", "TARGET"]]
-
-            split_save_datasets(
-                df=single_df, train_appid=appid_train, test_appid=appid_test,
-                columns=["SK_ID_CURR", "features_part_0", "TARGET"], postfix_sample=sample, dir_name_postfix="_single",
-                data_dir_path=data_dir_path, part_postfix="part_0")
-
+if __name__ == "__main__":
+    load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/",
+              parts_num=3, use_bureau=True, seed=22, sample=2000)
 
 # load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/home_credit_sample10000_parts_single")

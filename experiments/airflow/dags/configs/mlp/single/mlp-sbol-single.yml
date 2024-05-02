@@ -2,12 +2,12 @@ common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 1
-  experiment_label: airflow2
+  experiment_label: airflow
   reports_export_folder: ../../reports
   seed: 22
 
 vfl_model:
-  epochs: 2
+  epochs: 10
   batch_size: 1000
   eval_batch_size: 200
   vfl_model_name: mlp
@@ -21,10 +21,10 @@ vfl_model:
 
 data:
   random_seed: 0
-  dataset_size: 5000
+  dataset_size: -1
   dataset: 'sbol'
   use_smm: False
-  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample5000_parts1
+  host_path_data_dir:  /opt/airflow/data/multilabel_sber_sample190439_parts1
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split

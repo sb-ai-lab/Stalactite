@@ -87,14 +87,13 @@ def make_data_preparation(config: VFLConfig):
     if config.data.dataset.lower() == "mnist":
         load_mnist(config.data.host_path_data_dir, config.common.world_size, binary=False, is_single=is_single)
     elif config.data.dataset.lower() in ["sbol", "sbol_smm", "sbol_zvuk", "sbol_smm_zvuk"]:
-        # sbol_only = config.data.dataset.lower() == "sbol"
         use_smm = True if config.data.dataset.lower() == "sbol_smm" else False
         load_sbol(data_dir_path=config.data.host_path_data_dir, parts_num=config.common.world_size, use_smm=use_smm,
                   sample=config.data.dataset_size, seed=config.common.seed)
-    elif config.data.dataset.lower() in ["home_credit_bureau_pos", "home_credit"]:
-        applications_only = config.data.dataset.lower() == "home_credit"
-        load_home_credit(config.data.host_path_data_dir, config.common.world_size, is_single=is_single,
-                         application_only=applications_only)
+    elif config.data.dataset.lower() in ["home_credit_bureau_pos", "home_credit", "home_credit_bureau", "home_credit_pos"]:
+        use_bureau = True if config.data.dataset.lower() == "home_credit_bureau" else False
+        load_home_credit(data_dir_path=config.data.host_path_data_dir, parts_num=config.common.world_size,
+                         use_bureau=use_bureau, sample=config.data.dataset_size, seed=config.common.seed)
     else:
         raise ValueError(f"unknown dataset: {config.data.dataset.lower()}")
     logger.info(f"data preparation SUCCESS")
@@ -376,7 +375,7 @@ def objective_func_single(trial, config):
     processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
     processors, master_processor = load_processors(processors_path)
     if config.data.dataset_size == -1:
-        config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
+        config.data.dataset_size = len(processors[0].dataset[config.data.train_split][config.data.uids_key])
     suggested_params = suggest_params(trial=trial, config=config)
     # todo: revise it
     for param_name, param_val in suggested_params.items():
@@ -440,7 +439,7 @@ def objective_func_single(trial, config):
 
         metrics_to_optimize = metrics_to_opt_dict[config.data.dataset]
         current_run = mlflow.active_run()
-        runs = mlflow.search_runs(experiment_names=["airflow2"])
+        runs = mlflow.search_runs(experiment_names=["airflow"])
         metric = runs[runs["run_id"] == str(current_run.info.run_id)].iloc[0][metrics_to_optimize]
         return metric
 
@@ -560,20 +559,7 @@ def get_config(dataset_name: str, model_name: str, is_single: bool = False, memb
         config.data.host_path_data_dir = config.data.host_path_data_dir + str(members)
     return config
 
-# def get_single_config(dataset_name: str, model_name: str) -> VFLConfig:
-#
-#     config = VFLConfig.load_and_validate(
-#         f"/opt/airflow/dags/configs/{model_name}/single/{model_name}-{dataset_name}-single.yml")
-#
-#     return config
-#
-#
-# def get_vfl_config(dataset_name: str, model_name: str, members: int) -> VFLConfig:
-#
-#     config = VFLConfig.load_and_validate(f"/opt/airflow/dags/configs/{model_name}-{dataset_name}-vfl.yml")
-#     config.common.world_size = members
-#     config.data.host_path_data_dir = config.data.host_path_data_dir + str(members)
-#     return config
+
 @task
 def dump_study_uuid(model_name: str, dataset_name: str, world_size: int):
     pickle_path = f"/opt/airflow/dags/dags_data/{model_name}_{dataset_name}_{world_size}.pkl"
@@ -649,20 +635,13 @@ def build_single_mode_dag(dag_id: str,
             catchup=False,
     ) as dag:
 
-        processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
+        processors_path = "/opt/airflow/dags/dags_data/"
+
         data_preparators, get_processor_tasks, study_uids_task, train_tasks = [], [], [], []
 
-        # make data preparation for each dataset, saving preprocessed dataset
-        # for dataset_name in set(dataset_names_list):
-        #     data_preparators.append(make_data_preparation(
-        #         config=get_config(dataset_name=dataset_name, model_name="logreg", is_single=True))  # model_name here is not matter
-        #     )
-
-        # add processor and train-infer for each model
-        # tasks = []
         for model_name in models_names_list:
             for dataset_name in dataset_names_list:
-
+                "processors_dict.pkl"
                 config = get_config(dataset_name=dataset_name, model_name=model_name, is_single=True)
                 data_preparators.append(make_data_preparation(config=config))
                 get_processor_tasks.append(dump_processor(config=config, processors_dict_path=processors_path))
@@ -725,10 +704,13 @@ sbol_smm_zvuk_dag = build_dag(dag_id="sbol_smm_zvuk_dag", model_names=["logreg",
 home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
                             dataset_name="home_credit_bureau_pos", world_sizes=[3], n_trials=30, n_jobs=4)
 
+single_home_credit_dag = build_single_mode_dag(dag_id="single_home_credit_dag", models_names_list=["logreg", "mlp", "resnet"],
+                            dataset_names_list=["home_credit"], n_trials=2, n_jobs=2)
+
 single_sbol_dag = build_single_mode_dag(
     dag_id="single_sbol_dag",
     models_names_list=["logreg", "mlp", "resnet"],
-    dataset_names_list=["sbol"], n_trials=4, n_jobs=2
+    dataset_names_list=["sbol"], n_trials=30, n_jobs=4
 )
 
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],

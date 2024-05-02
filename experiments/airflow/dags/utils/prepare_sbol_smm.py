@@ -81,8 +81,8 @@ def load_data(data_dir_path: str, parts_num: int, sample: int, seed: int, use_sm
     else:
         logger.info("Save vfl dataset part 0...")
         split_save_datasets(df=sbol_user_features, train_users=users_train, test_users=users_test,
-                            columns=["user_id", "features_part_0"], postfix_sample=postfix_sample, part_postfix="part_0",
-                            dir_name_postfix=parts_num, data_dir_path=data_dir_path)
+                            columns=["user_id", "features_part_0"], postfix_sample=postfix_sample,
+                            part_postfix="part_0", dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
     if (parts_num == 2 and use_smm) or parts_num == 3:
         # preparing smm user features
