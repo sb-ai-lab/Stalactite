@@ -1,0 +1,51 @@
+common:
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  experiment_label: experiment-sbol-smm-logreg-local
+  reports_export_folder: /Users/alexgrig/stalactite_data/reports
+
+vfl_model:
+  epochs: 2
+  batch_size: 250
+  eval_batch_size: 200
+  vfl_model_name: logreg
+  is_consequently: False
+  use_class_weights: True
+  learning_rate: 0.05
+  do_train: True
+  do_predict: True
+  do_save_model: True
+  vfl_model_path: /Users/alexgrig/stalactite_data/models/sbol_logreg_model_local
+
+
+prerequisites:
+  mlflow_host: 0.0.0.0
+  mlflow_port: "5555"
+  prometheus_host: 0.0.0.0
+  prometheus_port: "9090"
+  grafana_port: "3000"
+
+master:
+  external_host: '0.0.0.0'
+  run_mlflow: True
+  run_prometheus: True
+
+member:
+  member_model_params: {
+    init_weights: 0.005,
+    output_dim: 19,
+  }
+
+
+data:
+  random_seed: 0
+  dataset_size: 8500
+  dataset: 'sbol_smm'
+  host_path_data_dir:  /Users/alexgrig/stalactite_data/sbol_smm_data/multilabel_sber_sample10000_parts2
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
+  features_key: "features_part_"
+  label_key: "labels"
+  uids_key: "user_id"

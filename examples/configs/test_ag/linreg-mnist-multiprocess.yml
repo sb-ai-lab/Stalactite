@@ -4,7 +4,7 @@ common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
-  seed: 42
+  seed: 43
 
 vfl_model:
   epochs: 2
@@ -64,7 +64,7 @@ member:
 
 docker:
   docker_compose_command: "docker compose"
-  docker_compose_path: '../../prerequisites'
+  docker_compose_path: '../../../prerequisites'
   use_gpu: False
 
 

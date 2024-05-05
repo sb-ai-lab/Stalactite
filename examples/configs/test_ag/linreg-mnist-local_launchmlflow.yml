@@ -17,14 +17,14 @@ vfl_model:
   do_train: True
   do_predict: True
   do_save_model: True
-  vfl_model_path: /Users/alexgrig/stalactite_data/models/linreg_model_local #../../saved_models/linreg_model
+  vfl_model_path: /home/user1/stalactite_data/models/linreg_model_local #../../saved_models/linreg_model
 
 data:
   random_seed: 0
   dataset_size: 5000
   dataset: 'mnist'
 #  host_path_data_dir:  ../../data/sber_ds_vfl/mnist_binary38_parts2
-  host_path_data_dir:  /Users/alexgrig/stalactite_data/mnist_binary38_parts_3 #../../data/sber_ds_vfl/mnist_test
+  host_path_data_dir:  /home/user1/stalactite_data/mnist_binary38_parts_3 #../../data/sber_ds_vfl/mnist_test
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"
@@ -33,7 +33,7 @@ data:
   uids_key: "image_idx"
 
 prerequisites:
-  mlflow_host: 176.123.161.62 # 0.0.0.0
+  mlflow_host: 172.208.11.130 # 0.0.0.0
   mlflow_port: "5555"
   prometheus_host: 0.0.0.0
   prometheus_port: "9090"
@@ -68,6 +68,6 @@ member:
   sent_task_timout: 3600
 
 docker:
-  docker_compose_path: "../../prerequisites"
+  docker_compose_path: "../../../prerequisites"
   docker_compose_command: "docker compose"
   use_gpu: False

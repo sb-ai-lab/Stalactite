@@ -29,6 +29,8 @@ prerequisites:
 master:
   external_host: '0.0.0.0'
   run_mlflow: True
+  logging_level: debug
+  run_prometheus: True 
   master_model_params: {
     input_dim: 128,
     dropout: 0.2,
@@ -45,12 +47,12 @@ member:
 
 data:
   random_seed: 0
-  dataset_size: 750
+  dataset_size: 1000
   dataset: 'mnist'
-  host_path_data_dir: /Users/alexgrig/stalactite_data/sbol_smm_data/multilabel_sber_sample10000_parts2
+  host_path_data_dir: /Users/alexgrig/stalactite_data/mnist_all_classes_parts_3
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
   features_key: "image_part_"
   label_key: "label"
-  uids_key: "user_id"
+  uids_key: "image_idx"

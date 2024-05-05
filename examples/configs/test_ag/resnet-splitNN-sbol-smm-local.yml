@@ -1,0 +1,54 @@
+common:
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  experiment_label: experiment-resnet-sbol-smm-local
+  reports_export_folder: /Users/alexgrig/stalactite_data/reports
+
+vfl_model:
+  epochs: 2
+  batch_size: 2500
+  eval_batch_size: 2000
+  vfl_model_name: resnet
+  is_consequently: False
+  use_class_weights: False
+  learning_rate: 0.01
+  do_train: True
+  do_predict: False
+  do_save_model: False
+  vfl_model_path: /Users/alexgrig/stalactite_data/models/resnet_model
+
+
+prerequisites:
+  mlflow_host: 0.0.0.0
+  mlflow_port: "5555"
+  prometheus_host: 0.0.0.0
+  prometheus_port: "9090"
+  grafana_port: "3000"
+
+master:
+  external_host: 0.0.0.0
+  run_mlflow: True
+  master_model_params: {
+    input_dim: 1356,
+    output_dim: 19,
+    use_bn: True,
+    #    init_weights: 0.005
+  }
+
+member:
+  member_model_params: {
+    hid_factor: [1, 1],
+#    init_weights: 0.005
+  }
+
+data:
+  random_seed: 0
+  dataset_size: 8500
+  dataset: 'sbol_smm'
+  host_path_data_dir:  /Users/alexgrig/stalactite_data/sbol_smm_data/multilabel_sber_sample10000_parts2
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
+  features_key: "features_part_"
+  label_key: "labels"
