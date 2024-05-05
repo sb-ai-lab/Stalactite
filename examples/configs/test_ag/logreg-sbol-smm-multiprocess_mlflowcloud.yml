@@ -1,0 +1,61 @@
+common:
+  experiment_label: experiment-sbol-smm-logreg-multiprocess_mlflowcloud
+  reports_export_folder: "/Users/alexgrig/stalactite_data/reports"
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+
+vfl_model:
+  epochs: 2
+  batch_size: 1500
+  vfl_model_name: logreg
+  is_consequently: False
+  use_class_weights: False
+  learning_rate: 0.01
+  do_train: True
+  do_predict: True
+  do_save_model: True
+  vfl_model_path: /Users/alexgrig/stalactite_data/models/sbol_logreg_model_local
+
+
+prerequisites:
+  mlflow_host: '176.123.161.62'
+  mlflow_port: '5555'
+  prometheus_host: '0.0.0.0'
+  prometheus_port: '9090'
+  grafana_port: '3001'
+
+data:
+  random_seed: 0
+  dataset_size: 8500
+  dataset: 'sbol_smm'
+  host_path_data_dir: /Users/alexgrig/stalactite_data/sbol_smm_data/multilabel_sber_sample10000_parts2
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
+  features_key: "features_part_"
+  label_key: "labels"
+
+grpc_server:
+  port: '50051'
+  max_message_size: -1
+
+master:
+  external_host: 0.0.0.0
+  run_mlflow: True
+  run_prometheus: True
+  logging_level: 'debug'
+  disconnect_idle_client_time: 120.
+
+member:
+  logging_level: 'debug'
+  heartbeat_interval: 2.
+  member_model_params: {
+    init_weights: 0.005,
+    output_dim: 19,
+  }
+
+
+docker:
+  docker_compose_command: "docker compose"
+  docker_compose_path: '../../prerequisites'

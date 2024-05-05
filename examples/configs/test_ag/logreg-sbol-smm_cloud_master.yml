@@ -1,0 +1,69 @@
+common:
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  experiment_label: experiment-logreg-sbol-smm_distributed_1
+  reports_export_folder: "/home/azureuser/data/stalactite_data/reports"
+  rendezvous_timeout: 3600
+
+vfl_model:
+  epochs: 2
+  batch_size: 1500
+  vfl_model_name: logreg
+  is_consequently: False
+  use_class_weights: False
+  learning_rate: 0.01
+  do_train: True
+  do_predict: True
+  do_save_model: True
+  vfl_model_path: /home/azureuser/data/stalactite_data/sbol_smm_saved_model
+
+
+prerequisites:
+  mlflow_host: '176.123.161.62'
+  mlflow_port: '5555'
+  prometheus_host: comp_cpu1
+  prometheus_port: '9090'
+  grafana_port: '3001'
+
+data:
+  random_seed: 0
+  dataset_size: 8500
+  dataset: 'sbol_smm'
+  host_path_data_dir: /home/azureuser/data/stalactite_data/sbol_smm_data/multilabel_sber_sample10000_parts2
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
+  features_key: "features_part_"
+  label_key: "labels"
+  uids_key: "user_id"
+
+grpc_server:
+  port: '50051'
+  max_message_size: -1
+  server_thread_pool_size: 10
+
+master:
+  external_host: comp_cpu1
+  run_mlflow: True
+  run_prometheus: True
+  logging_level: 'info'
+  disconnect_idle_client_time: 120.
+  time_between_idle_connections_checks: 3.
+
+
+member:
+  logging_level: 'info'
+  heartbeat_interval: 2.
+  sent_task_timout: 3600
+  member_model_params: {
+      output_dim: 19,
+    }
+
+grpc_arbiter:
+  use_arbiter: False
+
+docker:
+  docker_compose_command: "docker compose"
+  docker_compose_path: '../../../prerequisites'
+  use_gpu: False
