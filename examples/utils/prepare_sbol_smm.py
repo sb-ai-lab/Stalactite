@@ -4,6 +4,8 @@ import logging
 import pandas as pd
 import datasets
 import numpy as np
+from pathlib import Path
+import argparse
 
 from sklearn.model_selection import train_test_split
 
@@ -112,3 +114,21 @@ def load_data(data_dir_path: str, parts_num: int = 2, sbol_only: bool = False):
                 df=single_df, train_users=users_train, test_users=users_test,
                 columns=["user_id", "features_part_0", "labels"], postfix_sample=sample, dir_name_postfix="_single",
                 data_dir_path=data_dir_path, part_postfix="part_0")
+            
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Command line params')
+
+    parser.add_argument('--save_path', type=str, default='~/stalactite_data',
+                        help='Path where the splitted data is saved to')
+
+    parser.add_argument('--parts_num', type=int, default=2,
+                        help='Number of parts the data is split to')
+    
+    parser.add_argument('--sbol_only', type=bool, default=False,
+                        help='Whether only sbol data is used.')
+    
+    args = parser.parse_args()
+    save_path = Path(args.save_path).absolute()
+
+    load_data(data_dir_path=save_path, parts_num=args.parts_num, sbol_only=args.sbol_only)
+    print(f"Sbol and Ssm data are saved to: {save_path}")
