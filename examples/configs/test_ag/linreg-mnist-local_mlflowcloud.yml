@@ -2,7 +2,7 @@ common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
-  experiment_label: test-experiment-mnist-local
+  experiment_label: test-experiment-mnist-local_mlflowcloud
   reports_export_folder: /Users/alexgrig/stalactite_data/reports #../../reports
   seed: 42
 

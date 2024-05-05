@@ -1,5 +1,5 @@
 common:
-  experiment_label: test-experiment-mnist-multiprocess_cloudru
+  experiment_label: test-experiment-mnist-multiprocess_cloud
   reports_export_folder: "/Users/alexgrig/stalactite_data/reports"
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
@@ -27,7 +27,7 @@ prerequisites:
 
 data:
   random_seed: 0
-  dataset_size: 1000
+  dataset_size: 3000
   host_path_data_dir: /Users/alexgrig/stalactite_data/mnist_binary38_parts_3 # ../../data/sber_ds_vfl/mnist_binary38_parts2
   dataset: 'mnist'
   dataset_part_prefix: 'part_'
