@@ -555,7 +555,7 @@ def build_single_mode_dag(dag_id: str,
 #                             dataset_name="home_credit_bureau", world_sizes=[2], n_trials=2, n_jobs=2)
 
 
-home_credit_pos_dag = build_dag(dag_id="home_credit_pos_dag", model_names=["logreg", "mlp", "resnet"],
+home_credit_pos_dag = build_dag(dag_id="home_credit_pos_dag", model_names=["resnet"], #"logreg", "mlp",
                             dataset_name="home_credit_pos", world_sizes=[2], n_trials=30, n_jobs=4)
 
 

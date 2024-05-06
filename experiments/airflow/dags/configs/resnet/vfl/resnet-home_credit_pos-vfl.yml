@@ -27,7 +27,7 @@ master:
   container_host: 'node16.bdcl'
   run_mlflow: True
   master_model_params: {
-    input_dim: 247, #?
+    input_dim: 252, #?
     output_dim: 1,
     use_bn: True,
     #    init_weights: 0.005
