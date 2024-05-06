@@ -1,7 +1,7 @@
 common:
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
-  world_size: 3
+  world_size: 2
   experiment_label: airflow
   reports_export_folder: "../../reports"
   seed: 22
@@ -27,7 +27,7 @@ master:
   container_host: 'node16.bdcl'
   run_mlflow: True
   master_model_params: {
-    input_dim: 351, #?
+    input_dim: 322, #?
     output_dim: 1,
     use_bn: True,
     #    init_weights: 0.005
@@ -42,8 +42,8 @@ member:
 data:
   random_seed: 0
   dataset_size: 10000
-  dataset: 'home_credit_bureau_pos'
-  host_path_data_dir:  /opt/airflow/data/home_credit_sample10000_parts
+  dataset: 'home_credit_bureau'
+  host_path_data_dir:  /opt/airflow/data/home_credit_sample10000_bureau_parts
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"

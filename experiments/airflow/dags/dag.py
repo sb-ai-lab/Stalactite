@@ -100,7 +100,16 @@ def make_data_preparation(config: VFLConfig):
 
 
 @task
-def dump_processor(config: VFLConfig, processors_dict_path: str):
+def remove_processor(study_uid_dict: dict):
+    study_uid = study_uid_dict["study_uid"]
+    processors_path = f"/opt/airflow/dags/dags_data/processors_dict_{study_uid}.pkl"
+    os.remove(processors_path)
+
+@task
+def dump_processor(config: VFLConfig, study_uid_dict: dict):
+
+    study_uid = study_uid_dict["study_uid"]
+    processors_path = f"/opt/airflow/dags/dags_data/processors_dict_{study_uid}.pkl"
     dataset = {}
     for m in range(config.common.world_size):
         dataset[m] = datasets.load_from_disk(
@@ -126,110 +135,12 @@ def dump_processor(config: VFLConfig, processors_dict_path: str):
             os.path.join(f"{config.data.host_path_data_dir}/master_part")
         ), member_id=-1, params=config, is_master=True)
 
-    with open(processors_dict_path, 'wb') as f:
+    with open(processors_path, 'wb') as f:
         pickle.dump({"processors": processors, "master_processor": master_processor}, f)
 
 
-def run(config: VFLConfig):
-    processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
-    processors, master_processor = load_processors(processors_path)
-    with reporting(config):
-        shared_party_info = dict()
-        if 'logreg' in config.vfl_model.vfl_model_name:
-            master_class = HonestPartyMasterLogReg
-            member_class = HonestPartyMemberLogReg
-        elif "resnet" in config.vfl_model.vfl_model_name:
-            master_class = HonestPartyMasterResNetSplitNN
-            member_class = HonestPartyMemberResNet
-        elif "efficientnet" in config.vfl_model.vfl_model_name:
-            master_class = HonestPartyMasterEfficientNetSplitNN
-            member_class = HonestPartyMemberEfficientNet
-        elif "mlp" in config.vfl_model.vfl_model_name:
-            master_class = HonestPartyMasterMLPSplitNN
-            member_class = HonestPartyMemberMLP
-        else:
-            member_class = HonestPartyMemberLinReg
-            if config.vfl_model.is_consequently:
-                master_class = HonestPartyMasterLinRegConsequently
-            else:
-                master_class = HonestPartyMasterLinReg
-        master = master_class(
-            uid="master",
-            epochs=config.vfl_model.epochs,
-            report_train_metrics_iteration=config.common.report_train_metrics_iteration,
-            report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-            processor=master_processor,
-            target_uids=master_processor.dataset[config.data.train_split][config.data.uids_key][
-                        :config.data.dataset_size],
-            inference_target_uids=master_processor.dataset[config.data.test_split][config.data.uids_key],
-            batch_size=config.vfl_model.batch_size,
-            eval_batch_size=config.vfl_model.eval_batch_size,
-            model_update_dim_size=0,
-            run_mlflow=config.master.run_mlflow,
-            do_train=config.vfl_model.do_train,
-            do_predict=config.vfl_model.do_predict,
-            model_name=config.vfl_model.vfl_model_name if
-            config.vfl_model.vfl_model_name in ["resnet", "mlp", "efficientnet"] else None,
-            model_params=config.master.master_model_params
-        )
-
-        member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
-
-        members = [
-            member_class(
-                uid=member_uid,
-                member_record_uids=processors[member_rank].dataset[config.data.train_split][config.data.uids_key],
-                member_inference_record_uids=processors[member_rank].dataset[config.data.test_split][
-                    config.data.uids_key],
-                model_name=config.vfl_model.vfl_model_name,
-                processor=processors[member_rank],
-                batch_size=config.vfl_model.batch_size,
-                eval_batch_size=config.vfl_model.eval_batch_size,
-                epochs=config.vfl_model.epochs,
-                report_train_metrics_iteration=config.common.report_train_metrics_iteration,
-                report_test_metrics_iteration=config.common.report_test_metrics_iteration,
-                is_consequently=config.vfl_model.is_consequently,
-                members=member_ids if config.vfl_model.is_consequently else None,
-                do_train=config.vfl_model.do_train,
-                do_predict=config.vfl_model.do_predict,
-                do_save_model=config.vfl_model.do_save_model,
-                model_path=config.vfl_model.vfl_model_path,
-                model_params=config.member.member_model_params,
-                use_inner_join=True if member_rank == 0 else False
-
-            )
-            for member_rank, member_uid in enumerate(member_ids)
-        ]
-
-        def local_master_main():
-            logger.info("Starting thread %s" % threading.current_thread().name)
-            comm = LocalMasterPartyCommunicator(
-                participant=master,
-                world_size=config.common.world_size,
-                shared_party_info=shared_party_info,
-                recv_timeout=config.master.recv_timeout,
-            )
-            comm.run()
-            logger.info("Finishing thread %s" % threading.current_thread().name)
-
-        def local_member_main(member: PartyMember):
-            logger.info("Startinsbol_smmg thread %s" % threading.current_thread().name)
-            comm = LocalMemberPartyCommunicator(
-                participant=member,
-                world_size=config.common.world_size,
-                shared_party_info=shared_party_info,
-                recv_timeout=config.member.recv_timeout,
-            )
-            comm.run()
-            logger.info("Finishing thread %s" % threading.current_thread().name)
-
-        run_local_agents(
-            master=master, members=members, target_master_func=local_master_main, target_member_func=local_member_main
-        )
-
-
-def objective_func(trial, config):
-    processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
+def objective_func(trial, config, study_uid):
+    processors_path = f"/opt/airflow/dags/dags_data/processors_dict_{study_uid}.pkl"
     processors, master_processor = load_processors(processors_path)
     if config.data.dataset_size == -1:
         config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
@@ -370,9 +281,9 @@ def objective_func(trial, config):
     return metric
 
 
-def objective_func_single(trial, config):
+def objective_func_single(trial, config, study_uid):
     #todo: make similar to obj func
-    processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
+    processors_path = f"/opt/airflow/dags/dags_data/processors_dict_{study_uid}.pkl"
     processors, master_processor = load_processors(processors_path)
     if config.data.dataset_size == -1:
         config.data.dataset_size = len(processors[0].dataset[config.data.train_split][config.data.uids_key])
@@ -443,14 +354,6 @@ def objective_func_single(trial, config):
         metric = runs[runs["run_id"] == str(current_run.info.run_id)].iloc[0][metrics_to_optimize]
         return metric
 
-def run_opt(config, n_trials: int):
-    study = optuna.create_study(direction="maximize")
-    objective = partial(objective_func, config=config)
-    study.optimize(objective, n_trials=n_trials)
-    print("Best hyperparameters:", study.best_params)
-    print("Best value:", study.best_value)
-
-
 
 def run_opt_parallel(config, n_trials: int, study_uid: str, obj_func: Callable):
     study = optuna.create_study(direction="maximize",
@@ -458,18 +361,11 @@ def run_opt_parallel(config, n_trials: int, study_uid: str, obj_func: Callable):
                                 storage="postgresql+psycopg2://dmitriy:dmitriy@postgres2/dmitriy",
                                 load_if_exists=True
                                 )
-    objective = partial(obj_func, config=config)
+    objective = partial(obj_func, config=config, study_uid=study_uid)
     study.optimize(objective, n_trials=n_trials,
                    callbacks=[MaxTrialsCallback(n_trials, states=(TrialState.COMPLETE,))],)
     print("Best hyperparameters:", study.best_params)
     print("Best value:", study.best_value)
-
-
-@task
-def train_infer_single(config: VFLConfig, processors_dict_path: str):
-    logger.info(f"train and infer SINGLE for {config.vfl_model.vfl_model_name}")
-    run_single(config=config, processors_dict_path=processors_dict_path)
-    logger.info(f"train and infer SINGLE for: {config.vfl_model.vfl_model_name} SUCCESS")
 
 
 def load_processors(processors_dict_path: str):
@@ -515,38 +411,12 @@ def run_single(config: VFLConfig, processors_dict_path: str):
         party.run()
 
 
-
 @task
-def train(config: VFLConfig):
+def train_opt_parallel(config: VFLConfig, n_trials: int, obj_func: Callable, study_uid_dict: dict):
     logger.info(f"train for {config.vfl_model.vfl_model_name}")
-    run(config=config)
-    logger.info(f"train for model: {config.vfl_model.vfl_model_name} SUCCESS")
-
-
-@task
-def train_opt(config: VFLConfig, n_trials: int):
-    logger.info(f"train for {config.vfl_model.vfl_model_name}")
-    run_opt(config=config, n_trials=n_trials)
-    logger.info(f"train-opt for model: {config.vfl_model.vfl_model_name} SUCCESS")
-
-
-@task
-def train_opt_parallel(config: VFLConfig, n_trials: int, obj_func: Callable):
-    logger.info(f"train for {config.vfl_model.vfl_model_name}")
-    study_uid = get_study_uuid(
-        model_name=config.vfl_model.vfl_model_name,
-        dataset_name=config.data.dataset,
-        world_size=config.common.world_size
-    )
+    study_uid = study_uid_dict["study_uid"]
     run_opt_parallel(config=config, n_trials=n_trials, study_uid=study_uid, obj_func=obj_func)
     logger.info(f"train-opt for model: {config.vfl_model.vfl_model_name} SUCCESS")
-
-
-@task
-def infer(config: VFLConfig):
-    logger.info(f"inference for {config.vfl_model.vfl_model_name}")
-    run(config=config)
-    logger.info(f"inference for model: {config.vfl_model.vfl_model_name} SUCCESS")
 
 
 def get_config(dataset_name: str, model_name: str, is_single: bool = False, members: int = None) -> VFLConfig:
@@ -561,18 +431,9 @@ def get_config(dataset_name: str, model_name: str, is_single: bool = False, memb
 
 
 @task
-def dump_study_uuid(model_name: str, dataset_name: str, world_size: int):
-    pickle_path = f"/opt/airflow/dags/dags_data/{model_name}_{dataset_name}_{world_size}.pkl"
+def get_study_uid():
     study_uid = str(uuid.uuid4())
-    with open(pickle_path, 'wb') as f:
-        pickle.dump({"uid": study_uid}, f)
-
-
-def get_study_uuid(model_name: str, dataset_name: str, world_size: int):
-    pickle_path = f"/opt/airflow/dags/dags_data/{model_name}_{dataset_name}_{world_size}.pkl"
-    with open(pickle_path, 'rb') as f:
-        data = pickle.load(f)
-    return data["uid"]
+    return {"study_uid": study_uid}
 
 
 def build_dag(
@@ -590,34 +451,34 @@ def build_dag(
             catchup=False,
     ) as dag:
 
-        processors_path = "/opt/airflow/dags/dags_data/processors_dict.pkl"
-        data_preparators, get_processor_tasks, study_uids_task, train_tasks = [], [], [], []
+        data_preparators, get_processor_tasks, study_uids_task, train_tasks, remove_tasks = [], [], [], [], []
 
         for world_size in world_sizes:
             for model_name in model_names:
                 config = get_config(dataset_name=dataset_name, model_name=model_name, members=world_size,
                                     is_single=False)
                 data_preparators.append(make_data_preparation(config=config))
-                get_processor_tasks.append(dump_processor(config=config, processors_dict_path=processors_path))
-                # tasks.append(train(config=config))
-                study_uids_task.append(dump_study_uuid(
-                    model_name=model_name, dataset_name=dataset_name, world_size=world_size)
-                )
+                study_uid = get_study_uid()
+                study_uids_task.append(study_uid)
 
-                # tasks.append(train_opt(config=config, n_trials=n_trials))
+                get_processor_tasks.append(dump_processor(config=config, study_uid_dict=study_uid))
+
                 model_ds_train_tasks = []
                 for job in range(n_jobs):
                     model_ds_train_tasks.append(
-                        train_opt_parallel(config=config, n_trials=n_trials, obj_func=objective_func)
+                        train_opt_parallel(config=config, n_trials=n_trials, obj_func=objective_func,
+                                           study_uid_dict=study_uid)
                     )
                 train_tasks.append(model_ds_train_tasks)
+                remove_tasks.append(remove_processor(study_uid_dict=study_uid))
 
         seq_num = len(model_names)*len(world_sizes)
+
         for i in range(seq_num):
             if i == seq_num - 1:
-                data_preparators[i] >> get_processor_tasks[i] >> study_uids_task[i] >> train_tasks[i]
+                data_preparators[i] >> study_uids_task[i] >> get_processor_tasks[i] >> train_tasks[i] >> remove_tasks[i]
             else:
-                data_preparators[i] >> get_processor_tasks[i] >> study_uids_task[i] >> train_tasks[i] >> data_preparators[i+1]
+                data_preparators[i] >> study_uids_task[i] >> get_processor_tasks[i] >> train_tasks[i] >> remove_tasks[i] >> data_preparators[i + 1]
 
     return dag
 
@@ -635,46 +496,32 @@ def build_single_mode_dag(dag_id: str,
             catchup=False,
     ) as dag:
 
-        processors_path = "/opt/airflow/dags/dags_data/"
-
-        data_preparators, get_processor_tasks, study_uids_task, train_tasks = [], [], [], []
+        data_preparators, get_processor_tasks, study_uids_task, train_tasks, remove_tasks = [], [], [], [], []
 
         for model_name in models_names_list:
             for dataset_name in dataset_names_list:
-                "processors_dict.pkl"
                 config = get_config(dataset_name=dataset_name, model_name=model_name, is_single=True)
                 data_preparators.append(make_data_preparation(config=config))
-                get_processor_tasks.append(dump_processor(config=config, processors_dict_path=processors_path))
-                # tasks.append(train(config=config))
-                study_uids_task.append(dump_study_uuid(
-                    model_name=model_name, dataset_name=dataset_name, world_size=1)
-                )
+                study_uid = get_study_uid()
+                study_uids_task.append(study_uid)
+
+                get_processor_tasks.append(dump_processor(config=config, study_uid_dict=study_uid))
 
                 model_ds_train_tasks = []
                 for job in range(n_jobs):
                     model_ds_train_tasks.append(
-                        train_opt_parallel(config=config, n_trials=n_trials, obj_func=objective_func_single)
+                        train_opt_parallel(config=config, n_trials=n_trials, obj_func=objective_func_single,
+                                           study_uid_dict=study_uid)
                     )
                 train_tasks.append(model_ds_train_tasks)
-                # data_preparators.append(make_data_preparation(config=config))
-                #
-                # config = get_config(dataset_name=dataset_name, model_name=model_name, is_single=True)
-                # # save processor
-                # tasks.append(dump_processor(
-                #     config=config,
-                #     processors_dict_path=processors_path))
-                # # load processor and do train-infer
-                # tasks.append(train_infer_single(
-                #     config=config,
-                #     processors_dict_path=processors_path))
+                remove_tasks.append(remove_processor(study_uid_dict=study_uid))
 
         seq_num = len(models_names_list) * len(dataset_names_list)
         for i in range(seq_num):
             if i == seq_num - 1:
-                data_preparators[i] >> get_processor_tasks[i] >> study_uids_task[i] >> train_tasks[i]
+                data_preparators[i] >> study_uids_task[i] >> get_processor_tasks[i] >> train_tasks[i] >> remove_tasks[i]
             else:
-                data_preparators[i] >> get_processor_tasks[i] >> study_uids_task[i] >> train_tasks[i] >> \
-                data_preparators[i + 1]
+                data_preparators[i] >> study_uids_task[i] >> get_processor_tasks[i] >> train_tasks[i] >> remove_tasks[i] >> data_preparators[i + 1]
 
     return dag
 
@@ -686,31 +533,39 @@ def build_single_mode_dag(dag_id: str,
 # )
 
 
-mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp"], dataset_name="mnist",
-                             world_sizes=[2, 3], n_trials=2, n_jobs=2)
+# mnist_dag = build_dag(dag_id="mnist_dag", model_names=["logreg", "mlp"], dataset_name="mnist",
+#                              world_sizes=[2, 3], n_trials=2, n_jobs=2)
+#
+#
+# sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "resnet"],
+#                          dataset_name="sbol_smm", world_sizes=[2], n_trials=30, n_jobs=4)
+#
+# sbol_zvuk_dag = build_dag(dag_id="sbol_zvuk_dag", model_names=["logreg", "mlp", "resnet"],
+#                           dataset_name="sbol_zvuk", world_sizes=[2], n_trials=30, n_jobs=4)
+#
+#
+# sbol_smm_zvuk_dag = build_dag(dag_id="sbol_smm_zvuk_dag", model_names=["logreg", "mlp", "resnet"],
+#                          dataset_name="sbol_smm_zvuk", world_sizes=[3], n_trials=30, n_jobs=4)
+#
+#
+# home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg"],# "mlp", "resnet"],
+#                             dataset_name="home_credit_bureau_pos", world_sizes=[3], n_trials=2, n_jobs=2)
+
+# home_credit_bureau_dag = build_dag(dag_id="home_credit_bureau_dag", model_names=["logreg", "mlp", "resnet"],
+#                             dataset_name="home_credit_bureau", world_sizes=[2], n_trials=2, n_jobs=2)
 
 
-sbol_smm_dag = build_dag(dag_id="sbol_smm_dag", model_names=["logreg", "mlp", "resnet"],
-                         dataset_name="sbol_smm", world_sizes=[2], n_trials=30, n_jobs=4)
+home_credit_pos_dag = build_dag(dag_id="home_credit_pos_dag", model_names=["logreg", "mlp", "resnet"],
+                            dataset_name="home_credit_pos", world_sizes=[2], n_trials=30, n_jobs=4)
 
-sbol_zvuk_dag = build_dag(dag_id="sbol_zvuk_dag", model_names=["logreg", "mlp", "resnet"],
-                          dataset_name="sbol_zvuk", world_sizes=[2], n_trials=30, n_jobs=4)
-
-
-sbol_smm_zvuk_dag = build_dag(dag_id="sbol_smm_zvuk_dag", model_names=["logreg", "mlp", "resnet"],
-                         dataset_name="sbol_smm_zvuk", world_sizes=[3], n_trials=30, n_jobs=4)
-
-
-home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
-                            dataset_name="home_credit_bureau_pos", world_sizes=[3], n_trials=30, n_jobs=4)
 
 single_home_credit_dag = build_single_mode_dag(dag_id="single_home_credit_dag", models_names_list=["logreg", "mlp", "resnet"],
-                            dataset_names_list=["home_credit"], n_trials=2, n_jobs=2)
+                            dataset_names_list=["home_credit"], n_trials=30, n_jobs=4)
 
 single_sbol_dag = build_single_mode_dag(
     dag_id="single_sbol_dag",
-    models_names_list=["logreg", "mlp", "resnet"],
-    dataset_names_list=["sbol"], n_trials=30, n_jobs=4
+    models_names_list=["resnet"], #"logreg", "mlp",
+    dataset_names_list=["sbol"], n_trials=15, n_jobs=4
 )
 
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
