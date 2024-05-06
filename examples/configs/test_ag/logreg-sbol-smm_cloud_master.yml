@@ -22,7 +22,7 @@ vfl_model:
 prerequisites:
   mlflow_host: '176.123.161.62'
   mlflow_port: '5555'
-  prometheus_host: comp_cpu1
+  prometheus_host: '172.208.11.130'
   prometheus_port: '9090'
   grafana_port: '3001'
 
