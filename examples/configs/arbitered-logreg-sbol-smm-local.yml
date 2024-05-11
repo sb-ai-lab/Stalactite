@@ -32,7 +32,6 @@ member:
 
 
 data:
-  random_seed: 0
   dataset_size: 8500
   dataset: 'sbol_smm'
   host_path_data_dir: ../../data/sber_ds_vfl/multilabel_sber_sample10000_parts2

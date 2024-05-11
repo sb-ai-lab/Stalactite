@@ -22,7 +22,6 @@ master:
   run_mlflow: False
 
 data:
-  random_seed: 0
   dataset_size: 5000
   dataset: 'mnist'
   host_path_data_dir:  ../../data/sber_ds_vfl/mnist_single

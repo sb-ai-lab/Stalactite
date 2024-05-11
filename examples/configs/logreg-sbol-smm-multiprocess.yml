@@ -26,7 +26,6 @@ prerequisites:
   grafana_port: '3001'
 
 data:
-  random_seed: 0
   dataset_size: 1000
   dataset: 'sbol_smm'
   host_path_data_dir: ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2

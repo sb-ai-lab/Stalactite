@@ -21,7 +21,6 @@ prerequisites:
   grafana_port: '3001'
 
 data:
-  random_seed: 0
   dataset_size: 1000
   host_path_data_dir: ../../data/sber_ds_vfl/mnist_binary38_parts2
   dataset: 'mnist'

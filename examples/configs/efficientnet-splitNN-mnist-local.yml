@@ -42,7 +42,6 @@ member:
   }
 
 data:
-  random_seed: 0
   dataset_size: 750
   dataset: 'mnist'
   host_path_data_dir: ../../data/sber_ds_vfl/mnist_efficientnet_multiclass
