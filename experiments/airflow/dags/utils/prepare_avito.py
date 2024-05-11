@@ -1,5 +1,6 @@
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "False"
+os.environ["TORCH_HOME"] = "/opt/airflow/data/"
 
 from zipfile import ZipFile
 import warnings
@@ -7,7 +8,6 @@ import logging
 import time
 from typing import List
 import re
-import glob
 
 import pandas as pd
 import datasets
@@ -17,13 +17,12 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import QuantileTransformer, OneHotEncoder
 from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import StandardScaler
-import shutil
 
+from PIL import Image
 import torch
 import torchvision
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
-from torchvision.io import read_image
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
@@ -43,7 +42,7 @@ cat_optimal_smoothing = {
 }
 
 
-def fillna_scale(df: pd.DataFrame, train_item_id: pd.DataFrame, test_item_id:pd.DataFrame) -> pd.DataFrame:
+def fillna_scale(df: pd.DataFrame, train_item_id: pd.DataFrame, test_item_id: pd.DataFrame) -> pd.DataFrame:
     df_train = train_item_id.merge(df, on="item_id", how="left")
     df_test = test_item_id.merge(df, on="item_id", how="left")
 
@@ -110,7 +109,6 @@ def prepare_cat_features(
         ):
             skf_train, skf_test = train_df.iloc[train_index], train_df.iloc[test_index]
 
-            # TODO: improve
             train_mean_encoding = (skf_train.loc[:, [cat_feature, y_feature]].groupby(by=cat_feature).mean()[
                                        y_feature] * skf_train.shape[0] + smoothing_m * global_mean) / (
                                               skf_train.shape[0] + smoothing_m)
@@ -228,7 +226,8 @@ def add_simple_text_features(df):
 
 
 def add_text_embeddings(df: pd.DataFrame) -> pd.DataFrame:
-    model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+    model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2',
+                                cache_folder="/opt/airflow/data/")
     print("encoding description embeddings...")
 
     start_time = time.time()
@@ -291,30 +290,43 @@ def copy_images_to_separate_folder(df, image_col, orig_folder, new_folder):
 
 
 class AvitoImagesDataset(Dataset):
-    def __init__(self, img_dir, transform=None):
-        self.img_dir = img_dir
-        self.files = glob.glob(img_dir + '*.jpg')
+    def __init__(self, img_dir, transform=None, sample=None):
+        # self.img_dir = img_dir
+        self.zipobj = ZipFile(img_dir, 'r')
+        # self.files = glob.glob(img_dir + '*.jpg')
+        self.files = self.zipobj.namelist()
+        if sample is not None:
+            self.files = self.files[:sample]
+
         self.transform = transform
+        self.last_image = None
 
     def __len__(self):
         return len(self.files)
 
     def __getitem__(self, idx):
         file_name = self.files[idx].split('/')[-1][0:-4]
-        image = read_image(self.files[idx])
-        if self.transform:
-            image = self.transform(image)
-        return image, file_name
+        ifile = self.zipobj.open(self.files[idx])
+        try:
+            img = Image.open(ifile)
+            image = transforms.ToTensor()(img)
+            if self.transform:
+                image = self.transform(image)
+            self.last_image = image
+            return image, file_name
+        except:
+            return self.last_image, file_name
+    def close(self):
+        self.zipobj.close()
 
 
-def add_imagenet_probs(df, parent_dir, subsample_image_folder):
+def add_imagenet_probs(df, parent_dir, image_zipname, sample=None):
     start_time = time.time()
-
     batch_size = 64
     device = 'cpu'
     predictions_classes_num = 10
 
-    with open(os.path.join(parent_dir, "imagenet_class_index.json")) as f:  # image net classes
+    with open(os.path.join(parent_dir, "imagenet_class_index.json")) as f:
         imagenet_labels = eval(f.read())
     imagenet_means = [0.485, 0.456, 0.406]
     imagenet_stds = [0.229, 0.224, 0.225]
@@ -328,8 +340,8 @@ def add_imagenet_probs(df, parent_dir, subsample_image_folder):
             std=imagenet_stds)
         ])
 
-    avitoImagesDs = AvitoImagesDataset(subsample_image_folder, transform=transform)
-    avito_dataloader = DataLoader(avitoImagesDs, batch_size=batch_size, shuffle=False, num_workers=10)
+    avitoImagesDs = AvitoImagesDataset(image_zipname, transform=transform, sample=sample)
+    avito_dataloader = DataLoader(avitoImagesDs, batch_size=batch_size, shuffle=False, num_workers=0)
 
     model = torchvision.models.resnet50(pretrained=True)
     model.eval()
@@ -340,6 +352,8 @@ def add_imagenet_probs(df, parent_dir, subsample_image_folder):
 
     with torch.no_grad():
         for step, (inputs, file_names) in enumerate(avito_dataloader):
+            if inputs is None:
+                continue
             inputs = inputs.to(device)
 
             out = model(inputs)
@@ -365,6 +379,7 @@ def add_imagenet_probs(df, parent_dir, subsample_image_folder):
                    [f'pred_class_prob_{i}' for i in range(predictions_classes_num)]
 
     image_pred_features = pd.DataFrame.from_records(predictions, columns=column_names)
+    avitoImagesDs.close()
 
     # Select features
     df = df.merge(
@@ -376,97 +391,86 @@ def add_imagenet_probs(df, parent_dir, subsample_image_folder):
     return df
 
 
-def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, tabular_only: bool = False):
-    debug = False
-    subsample_size = 0.07
-    seed = 22
-    sample = 100_000  ##100_000 #10_000 #100_000_000
+def load_data(data_dir_path: str, parts_num: int, sample: int, seed: int, use_texts: bool = False):
     parent_dir = os.path.dirname(data_dir_path)
     print("reading dataframe")
-    tabular_df = pd.read_csv(os.path.join(parent_dir, "train.csv"), nrows=sample)
+    tabular_df = pd.read_csv(os.path.join(parent_dir, "train_avito.csv"), nrows=None if sample == -1 else sample)
     print(tabular_df.shape)
     categorical_features = ['user_id', 'region', 'city', 'parent_category_name', 'category_name', 'param_1', 'param_2',
                             'param_3', 'user_type']
     numerical_features = ['price', 'item_seq_number']
     date_features = ['activation_date']
 
+    if sample == -1:
+        sample = tabular_df.shape[0]
+
     df_labels = tabular_df[["item_id", "deal_probability"]]
 
     labels_stratify_df = tabular_df[["item_id"]].copy()
     labels_stratify_df["stratify_feature"] = tabular_df["deal_probability"] == 0
 
-    item_id_train, item_id_test = train_test_split(
-        tabular_df[["item_id"]], train_size=subsample_size,
-        test_size=subsample_size, random_state=seed, stratify=labels_stratify_df["stratify_feature"]
-    )
-    sample_item_id = pd.concat([item_id_train, item_id_test], ignore_index=True)
-    # filtering
-    tabular_df = sample_item_id.merge(tabular_df, how="left", on="item_id")
-    print("filtering")
-    print(tabular_df.shape)
-    labels_stratify_df = tabular_df[["item_id"]].copy()
-    labels_stratify_df["stratify_feature"] = tabular_df["deal_probability"] == 0
+    postfix_sample = sample
+    if parts_num == 2 and use_texts:
+        postfix_sample = f"{sample}_texts"
+    if parts_num == 2 and not use_texts:
+        postfix_sample = f"{sample}_images"
 
-    if not is_single:
+    item_id_train, item_id_test = train_test_split(
+        tabular_df[["item_id"]], test_size=0.15, random_state=seed, stratify=labels_stratify_df["stratify_feature"]
+    )
+
+    if parts_num > 1:
         logger.info("Save vfl dataset labels part...")
         split_save_datasets(df=df_labels, train_item_id=item_id_train, test_item_id=item_id_test,
-                            columns=["item_id", "deal_probability"], postfix_sample=subsample_size,
+                            columns=["item_id", "deal_probability"], postfix_sample=postfix_sample,
                             part_postfix="master_part",
-                            dir_name_postfix=3,
+                            dir_name_postfix=parts_num,
                             data_dir_path=data_dir_path)
 
-    # todo: check target distr in train-test split
     # preparing tabular dataframe
     print("preparing tabular dataframe")
-    if not debug:
-        # categorical features
-        tabular_df = prepare_cat_features(
-            df=tabular_df, train_item_id=item_id_train, test_item_id=item_id_test,
-            labels_stratify_df=labels_stratify_df,
-            categorical_features=categorical_features
-        )
-        # numerical features
-        tabular_df = prepare_num_features(
-            df=tabular_df, train_item_id=item_id_train, test_item_id=item_id_test, num_features=numerical_features
-        )
+    # categorical features
+    tabular_df = prepare_cat_features(
+        df=tabular_df, train_item_id=item_id_train, test_item_id=item_id_test,
+        labels_stratify_df=labels_stratify_df,
+        categorical_features=categorical_features
+    )
+    # numerical features
+    tabular_df = prepare_num_features(
+        df=tabular_df, train_item_id=item_id_train, test_item_id=item_id_test, num_features=numerical_features
+    )
 
-        # date features
-        tabular_df['activation_date'] = pd.to_datetime(tabular_df['activation_date'])
-        tabular_df = prepare_date_features(data=tabular_df, date_features=date_features)
+    # date features
+    tabular_df['activation_date'] = pd.to_datetime(tabular_df['activation_date'])
+    tabular_df = prepare_date_features(data=tabular_df, date_features=date_features)
 
-        feature_suffixes_to_use = ['_me', '_qn', '_dd']
-        features_to_use = [cc for cc in tabular_df.columns if cc[-3:] in feature_suffixes_to_use]
-        columns_to_use = ["item_id", *features_to_use, "deal_probability"]
-        tabular_df = tabular_df.loc[:, columns_to_use]
+    feature_suffixes_to_use = ['_me', '_qn', '_dd']
+    features_to_use = [cc for cc in tabular_df.columns if cc[-3:] in feature_suffixes_to_use]
+    columns_to_use = ["item_id", *features_to_use, "deal_probability"]
+    tabular_df = tabular_df.loc[:, columns_to_use]
 
-        tabular_df["features_part_0"] = tabular_df[features_to_use].apply(
-            lambda x: list(x), axis=1)
+    tabular_df["features_part_0"] = tabular_df[features_to_use].apply(
+        lambda x: list(x), axis=1)
 
-        tabular_df = tabular_df[["item_id", "features_part_0", "deal_probability"]]
-
-    if not is_single:
-        logger.info("Save vfl dataset part 0...")
+    tabular_df = tabular_df[["item_id", "features_part_0", "deal_probability"]]
+    if parts_num == 1:
+        logger.info("Save tabular only dataset for single experiments....")
         split_save_datasets(df=tabular_df, train_item_id=item_id_train, test_item_id=item_id_test,
-                            columns=["item_id", "features_part_0"], postfix_sample=subsample_size,
-                            part_postfix="part_0", dir_name_postfix=3, data_dir_path=data_dir_path)
+                            columns=["item_id", "features_part_0", "deal_probability"], postfix_sample=postfix_sample,
+                            part_postfix="part_0", dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
     else:
-        if tabular_only:
-            logger.info("Save sbol only dataset for single experiments....")
-            split_save_datasets(df=tabular_df, train_item_id=item_id_train, test_item_id=item_id_test,
-                                columns=["item_id", "features_part_0", "deal_probability"], postfix_sample=subsample_size,
-                                part_postfix="part_0", dir_name_postfix="_tabular_only",
-                                data_dir_path=data_dir_path)
+        logger.info("Save vfl dataset part 0...")
+        split_save_datasets(df=tabular_df, train_item_id=item_id_train, test_item_id=item_id_test,
+                            columns=["item_id", "features_part_0"], postfix_sample=postfix_sample,
+                            part_postfix="part_0", dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
-    # preparing text dataframe
-    print("preparing text dataframe")
-    text_df = pd.read_csv(os.path.join(parent_dir, "train.csv"), nrows=sample)
-    text_df = text_df[["item_id", "title", "description"]]
-    # filtering
-    text_df = sample_item_id.merge(text_df, how="left", on="item_id")
-    print("filtering")
-    print(text_df.shape)
-    if not debug:
+
+    if (parts_num == 2 and use_texts) or parts_num == 3:
+        # preparing text dataframe
+        print("preparing text dataframe")
+        text_df = pd.read_csv(os.path.join(parent_dir, "train_avito.csv"), nrows=sample)
+        text_df = text_df[["item_id", "title", "description"]]
 
         text_df = add_simple_text_features(text_df)
         text_df = add_text_embeddings(text_df)
@@ -478,11 +482,6 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, t
                        [cc for cc in text_df.columns if cc.startswith('descr_emb')] + [cc for cc in text_df.columns if
                                                                                 cc.startswith('title_emb')]
         text_df = text_df.loc[:, use_features]
-
-    # train_Y = train_df['deal_probability']
-
-    # test_X = te_df.loc[:, use_features]
-    # test_Y = test_df['deal_probability']
 
         # Fill missing values:
 
@@ -515,115 +514,55 @@ def load_data(data_dir_path: str, parts_num: int = 2, is_single: bool = False, t
 
         text_df = pd.concat([text_df_train, text_df_test], ignore_index=True)
 
-        # # Proper shapes for Y:
-        # train_Y = train_Y.to_numpy();
-        # test_Y = test_Y.to_numpy();  # Y to numpy
-        # train_Y.shape = (train_Y.shape[0], 1);
-        # test_Y.shape = (test_Y.shape[0], 1)  # Y to columns
-
         cols_to_concat = [c for c in text_df.columns if c not in ["item_id"]]
         text_df["features_part_1"] = text_df[cols_to_concat].apply(
             lambda x: list(x), axis=1)
         text_df = text_df[["item_id", "features_part_1"]]
 
-    if not is_single:
         logger.info("Save vfl dataset part 1...")
         split_save_datasets(df=text_df,  train_item_id=item_id_train, test_item_id=item_id_test,
-                            columns=["item_id", "features_part_1"], postfix_sample=subsample_size,
-                            part_postfix="part_1", dir_name_postfix=3, data_dir_path=data_dir_path)
+                            columns=["item_id", "features_part_1"], postfix_sample=postfix_sample,
+                            part_postfix="part_1", dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
-    # preparing images dataframe
-    print("preparing images dataframe")
-    images_df = pd.read_csv(os.path.join(parent_dir, "train.csv"), nrows=sample)
-    images_df = images_df[["item_id", "image", "image_top_1"]]
-    subsample_image_folder = f'train_jpg_seed{seed}_size{subsample_size}/'.replace('.', '_')
-    # filtering
-    images_df = sample_item_id.merge(images_df, how="left", on="item_id")
-    print("filtering")
-    print(images_df.shape)
+    if (parts_num == 2 and not use_texts) or parts_num == 3:
+        features_part_number = 2 if parts_num == 3 else 1
 
-    _ = copy_images_to_separate_folder(
-        df=images_df,
-        image_col='image',
-        orig_folder=os.path.join(parent_dir, 'train_jpg_0.zip'),
-        new_folder=os.path.join(parent_dir, subsample_image_folder))
+        # preparing images dataframe
+        print("preparing images dataframe")
+        images_df = pd.read_csv(os.path.join(parent_dir, "train_avito.csv"), nrows=sample)
+        images_df = images_df[["item_id", "image", "image_top_1"]]
 
-    images_df = add_imagenet_probs(df=images_df, parent_dir=parent_dir,
-                                   subsample_image_folder=os.path.join(parent_dir, subsample_image_folder))
+        images_df = add_imagenet_probs(df=images_df, parent_dir=parent_dir,
+                                       image_zipname=os.path.join(parent_dir, "train_jpg_0.zip"), sample=sample)
 
-    images_df = images_df[['item_id', 'image_top_1', 'pred_class_prob_0', 'pred_class_prob_1', 'pred_class_prob_2']]
+        images_df = images_df[['item_id', 'image_top_1', 'pred_class_prob_0', 'pred_class_prob_1', 'pred_class_prob_2']]
 
-    images_df = fillna_scale(df=images_df, train_item_id=item_id_train, test_item_id=item_id_test)
+        images_df = fillna_scale(df=images_df, train_item_id=item_id_train, test_item_id=item_id_test)
 
-    cols_to_concat = [c for c in images_df.columns if c not in ["item_id"]]
-    images_df["features_part_2"] = images_df[cols_to_concat].apply(
-        lambda x: list(x), axis=1)
-    images_df = images_df[["item_id", "features_part_2"]]
+        cols_to_concat = [c for c in images_df.columns if c not in ["item_id"]]
+        images_df[f"features_part_{features_part_number}"] = images_df[cols_to_concat].apply(
+            lambda x: list(x), axis=1)
+        images_df = images_df[["item_id", f"features_part_{features_part_number}"]]
 
-    # # Proper shapes for Y:
-    # train_Y = train_Y.to_numpy();
-    # test_Y = test_Y.to_numpy();  # Y to numpy
-    # train_Y.shape = (train_Y.shape[0], 1);
-    # test_Y.shape = (test_Y.shape[0], 1)  # Y to columns
-
-    if not is_single:
-        logger.info("Save vfl dataset part 2...")
+        logger.info(f"Save vfl dataset part {features_part_number}...")
         split_save_datasets(
             df=images_df, train_item_id=item_id_train, test_item_id=item_id_test,
-            columns=["item_id", "features_part_2"], postfix_sample=subsample_size, part_postfix="part_2",
-            dir_name_postfix=3, data_dir_path=data_dir_path)
-
-    else:
-        if not tabular_only:
-            logger.info("Save dataset for single experiments....")
-            # join text data
-            single_df = tabular_df.merge(text_df, on="item_id", how="left")
-            single_df["has_f1"] = ~single_df["features_part_1"].isna()
-            single_df["has_f1"] = single_df["has_f1"].astype(int)
-            fill_shape = len(text_df["features_part_1"][0])
-            single_df["features_part_1"] = single_df.apply(
-                lambda x: np.zeros(fill_shape) if x["has_f1"] == 0 else x["features_part_1"],
-                axis=1
-            )
-            single_df["features_part_1"] = single_df.apply(
-                lambda x: np.concatenate((x["features_part_1"], np.array([x["has_f1"]])), axis=0), axis=1)
-
-            # join images data
-            single_df = single_df.merge(images_df, on="item_id", how="left")
-            single_df["has_f2"] = ~single_df["features_part_2"].isna()
-            single_df["has_f2"] = single_df["has_f2"].astype(int)
-            fill_shape = len(images_df["features_part_2"][0])
-            single_df["features_part_2"] = single_df.apply(
-                lambda x: np.zeros(fill_shape) if x["has_f2"] == 0 else x["features_part_2"],
-                axis=1
-            )
-            single_df["features_part_2"] = single_df.apply(
-                lambda x: np.concatenate((x["features_part_2"], np.array([x["has_f2"]])), axis=0), axis=1)
-
-            single_df["features_part_0"] = single_df.apply(
-                lambda x: np.concatenate(
-                    (x["features_part_0"], x["features_part_1"], x["features_part_2"]), axis=0
-                ), axis=1)
-
-            single_df = single_df[["item_id", "features_part_0", "deal_probability"]]
-            a = single_df.isna().sum()
-
-            split_save_datasets(
-                df=single_df, train_item_id=item_id_train, test_item_id=item_id_test,
-                columns=["item_id", "features_part_0", "deal_probability"],
-                postfix_sample=subsample_size, dir_name_postfix="_single",
-                data_dir_path=data_dir_path, part_postfix="part_0")
+            columns=["item_id", f"features_part_{features_part_number}"], postfix_sample=postfix_sample,
+            part_postfix=f"part_{features_part_number}", dir_name_postfix=parts_num, data_dir_path=data_dir_path)
 
 
-# load_data(
-#     data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/avito/avito_sample0_07_parts_single",
-#     is_single=True, tabular_only=False
-# )
-# load_data(
-#     data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/avito/avito_sample0_07_parts_tabular_only.csv",
-#     is_single=True, tabular_only=True
-# )
-# load_data(
-#     data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/avito/avito_sample0_07_parts3",
-#     is_single=False, tabular_only=False
-# )
+if __name__ == "__main__":
+    pass
+    load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/",
+              parts_num=1, use_texts=False, seed=22, sample=-1)
+
+    # load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/",
+    #           parts_num=2, use_texts=True, seed=22, sample=2000)
+
+    # load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/",
+    #           parts_num=2, use_texts=False, seed=22, sample=500)
+    #
+    # load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/experiments/airflow/data/",
+    #           parts_num=3, use_texts=False, seed=22, sample=2000)
+
+

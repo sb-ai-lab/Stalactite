@@ -286,7 +286,6 @@ def load_data(data_dir_path: str, parts_num: int, sample: int, seed: int, use_bu
 
     if (parts_num == 2 and use_bureau) or parts_num == 3:
 
-
         # preparing bureau dataframe
         bureau = bureau.merge(other_sources_df, on="SK_ID_CURR", how="left")
         bureau = fillna_func(df=bureau, df_name="Bureau")

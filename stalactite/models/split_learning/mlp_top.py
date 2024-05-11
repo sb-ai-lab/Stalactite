@@ -42,7 +42,6 @@ class MLPTop(nn.Module):
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         x = self.classifier(x)
-
         return x
 
     def forward(self, x: Tensor) -> Tensor:

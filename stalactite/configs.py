@@ -99,11 +99,12 @@ class DataConfig(BaseModel):
     host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
     dataset: Literal[
         'mnist', 'sbol', 'sbol_smm', 'sbol_zvuk', 'sbol_smm_zvuk', 'home_credit', 'home_credit_bureau_pos', 'home_credit_pos', 'home_credit_bureau',
-        'avito', 'avito_texts_images',
+        'avito', 'avito_texts_images', 'avito_texts', 'avito_images',
     ] = Field(
         default='mnist',
-        description='Dataset type. One of `mnist`, `sbol`, `sbol_smm`, `sbol_zvuk`, `sbol_smm_zvuk`, `home_credit`,  `home_credit_bureau_pos`,'
-                    ' `avito`, `avito_texts_images`, `home_credit_pos`, `home_credit_bureau`'
+        description='Dataset type. One of `mnist`, `sbol`, `sbol_smm`, `sbol_zvuk`, `sbol_smm_zvuk`, `home_credit`,'
+                    '`home_credit_bureau_pos`, `avito`, `avito_texts_images`, `avito_texts`, `avito_images`,'
+                    ' `home_credit_pos`, `home_credit_bureau`'
     )
     dataset_part_prefix: str = Field(default='part_')
     train_split: str = Field(default='train_train')

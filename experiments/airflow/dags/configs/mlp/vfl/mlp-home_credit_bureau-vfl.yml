@@ -7,7 +7,7 @@ common:
   seed: 22
 
 vfl_model:
-  epochs: 1
+  epochs: 10
   batch_size: 250
   eval_batch_size: 200
   vfl_model_name: mlp
@@ -42,9 +42,9 @@ member:
 
 data:
   random_seed: 0
-  dataset_size: 10000
+  dataset_size: -1
   dataset: 'home_credit_bureau'
-  host_path_data_dir:  /opt/airflow/data/home_credit_sample10000_bureau_parts
+  host_path_data_dir:  /opt/airflow/data/home_credit_sample307507_bureau_parts
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"

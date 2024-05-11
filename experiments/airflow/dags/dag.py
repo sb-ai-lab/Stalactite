@@ -52,6 +52,7 @@ from stalactite.configs import VFLConfig
 from utils.prepare_mnist import load_data as load_mnist
 from utils.prepare_sbol_smm import load_data as load_sbol
 from utils.prepare_home_credit import load_data as load_home_credit
+from utils.prepare_avito import load_data as load_avito
 from utils.utils import (suggest_params, rsetattr, change_master_model_param, change_member_model_param,
                          compute_hidden_layers, metrics_to_opt_dict)
 
@@ -94,6 +95,11 @@ def make_data_preparation(config: VFLConfig):
         use_bureau = True if config.data.dataset.lower() == "home_credit_bureau" else False
         load_home_credit(data_dir_path=config.data.host_path_data_dir, parts_num=config.common.world_size,
                          use_bureau=use_bureau, sample=config.data.dataset_size, seed=config.common.seed)
+
+    elif config.data.dataset.lower() in ["avito", "avito_texts", "avito_images", "avito_texts_images"]:
+        use_texts = True if config.data.dataset.lower() == "avito_texts" else False
+        load_avito(data_dir_path=config.data.host_path_data_dir, parts_num=config.common.world_size,
+                         use_texts=use_texts, sample=config.data.dataset_size, seed=config.common.seed)
     else:
         raise ValueError(f"unknown dataset: {config.data.dataset.lower()}")
     logger.info(f"data preparation SUCCESS")
@@ -322,7 +328,7 @@ def objective_func_single(trial, config, study_uid):
             if config.data.dataset.lower() == "mnist":
                 single_party_class = PartySingleLogregMulticlass
 
-            elif config.data.dataset.lower() in ["sbol", "sbol_smm", "home_credit_bureau_pos", "home_credit"]:
+            elif config.data.dataset.lower() in ["sbol", "sbol_smm", "home_credit", "avito"]:
                 single_party_class = PartySingleLogreg
             else:
                 raise ValueError(f"unknown dataset: {config.data.dataset.lower()} for logreg model")
@@ -551,9 +557,8 @@ def build_single_mode_dag(dag_id: str,
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg"],# "mlp", "resnet"],
 #                             dataset_name="home_credit_bureau_pos", world_sizes=[3], n_trials=2, n_jobs=2)
 
-# home_credit_bureau_dag = build_dag(dag_id="home_credit_bureau_dag", model_names=["logreg", "mlp", "resnet"],
-#                             dataset_name="home_credit_bureau", world_sizes=[2], n_trials=2, n_jobs=2)
-
+home_credit_bureau_dag = build_dag(dag_id="home_credit_bureau_dag", model_names=["logreg", "mlp", "resnet"],
+                            dataset_name="home_credit_bureau", world_sizes=[2], n_trials=30, n_jobs=4)
 
 home_credit_pos_dag = build_dag(dag_id="home_credit_pos_dag", model_names=["resnet"], #"logreg", "mlp",
                             dataset_name="home_credit_pos", world_sizes=[2], n_trials=30, n_jobs=4)
@@ -570,4 +575,16 @@ single_sbol_dag = build_single_mode_dag(
 
 # home_credit_dag = build_dag(dag_id="home_credit_dag", model_names=["logreg", "mlp", "resnet"],
 #                             dataset_name="home_credit_bureau_pos", world_sizes=[3])
-# todo: avito dag
+
+single_avito_dag = build_single_mode_dag(dag_id="single_avito_dag", models_names_list=["logreg", "mlp", "resnet"],
+                            dataset_names_list=["avito"], n_trials=30, n_jobs=4)
+
+
+avito_texts_dag = build_dag(dag_id="avito_texts_dag", model_names=["logreg", "mlp", "resnet"],
+                            dataset_name="avito_texts", world_sizes=[2], n_trials=30, n_jobs=2)
+
+avito_images_dag = build_dag(dag_id="avito_images_dag", model_names=["logreg", "mlp", "resnet"],
+                            dataset_name="avito_images", world_sizes=[2], n_trials=30, n_jobs=4)
+#
+avito_texts_images_dag = build_dag(dag_id="avito_texts_images_dag", model_names=["logreg", "mlp", "resnet"],
+                            dataset_name="avito_texts_images", world_sizes=[3], n_trials=30, n_jobs=2)
