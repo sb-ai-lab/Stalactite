@@ -23,7 +23,7 @@ from stalactite.communications.local import LocalMasterPartyCommunicator, LocalM
 from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
 from examples.utils.prepare_mnist import load_data as load_mnist
-from examples.utils.prepare_sbol_smm import load_data as load_sbol_smm
+from examples.utils.prepare_sbol import load_data as load_sbol
 from stalactite.helpers import reporting, run_local_agents
 from stalactite.utils import seed_all
 
@@ -72,7 +72,8 @@ def load_processors(config: VFLConfig):
 
         dataset = {}
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_sbol_smm(os.path.dirname(config.data.host_path_data_dir), parts_num=2)
+            load_sbol(os.path.dirname(config.data.host_path_data_dir), parts_num=2, sample=config.data.sample,
+                      seed=config.common.seed, use_smm=True)
 
         for m in range(config.common.world_size):
             dataset[m] = datasets.load_from_disk(
