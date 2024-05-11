@@ -34,11 +34,11 @@ def load_processors(config_path: str):
             dataset=dataset[0], member_id=0, params=config, is_master=True, master_has_features=True
         )
 
-    elif config.data.dataset.lower() == "sbol_smm":
+    elif config.data.dataset.lower() == "sbol":
 
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_sbol(os.path.dirname(config.data.host_path_data_dir), parts_num=1, sample=config.data.dataset_size,
-                      seed=config.data.seed)
+            load_sbol(data_dir_path=config.data.host_path_data_dir, parts_num=1, sample=config.data.dataset_size,
+                      seed=config.common.seed)
 
         dataset = {0: datasets.load_from_disk(
             os.path.join(f"{config.data.host_path_data_dir}/part_{0}")
@@ -63,10 +63,12 @@ def run(config_path: Optional[str] = None):
     config = VFLConfig.load_and_validate(config_path)
     seed_all(config.common.seed)
     model_name = config.vfl_model.vfl_model_name
+    processor = load_processors(config_path)
 
+    if config.data.dataset_size == -1:
+        config.data.dataset_size = len(processor.dataset[config.data.train_split][config.data.uids_key])
     with reporting(config):
 
-        processor = load_processors(config_path)
         target_uids = [x for x in range(config.data.dataset_size)]
 
         if model_name == "linreg":
@@ -77,7 +79,8 @@ def run(config_path: Optional[str] = None):
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
                 use_mlflow=config.master.run_mlflow,
-                target_uids=target_uids,
+                target_uids=processor.dataset[config.data.train_split][config.data.uids_key][
+                        :config.data.dataset_size],
                 model_params=config.member.member_model_params
 
             )
@@ -90,7 +93,8 @@ def run(config_path: Optional[str] = None):
                 report_train_metrics_iteration=config.common.report_train_metrics_iteration,
                 report_test_metrics_iteration=config.common.report_test_metrics_iteration,
                 use_mlflow=config.master.run_mlflow,
-                target_uids=target_uids,
+                target_uids=processor.dataset[config.data.train_split][config.data.uids_key][
+                        :config.data.dataset_size],
                 model_params=config.member.member_model_params
             )
         else:
