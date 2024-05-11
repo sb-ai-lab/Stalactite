@@ -63,7 +63,7 @@ def load_processors(config: VFLConfig):
 
         dataset = {}
         if len(os.listdir(config.data.host_path_data_dir)) == 0:
-            load_sbol(os.path.dirname(config.data.host_path_data_dir), parts_num=2, sample=config.data.sample,
+            load_sbol(os.path.dirname(config.data.host_path_data_dir), parts_num=2, sample=config.data.dataset_size,
                       seed=config.common.seed, use_smm=True)
 
         for m in range(1, config.common.world_size + 1):
