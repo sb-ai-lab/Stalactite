@@ -180,8 +180,6 @@ def objective_func(trial, config, study_uid):
         else:
             raise ValueError(f"Unsupported param type: {param_name}")
 
-    # for param_name, param_val in suggested_params.items():
-    #         rsetattr(config, f"vfl_model.{param_name}", param_val)
     with reporting(config):
         shared_party_info = dict()
         if 'logreg' in config.vfl_model.vfl_model_name:
@@ -282,19 +280,16 @@ def objective_func(trial, config, study_uid):
         current_run = mlflow.active_run()
         runs = mlflow.search_runs(experiment_names=["airflow"])
         metric = runs[runs["run_id"] == str(current_run.info.run_id)].iloc[0][metrics_to_optimize]
-        # metric = random.random() #todo: remove
 
     return metric
 
 
 def objective_func_single(trial, config, study_uid):
-    #todo: make similar to obj func
     processors_path = f"/opt/airflow/dags/dags_data/processors_dict_{study_uid}.pkl"
     processors, master_processor = load_processors(processors_path)
     if config.data.dataset_size == -1:
         config.data.dataset_size = len(processors[0].dataset[config.data.train_split][config.data.uids_key])
     suggested_params = suggest_params(trial=trial, config=config)
-    # todo: revise it
     for param_name, param_val in suggested_params.items():
         if param_name in ["batch_size", "learning_rate", "weight_decay"]:
             rsetattr(config, f"vfl_model.{param_name}", param_val)
