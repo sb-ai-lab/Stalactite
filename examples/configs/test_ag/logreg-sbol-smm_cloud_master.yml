@@ -44,7 +44,7 @@ grpc_server:
   server_thread_pool_size: 10
 
 master:
-  external_host: comp_cpu1
+  external_host: 176.123.161.62
   run_mlflow: True
   run_prometheus: True
   logging_level: 'info'
