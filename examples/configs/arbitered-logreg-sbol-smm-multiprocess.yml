@@ -28,11 +28,12 @@ prerequisites:
 master:
   external_host: 'node3.bdcl'
   run_mlflow: True
-  run_prometheus: True
+  run_prometheus: False
   port: "50051"
   logging_level: 'debug'
   disconnect_idle_client_time: 500.
   recv_timeout: 3600.
+  cuda_visible_devices: "0"
 
 member:
   heartbeat_interval: 2.
@@ -67,6 +68,7 @@ data:
 docker:
   docker_compose_command: "docker compose"
   docker_compose_path: '../../prerequisites'
+  use_gpu: True
 
 grpc_server:
   server_threadpool_max_workers: 5

@@ -159,6 +159,10 @@ class PartyConfig(BaseModel):
     """VFL base parties` parameters config."""
     logging_level: Literal["debug", "info", "warning"] = Field(default="info", description="Logging level")
     recv_timeout: float = Field(default=360., description='Timeout of the recv operation')
+    cuda_visible_devices: str = Field(
+        default='all',
+        description='CUDA_VISIBLE_DEVICES ids. E.g. "0,2,3" for CUDA to use GPUs with ids 0, 2 and 3 only.'
+    )
 
     @model_validator(mode="after")
     def validate_logging_level(self):

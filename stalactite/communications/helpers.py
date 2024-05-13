@@ -42,6 +42,7 @@ METHOD_VALUES = {
     Method.finalize: "other_kwargs",
     Method.update_weights: "other_kwargs",
     Method.predict: "tensor_kwargs",
+    Method.update_predict: "tensor_kwargs",
     Method.get_public_key: "other_kwargs",
     Method.predict_partial: "other_kwargs",
     Method.compute_gradient: "other_kwargs",

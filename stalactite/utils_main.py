@@ -25,8 +25,8 @@ BASE_MEMBER_CONTAINER_NAME = "member-agent-vfl"
 BASE_IMAGE_FILE = "grpc-base.dockerfile"
 BASE_IMAGE_FILE_CPU = "grpc-base-cpu.dockerfile"
 BASE_IMAGE_TAG = "grpc-base:latest"
-PREREQUISITES_NETWORK = "prerequisites_vfl-network"  # Do not change this value
-MLFLOW_NETWORK = "stalactite-mlflow_default"
+PREREQUISITES_NETWORK = "monitoring_vfl-network"  # Do not change this value
+MLFLOW_NETWORK = "mlflow_default"
 
 logger = logging.getLogger(__name__)
 logging.getLogger('docker').setLevel(logging.ERROR)
@@ -126,7 +126,8 @@ def build_base_image(
             rm=True,
         )
         for log in _logs:
-            logger.debug(log.get("stream", log.get("aux", {"aux": ""}).get("ID", "")).strip())
+            if logstr := log.get("stream", log.get("aux", {"aux": ""}).get("ID", "")).strip():
+                logger.debug(logstr)
     except APIError as exc:
         logger.error("Error while building an image", exc_info=exc)
         raise
@@ -161,6 +162,7 @@ def create_and_start_container(
         command: Optional[List[str]] = None,
         network_config: Optional[dict] = None,
         ports: Optional[list] = None,
+        runtime: Optional[str] = None,
 ):
     logger.info(f"Starting gRPC {role} container")
     if command is None:
@@ -169,6 +171,7 @@ def create_and_start_container(
             "--config-path", f"{os.path.abspath(config_path)}",
             "--role", role
         ]
+
     container = client.create_container(
         image=image,
         command=command,
@@ -180,7 +183,8 @@ def create_and_start_container(
         host_config=host_config,
         networking_config=network_config,
         name=container_name,
-        ports=ports
+        ports=ports,
+        runtime=runtime,
     )
     logger.info(f'{role.capitalize()} container ({container_name}) id: {container.get("Id")}')
     client.start(container=container.get("Id"))
@@ -266,27 +270,30 @@ def start_distributed_agent(
             ports = [config.grpc_server.port]
             name = ctx.obj["master_container_name"] + ("-predict" if infer else "")
             env_vars['STALACTITE_MLFLOW_HOST'] = get_mlflow_endpoint(config)
+            if config.master.cuda_visible_devices != 'all' and config.docker.use_gpu:
+                env_vars['CUDA_VISIBLE_DEVICES'] = config.master.cuda_visible_devices
         elif role == Role.arbiter:
             ports = [config.grpc_arbiter.port]
             port_binds = {config.grpc_arbiter.port: config.grpc_arbiter.port}
             name = ctx.obj["arbiter_container_name"] + ("-predict" if infer else "")
+            if config.grpc_arbiter.cuda_visible_devices != 'all' and config.docker.use_gpu:
+                env_vars['CUDA_VISIBLE_DEVICES'] = config.grpc_arbiter.cuda_visible_devices
         else:
             port_binds, ports = dict(), list()
             name = ctx.obj["member_container_name"](rank) + ("-predict" if infer else "")
+            if config.member.cuda_visible_devices != 'all' and config.docker.use_gpu:
+                env_vars['CUDA_VISIBLE_DEVICES'] = config.member.cuda_visible_devices
 
+        vols = {f"{data_path}", f"{configs_path}", f"{model_path}"}
         container = create_and_start_container(
             network_config=networking_config,
             client=client,
             image=BASE_IMAGE_TAG,
             container_label=ctx.obj[f"{role}_container_label"],
             environment=env_vars,
-            volumes=[f"{data_path}", f"{configs_path}", f"{model_path}"],
+            volumes=list(vols),
             host_config=client.create_host_config(
-                binds=[
-                    f"{configs_path}:{configs_path}:rw",
-                    f"{data_path}:{data_path}:rw",
-                    f"{model_path}:{model_path}:rw",
-                ],
+                binds=[f"{path}:{path}:rw" for path in vols],
                 port_bindings=port_binds,
             ),
             ports=ports,
@@ -295,6 +302,7 @@ def start_distributed_agent(
             config_path=config_path,
             hostname=None,
             command=command,
+            runtime='nvidia' if config.docker.use_gpu else None,
         )
 
         if not detached:
@@ -336,13 +344,9 @@ def start_multiprocess_agents(
 
     raise_path_not_exist(configs_path)
 
-    volumes = [f"{data_path}", f"{configs_path}", f"{model_path}"]
+    volumes = {f"{data_path}", f"{configs_path}", f"{model_path}"}
     mounts_host_config = client.create_host_config(
-        binds=[
-            f"{configs_path}:{configs_path}:rw",
-            f"{data_path}:{data_path}:rw",
-            f"{model_path}:{model_path}:rw",
-        ]
+        binds=[f"{path}:{path}:rw" for path in volumes],
     )
     container_label = BASE_CONTAINER_LABEL
     master_container_name = BASE_MASTER_CONTAINER_NAME
@@ -367,12 +371,16 @@ def start_multiprocess_agents(
                 "--role", "arbiter",
                 "--infer"
             ] if is_infer else None
+            if config.grpc_arbiter.cuda_visible_devices != 'all' and config.docker.use_gpu:
+                env_vars = {'CUDA_VISIBLE_DEVICES': config.grpc_arbiter.cuda_visible_devices}
+            else:
+                env_vars = dict()
             create_and_start_container(
                 client=client,
                 image=BASE_IMAGE_TAG,
                 container_label=container_label,
-                environment={},
-                volumes=volumes,
+                environment=env_vars,
+                volumes=list(volumes),
                 host_config=mounts_host_config,
                 network_config=networking_config,
                 container_name=arbiter_container_name,
@@ -380,6 +388,7 @@ def start_multiprocess_agents(
                 config_path=config_path,
                 hostname=grpc_arbiter_host,
                 command=command_arbiter,
+                runtime='nvidia' if config.docker.use_gpu else None,
             )
 
         command_master = [
@@ -388,13 +397,18 @@ def start_multiprocess_agents(
             "--infer",
             "--role", "master"
         ] if is_infer else None
+        env_vars = dict()
+        if config.master.cuda_visible_devices != 'all' and config.docker.use_gpu:
+            env_vars['CUDA_VISIBLE_DEVICES'] = config.master.cuda_visible_devices
+        env_vars['GRPC_ARBITER_HOST'] = grpc_arbiter_host
+        env_vars['STALACTITE_MLFLOW_HOST'] = get_mlflow_endpoint(config)
 
         create_and_start_container(
             client=client,
             image=BASE_IMAGE_TAG,
             container_label=container_label,
-            environment={"GRPC_ARBITER_HOST": grpc_arbiter_host, 'STALACTITE_MLFLOW_HOST': get_mlflow_endpoint(config)},
-            volumes=volumes,
+            environment=env_vars,
+            volumes=list(volumes),
             host_config=mounts_host_config,
             network_config=networking_config,
             container_name=master_container_name,
@@ -402,6 +416,7 @@ def start_multiprocess_agents(
             config_path=config_path,
             hostname=grpc_server_host,
             command=command_master,
+            runtime='nvidia' if config.docker.use_gpu else None,
         )
 
         for member_rank in range(config.common.world_size):
@@ -417,16 +432,20 @@ def start_multiprocess_agents(
                 "--role", "member"
             ] if is_infer else None
 
+            env_vars = dict()
+            if config.member.cuda_visible_devices != 'all' and config.docker.use_gpu:
+                env_vars['CUDA_VISIBLE_DEVICES'] = config.member.cuda_visible_devices
+
+            env_vars['RANK'] = member_rank
+            env_vars['GRPC_SERVER_HOST'] = grpc_server_host
+            env_vars['GRPC_ARBITER_HOST'] = grpc_arbiter_host
+
             create_and_start_container(
                 client=client,
                 image=BASE_IMAGE_TAG,
                 container_label=container_label,
-                environment={
-                    "RANK": member_rank,
-                    "GRPC_SERVER_HOST": grpc_server_host,
-                    "GRPC_ARBITER_HOST": grpc_arbiter_host
-                },
-                volumes=volumes,
+                environment=env_vars,
+                volumes=list(volumes),
                 host_config=mounts_host_config,
                 network_config=networking_config,
                 container_name=member_container_name,
@@ -434,6 +453,7 @@ def start_multiprocess_agents(
                 config_path=config_path,
                 hostname=None,
                 command=member_command,
+                runtime='nvidia' if config.docker.use_gpu else None,
             )
 
     except APIError as exc:
