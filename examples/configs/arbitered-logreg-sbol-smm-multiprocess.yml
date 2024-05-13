@@ -28,11 +28,12 @@ prerequisites:
 master:
   external_host: 'node3.bdcl'
   run_mlflow: True
-  run_prometheus: True
+  run_prometheus: False
   port: "50051"
   logging_level: 'debug'
   disconnect_idle_client_time: 500.
   recv_timeout: 3600.
+  cuda_visible_devices: "0"
 
 member:
   heartbeat_interval: 2.
@@ -54,10 +55,9 @@ grpc_arbiter:
   server_threadpool_max_workers: 5
 
 data:
-  random_seed: 0
-  dataset_size: 8500
+  dataset_size: 10000
   dataset: 'sbol_smm'
-  host_path_data_dir: ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_parts2
+  host_path_data_dir: ../../data/sber_ds_vfl/vfl_multilabel_sber_sample10000_smm_parts2
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"
@@ -68,6 +68,7 @@ data:
 docker:
   docker_compose_command: "docker compose"
   docker_compose_path: '../../prerequisites'
+  use_gpu: True
 
 grpc_server:
   server_threadpool_max_workers: 5

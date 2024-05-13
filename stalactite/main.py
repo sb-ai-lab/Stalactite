@@ -88,9 +88,7 @@ def start(config_path, detached, group):
     for group_name in group:
         command = f"{config.docker.docker_compose_command} -f docker-compose-{group_name}.yml"
         run_subprocess_command(
-            command=command + (
-                " -p stalactite-mlflow" if group_name == PrerequisitesGroup.mlflow else ""
-            ) + " up" + (" -d" if detached else "") + " --build",
+            command=command + " up" + (" -d" if detached else "") + " --build",
             logger_err_info="Failed build process",
             cwd=config.docker.docker_compose_path,
             env=env_vars,

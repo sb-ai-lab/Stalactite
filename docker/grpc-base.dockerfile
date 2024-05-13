@@ -1,4 +1,4 @@
-FROM python:3.10.5-slim
+FROM pytorch/pytorch:latest
 
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
@@ -22,5 +22,6 @@ RUN poetry install --only-root
 
 WORKDIR /opt/stalactite
 ENV GIT_PYTHON_REFRESH="quiet"
+ENV CUDA_DEVICE_ORDER="PCI_BUS_ID"
 
 # docker build -f ./docker/grpc-base.dockerfile -t grpc-base:latest .
