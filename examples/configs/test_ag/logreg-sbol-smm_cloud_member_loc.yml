@@ -3,7 +3,7 @@ common:
   report_test_metrics_iteration: 1
   world_size: 2
   experiment_label: experiment-logreg-sbol-smm_distributed_1
-  reports_export_folder: "/home/azureuser/data/stalactite_data/reports"
+  reports_export_folder: "/Users/alexgrig/stalactite_data/reports"
   rendezvous_timeout: 3600
 
 vfl_model:
@@ -16,7 +16,7 @@ vfl_model:
   do_train: True
   do_predict: True
   do_save_model: True
-  vfl_model_path: /home/azureuser/data/stalactite_data/sbol_smm_saved_model
+  vfl_model_path: /Users/alexgrig/stalactite_data/sbol_smm_saved_model
 
 
 prerequisites:
@@ -30,7 +30,7 @@ data:
   random_seed: 0
   dataset_size: 8500
   dataset: 'sbol_smm'
-  host_path_data_dir: /home/azureuser/data/stalactite_data/sbol_smm_data/multilabel_sber_sample10000_parts2
+  host_path_data_dir: /Users/alexgrig/stalactite_data/sbol_smm_data/multilabel_sber_sample10000_parts2
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"
