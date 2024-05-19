@@ -58,4 +58,4 @@ member:
 
 docker:
   docker_compose_command: "docker compose"
-  docker_compose_path: '../../prerequisites'
+  docker_compose_path: '../../../prerequisites'

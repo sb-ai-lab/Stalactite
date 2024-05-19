@@ -20,7 +20,7 @@ vfl_model:
 
 
 prerequisites:
-  mlflow_host: '0.0.0.0'
+  mlflow_host: '176.123.161.62'
   mlflow_port: '5555'
   prometheus_host: '0.0.0.0'
   prometheus_port: "9090"
@@ -30,7 +30,7 @@ master:
   external_host: '0.0.0.0'
   run_mlflow: True
   logging_level: debug
-  run_prometheus: True 
+  run_prometheus: False
   master_model_params: {
     input_dim: 128,
     dropout: 0.2,
