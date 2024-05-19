@@ -32,7 +32,7 @@ class ImagePreprocessorEff:
         train_split_key = self.data_params.train_split
         test_split_key = self.data_params.test_split
 
-        data_train = self.dataset[train_split_key] #.select([x for x in range(10_000)])
+        data_train = self.dataset[train_split_key]
         data_test = self.dataset[test_split_key]
 
         feature_name = self.data_params.features_key
