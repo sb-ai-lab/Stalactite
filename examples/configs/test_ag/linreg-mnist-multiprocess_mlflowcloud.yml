@@ -16,7 +16,7 @@ vfl_model:
   do_train: True
   do_predict: True
   do_save_model: True
-  vfl_model_path: /Users/alexgrig/stalactite_data/models/linreg_model_local #../../saved_models/linreg_model
+  vfl_model_path: /Users/alexgrig/stalactite_data/models/linreg_model_local_multiprocess #../../saved_models/linreg_model
 
 prerequisites:
   mlflow_host: '176.123.161.62'
