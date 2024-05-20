@@ -7,7 +7,7 @@ services:
     ports:
       - "${PROMETHEUS_PORT}:9090"
     volumes:
-      -  "${DOCKER_COMPOSE_PATH}/configs/prometheus.yml:/etc/prometheus/prometheus.yml"
+      - "${DOCKER_COMPOSE_PATH}/configs/prometheus.yml:/etc/prometheus/prometheus.yml"
       - prometheus_storage:/prometheus
     networks:
       - vfl-network
@@ -30,6 +30,7 @@ services:
 
 networks:
   vfl-network:
+    external: true
 
 volumes:
   prometheus_storage:

@@ -53,8 +53,10 @@ def log_timing(name: str, log_func: Callable = print):
 @contextmanager
 def reporting(config: VFLConfig):
     if config.master.run_mlflow:
-        mlflow_host = os.environ.get('STALACTITE_MLFLOW_HOST', config.prerequisites.mlflow_host)
-        mlflow.set_tracking_uri(f"http://{mlflow_host}:{config.prerequisites.mlflow_port}")
+        mlflow_host = os.environ.get(
+            'STALACTITE_MLFLOW_URI', f"http://{config.prerequisites.mlflow_host}:{config.prerequisites.mlflow_port}"
+        )
+        mlflow.set_tracking_uri(mlflow_host)
         mlflow.set_experiment(config.common.experiment_label)
         mlflow.start_run()
 

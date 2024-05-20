@@ -25,11 +25,18 @@ BASE_MEMBER_CONTAINER_NAME = "member-agent-vfl"
 BASE_IMAGE_FILE = "grpc-base.dockerfile"
 BASE_IMAGE_FILE_CPU = "grpc-base-cpu.dockerfile"
 BASE_IMAGE_TAG = "grpc-base:latest"
-PREREQUISITES_NETWORK = "monitoring_vfl-network"  # Do not change this value
-MLFLOW_NETWORK = "mlflow_default"
+EXTERNAL_PREREQUISITES_NETWORK = "vfl-network" # Do not change this value
+MLFLOW_CONTAINER_NAME = "mlflow-mlflow-vfl-1"
 
 logger = logging.getLogger(__name__)
 logging.getLogger('docker').setLevel(logging.ERROR)
+
+
+def create_external_network(docker_client: APIClient = APIClient()):
+    if networks := docker_client.networks(names=[EXTERNAL_PREREQUISITES_NETWORK], filters={'driver': 'bridge'}):
+        logger.debug(f'{EXTERNAL_PREREQUISITES_NETWORK} has already been created ({networks}). Skipping.')
+    else:
+        docker_client.create_network(name=EXTERNAL_PREREQUISITES_NETWORK, driver='bridge', internal=False)
 
 
 def validate_int(value: Any):
@@ -193,6 +200,7 @@ def create_and_start_container(
 
 def get_mlflow_endpoint(config: VFLConfig) -> str:
     mlflow_host = config.prerequisites.mlflow_host
+    mlflow_port = config.prerequisites.mlflow_port
     if mlflow_host in ['0.0.0.0', 'localhost']:
         logger.info('Searching the MlFlow container locally')
         client = APIClient()
@@ -205,14 +213,15 @@ def get_mlflow_endpoint(config: VFLConfig) -> str:
             )
             raise exc
         try:
-            mlflow_host = container_info['NetworkSettings']['Networks'][MLFLOW_NETWORK]['Gateway']
+            mlflow_host = MLFLOW_CONTAINER_NAME
+            mlflow_port = 5000
         except KeyError:
             raise ValueError(
                 'MlFlow container does not configured via `stalactite prerequisites`, rerun the command or use'
                 ' host machine IP address in the `config.prerequisites.mlflow_host` configuration parameter'
             )
         logger.info(f'Found MlFlow at {mlflow_host}')
-    return mlflow_host
+    return f"http://{mlflow_host}:{mlflow_port}"
 
 
 def start_distributed_agent(
@@ -247,11 +256,11 @@ def start_distributed_agent(
         model_path = os.path.abspath(config.vfl_model.vfl_model_path)
 
         if role == Role.master:
-            if networks := client.networks(names=[PREREQUISITES_NETWORK]):
+            if networks := client.networks(names=[EXTERNAL_PREREQUISITES_NETWORK]):
                 network = networks.pop()["Name"]
             else:
-                network = PREREQUISITES_NETWORK
-                client.create_network(network)
+                network = EXTERNAL_PREREQUISITES_NETWORK
+                create_external_network(client)
             networking_config = client.create_networking_config({network: client.create_endpoint_config()})
         else:
             networking_config = None
@@ -269,7 +278,7 @@ def start_distributed_agent(
             port_binds = {config.grpc_server.port: config.grpc_server.port}
             ports = [config.grpc_server.port]
             name = ctx.obj["master_container_name"] + ("-predict" if infer else "")
-            env_vars['STALACTITE_MLFLOW_HOST'] = get_mlflow_endpoint(config)
+            env_vars['STALACTITE_MLFLOW_URI'] = get_mlflow_endpoint(config)
             if config.master.cuda_visible_devices != 'all' and config.docker.use_gpu:
                 env_vars['CUDA_VISIBLE_DEVICES'] = config.master.cuda_visible_devices
         elif role == Role.arbiter:
@@ -329,11 +338,11 @@ def start_multiprocess_agents(
     logger.info("Building an image of the agent. If build for the first time, it may take a while...")
     build_base_image(client, use_gpu=config.docker.use_gpu)
 
-    if networks := client.networks(names=[PREREQUISITES_NETWORK]):
+    if networks := client.networks(names=[EXTERNAL_PREREQUISITES_NETWORK]):
         network = networks.pop()["Name"]
     else:
-        network = PREREQUISITES_NETWORK
-        client.create_network(network)
+        network = EXTERNAL_PREREQUISITES_NETWORK
+        create_external_network(client)
     networking_config = client.create_networking_config({network: client.create_endpoint_config()})
 
     raise_path_not_exist(config.data.host_path_data_dir)
@@ -401,7 +410,7 @@ def start_multiprocess_agents(
         if config.master.cuda_visible_devices != 'all' and config.docker.use_gpu:
             env_vars['CUDA_VISIBLE_DEVICES'] = config.master.cuda_visible_devices
         env_vars['GRPC_ARBITER_HOST'] = grpc_arbiter_host
-        env_vars['STALACTITE_MLFLOW_HOST'] = get_mlflow_endpoint(config)
+        env_vars['STALACTITE_MLFLOW_URI'] = get_mlflow_endpoint(config)
 
         create_and_start_container(
             client=client,
