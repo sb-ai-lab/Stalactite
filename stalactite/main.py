@@ -27,7 +27,11 @@ from stalactite.utils_main import (
     get_status,
     is_test_environment,
     run_subprocess_command,
-    stop_containers, start_distributed_agent, start_multiprocess_agents, run_local_experiment,
+    stop_containers,
+    start_distributed_agent,
+    start_multiprocess_agents,
+    run_local_experiment,
+    create_external_network,
 )
 
 logging.getLogger('git').setLevel(logging.ERROR)
@@ -85,6 +89,7 @@ def start(config_path, detached, group):
     logger.info(f"Starting prerequisites containers ({group})")
     config = VFLConfig.load_and_validate(config_path)
     env_vars = get_env_vars(config)
+    create_external_network()
     for group_name in group:
         command = f"{config.docker.docker_compose_command} -f docker-compose-{group_name}.yml"
         run_subprocess_command(
