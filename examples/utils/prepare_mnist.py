@@ -210,3 +210,5 @@ if __name__ == '__main__':
     load_data(save_path, args.parts_num, args.binary)
 
     print(f"Splitted data is saved to: {save_path}")
+    
+    # python ./prepare_mnist.py --save_path ~/stalactite_data --parts_num 3
