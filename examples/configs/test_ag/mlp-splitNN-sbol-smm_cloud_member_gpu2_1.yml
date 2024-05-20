@@ -47,7 +47,6 @@ master:
   external_host: 172.208.11.130
   run_mlflow: True
   run_prometheus: True
-  logging_level: debug
   disconnect_idle_client_time: 120.
   time_between_idle_connections_checks: 3.
   master_model_params: {
@@ -58,10 +57,12 @@ master:
   }
 
 member:
+  logging_level: debug
   member_model_params: {
     hidden_channels:[1000, 300, 100],
 #    init_weights: 0.005
   }
+cuda_visible_devices: 1
 
 grpc_arbiter:
   use_arbiter: False
@@ -69,4 +70,4 @@ grpc_arbiter:
 docker:
   docker_compose_command: "docker compose"
   docker_compose_path: '../../../prerequisites'
-  use_gpu: False
+  use_gpu: True

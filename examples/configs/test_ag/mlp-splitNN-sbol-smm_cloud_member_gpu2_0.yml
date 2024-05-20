@@ -7,7 +7,7 @@ common:
   seed: 22
 
 vfl_model:
-  epochs: 1
+  epochs: 10
   batch_size: 250
   eval_batch_size: 200
   vfl_model_name: mlp
@@ -47,21 +47,22 @@ master:
   external_host: 172.208.11.130
   run_mlflow: True
   run_prometheus: True
+  disconnect_idle_client_time: 120.
+  time_between_idle_connections_checks: 3.
   master_model_params: {
     input_dim: 100,
     output_dim: 19,
     multilabel: True,
 #    init_weights: 0.005
   }
-  disconnect_idle_client_time: 120.
-  time_between_idle_connections_checks: 3.
 
 member:
+  logging_level: debug
   member_model_params: {
     hidden_channels:[1000, 300, 100],
 #    init_weights: 0.005
   }
-cuda_visible_devices: 1
+cuda_visible_devices: 0
 
 grpc_arbiter:
   use_arbiter: False
