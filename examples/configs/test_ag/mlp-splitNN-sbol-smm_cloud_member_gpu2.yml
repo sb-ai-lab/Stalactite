@@ -1,0 +1,72 @@
+common:
+  report_train_metrics_iteration: 1
+  report_test_metrics_iteration: 1
+  world_size: 2
+  experiment_label: experiment-mlp-sbol-smm-dictrubuted_1
+  reports_export_folder: /home/azureuser/data/stalactite_data/reports
+  seed: 22
+
+vfl_model:
+  epochs: 1
+  batch_size: 250
+  eval_batch_size: 200
+  vfl_model_name: mlp
+  is_consequently: False
+  use_class_weights: True
+  learning_rate: 0.01
+  do_train: True
+  do_predict: True
+  do_save_model: True
+  vfl_model_path: /home/azureuser/data/stalactite_data/models/mlp_model
+
+
+prerequisites:
+  mlflow_host: 176.123.161.62
+  mlflow_port: "5555"
+  prometheus_host: 172.208.11.130
+  prometheus_port: "9090"
+  grafana_port: "3000"
+
+data:
+  random_seed: 0
+  dataset_size: 850
+  dataset: 'sbol_smm'
+  host_path_data_dir:  /home/azureuser/data/stalactite_data/sbol_smm_data/multilabel_sber_sample10000_parts2
+  dataset_part_prefix: 'part_'
+  train_split: "train_train"
+  test_split: "train_val"
+  features_key: "features_part_"
+  label_key: "labels"
+
+grpc_server:
+  port: '50051'
+  max_message_size: -1
+  server_thread_pool_size: 10
+
+master:
+  external_host: 172.208.11.130
+  run_mlflow: True
+  run_prometheus: True
+  master_model_params: {
+    input_dim: 100,
+    output_dim: 19,
+    multilabel: True,
+#    init_weights: 0.005
+  }
+  disconnect_idle_client_time: 120.
+  time_between_idle_connections_checks: 3.
+
+member:
+  member_model_params: {
+    hidden_channels:[1000, 300, 100],
+#    init_weights: 0.005
+  }
+cuda_visible_devices: 1
+
+grpc_arbiter:
+  use_arbiter: False
+
+docker:
+  docker_compose_command: "docker compose"
+  docker_compose_path: '../../../prerequisites'
+  use_gpu: True
