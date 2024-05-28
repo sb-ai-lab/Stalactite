@@ -28,6 +28,7 @@ model path, load it for the inference and report the metrics.
 Depending on the experiment you run, two main types of the Master agent could be initialized. It is either Master, which
 trains its own VFL model, or Master, which only aggregates the members results. In current tutorial, the master holding
 the model is identified by the variable ``master_with_model``, and master without trainable model: ``master_no_model``
+(To identify the implemented algorithms` master type, check the :ref:`master_types` overview).
 
 In the inference process, independently from the VFL type you run (arbitered / honest), the inference process is run
 on the master and member:
