@@ -17,6 +17,8 @@ services:
       - ${MLFLOW_PORT}:5000
     networks:
       - vfl-network
+    labels:
+      framework: "stalactite"
 
   postgres-vfl:
     image: postgres:15.3
@@ -29,6 +31,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - vfl-network
+    labels:
+      framework: "stalactite"
 
 networks:
   vfl-network:
@@ -36,4 +40,8 @@ networks:
 
 volumes:
   postgres_data:
+    labels:
+      framework: "stalactite"
   mlruns:
+    labels:
+      framework: "stalactite"

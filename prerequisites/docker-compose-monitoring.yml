@@ -11,6 +11,8 @@ services:
       - prometheus_storage:/prometheus
     networks:
       - vfl-network
+    labels:
+      framework: "stalactite"
 
   grafana:
     image: grafana/grafana-enterprise
@@ -27,6 +29,8 @@ services:
       - PROMETHEUS_PORT=${PROMETHEUS_PORT}
     networks:
       - vfl-network
+    labels:
+      framework: "stalactite"
 
 networks:
   vfl-network:
@@ -34,5 +38,9 @@ networks:
 
 volumes:
   prometheus_storage:
+    labels:
+      framework: "stalactite"
   grafana_storage:
+    labels:
+      framework: "stalactite"
 

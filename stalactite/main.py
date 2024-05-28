@@ -11,7 +11,7 @@ from pathlib import Path
 
 import click
 import mlflow as _mlflow
-from docker.errors import APIError
+from docker.errors import APIError, NotFound
 
 from docker import APIClient
 from stalactite.configs import VFLConfig
@@ -22,6 +22,7 @@ from stalactite.utils_main import (
     BASE_ARBITER_CONTAINER_NAME,
     BASE_MEMBER_CONTAINER_NAME,
     KEY_CONTAINER_LABEL,
+    DOCKER_OBJECTS_LABEL,
     get_env_vars,
     get_logs,
     get_status,
@@ -50,6 +51,46 @@ class PrerequisitesGroup(str, enum.Enum):
 def cli():
     """Main stalactite CLI command group."""
     click.echo("Stalactite module API")
+
+@cli.command()
+@click.option(
+    "--remove-images", is_flag=True, show_default=True, default=False, help="Remove built images."
+)
+def clean_all(remove_images):
+    click.echo("Removing all the stalactite related docker objects")
+    client = APIClient()
+    filters = {
+        'label': (lambda d: [f"{key}={value}" for key, value in d.items()])(DOCKER_OBJECTS_LABEL)
+    }
+    containers = client.containers(all=True, filters=filters)
+    click.echo(f'Removing {len(containers)} containers')
+    for container in containers:
+        try:
+            client.remove_container(container, force=True, v=True)
+        except NotFound:
+            logger.warning('Could not remove container, resource already has been deleted')
+    volumes = client.volumes(filters=filters)
+    click.echo(f'Removing {len(volumes)} volumes')
+    for volume in volumes:
+        try:
+            client.remove_volume(volume, force=True)
+        except NotFound:
+            logger.warning('Could not remove volume, resource already has been deleted')
+    networks = client.networks(filters=filters)
+    click.echo(f'Removing {len(networks)} networks')
+    for network in networks:
+        try:
+            client.remove_network(network)
+        except NotFound:
+            logger.warning('Could not remove network, resource already has been deleted')
+    if remove_images:
+        images = client.images(filters=filters)
+        click.echo(f'Removing {len(images)} images')
+        for image in images:
+            try:
+                client.remove_image(image, force=True)
+            except NotFound:
+                logger.warning('Could not remove image, resource already has been deleted')
 
 
 @cli.group()
