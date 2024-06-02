@@ -3,7 +3,8 @@ common:
   report_test_metrics_iteration: 1
   world_size: 3
   experiment_label: experiment-efficientnet-mnist-local
-  reports_export_folder: /Users/alexgrig/stalactite_data/reports
+  #reports_export_folder: /Users/alexgrig/stalactite_data/reports
+  reports_export_folder: /home/azureuser/data/stalactite_data/reports
 
 vfl_model:
   epochs: 1
@@ -16,11 +17,11 @@ vfl_model:
   do_train: True
   do_predict: True
   do_save_model: True
-  vfl_model_path: /Users/alexgrig/stalactite_data/models/efficientnet_model
-
+  #vfl_model_path: /Users/alexgrig/stalactite_data/models/efficientnet_model
+  vfl_model_path: /home/azureuser/data/stalactite_data/models/efficientnet_model
 
 prerequisites:
-  mlflow_host: '176.123.161.62'
+  mlflow_host: '0.0.0.0' #'176.123.161.62'
   mlflow_port: '5555'
   prometheus_host: '0.0.0.0'
   prometheus_port: "9090"
@@ -49,7 +50,8 @@ data:
   random_seed: 0
   dataset_size: 1000
   dataset: 'mnist'
-  host_path_data_dir: /Users/alexgrig/stalactite_data/mnist_all_classes_parts_3
+  #host_path_data_dir: /Users/alexgrig/stalactite_data/mnist_all_classes_parts_3
+  host_path_data_dir: /home/azureuser/data/stalactite_data/mnist_all_classes_parts_3
   dataset_part_prefix: 'part_' # used in dataset folder structure inspection. Concatenated with the index of a party: 0,1,... etc.
   train_split: "train_train" # name of the train split
   test_split: "train_val" # name of the test split
