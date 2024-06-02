@@ -111,7 +111,7 @@ def save_master_dataset(dataset, path):
     if not path.exists():
         path.mkdir()
 
-    dataset.save_to_disk(path)
+    dataset.save_to_disk(str(path))
 
 
 def save_splitted_dataset(ds_list, path, part_dir_name='part_', clean_dir=False):
@@ -133,7 +133,7 @@ def save_splitted_dataset(ds_list, path, part_dir_name='part_', clean_dir=False)
         if part_path.exists():
             raise IOError('Directory already exists')
         part_path.mkdir()
-        ds.save_to_disk(part_path)
+        ds.save_to_disk(str(path))
 
 
 def load_data(save_path: Path, parts_num: int, binary: bool = True):
