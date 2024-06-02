@@ -18,6 +18,7 @@ from stalactite.helpers import run_local_agents, reporting, global_logging
 from stalactite.ml.arbitered.base import Role
 
 BASE_CONTAINER_LABEL = "grpc-experiment"
+DOCKER_OBJECTS_LABEL = {"framework": "stalactite"}
 KEY_CONTAINER_LABEL = "container-g"
 BASE_MASTER_CONTAINER_NAME = "master-agent-vfl"  # Do not change this value
 BASE_ARBITER_CONTAINER_NAME = "arbiter-agent-vfl"  # Do not change this value
@@ -36,7 +37,12 @@ def create_external_network(docker_client: APIClient = APIClient()):
     if networks := docker_client.networks(names=[EXTERNAL_PREREQUISITES_NETWORK], filters={'driver': 'bridge'}):
         logger.debug(f'{EXTERNAL_PREREQUISITES_NETWORK} has already been created ({networks}). Skipping.')
     else:
-        docker_client.create_network(name=EXTERNAL_PREREQUISITES_NETWORK, driver='bridge', internal=False)
+        docker_client.create_network(
+            name=EXTERNAL_PREREQUISITES_NETWORK,
+            driver='bridge',
+            internal=False,
+            labels=DOCKER_OBJECTS_LABEL,
+        )
 
 
 def validate_int(value: Any):
@@ -131,6 +137,7 @@ def build_base_image(
             nocache=False,
             dockerfile=os.path.join(Path(os.path.abspath(__file__)).parent.parent, "docker", image_file_name),
             rm=True,
+            labels=DOCKER_OBJECTS_LABEL,
         )
         for log in _logs:
             if logstr := log.get("stream", log.get("aux", {"aux": ""}).get("ID", "")).strip():
@@ -185,7 +192,7 @@ def create_and_start_container(
         detach=True,
         environment=environment,
         hostname=hostname,
-        labels={KEY_CONTAINER_LABEL: container_label},
+        labels={KEY_CONTAINER_LABEL: container_label, **DOCKER_OBJECTS_LABEL},
         volumes=volumes,
         host_config=host_config,
         networking_config=network_config,
@@ -205,21 +212,15 @@ def get_mlflow_endpoint(config: VFLConfig) -> str:
         logger.info('Searching the MlFlow container locally')
         client = APIClient()
         try:
-            container_info = client.inspect_container('stalactite-mlflow-mlflow-vfl-1')
+            client.inspect_container(MLFLOW_CONTAINER_NAME)
         except NotFound as exc:
             logger.error(
-                'Could not find the `stalactite-mlflow-mlflow-vfl-1` container locally. Are you sure, that you have '
+                f'Could not find the `{MLFLOW_CONTAINER_NAME}` container locally. Are you sure, that you have '
                 'started prerequisites group `mlflow` on current machine?'
             )
             raise exc
-        try:
-            mlflow_host = MLFLOW_CONTAINER_NAME
-            mlflow_port = 5000
-        except KeyError:
-            raise ValueError(
-                'MlFlow container does not configured via `stalactite prerequisites`, rerun the command or use'
-                ' host machine IP address in the `config.prerequisites.mlflow_host` configuration parameter'
-            )
+        mlflow_host = MLFLOW_CONTAINER_NAME
+        mlflow_port = 5000
         logger.info(f'Found MlFlow at {mlflow_host}')
     return f"http://{mlflow_host}:{mlflow_port}"
 
