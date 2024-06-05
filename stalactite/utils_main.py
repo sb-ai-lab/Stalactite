@@ -15,7 +15,7 @@ from stalactite.communications.local import ArbiteredLocalPartyCommunicator, Loc
 from stalactite.configs import VFLConfig, raise_path_not_exist
 from stalactite.data_utils import get_party_arbiter, get_party_master, get_party_member
 from stalactite.helpers import run_local_agents, reporting, global_logging
-from stalactite.ml.arbitered.base import Role
+from stalactite.utils import Role
 
 BASE_CONTAINER_LABEL = "grpc-experiment"
 DOCKER_OBJECTS_LABEL = {"framework": "stalactite"}

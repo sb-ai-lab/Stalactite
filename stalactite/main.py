@@ -7,7 +7,6 @@ using the configuration file in the YAML format.
 import enum
 import logging
 import os
-from pathlib import Path
 
 import click
 import mlflow as _mlflow
@@ -52,11 +51,13 @@ def cli():
     """Main stalactite CLI command group."""
     click.echo("Stalactite module API")
 
+
 @cli.command()
 @click.option(
     "--remove-images", is_flag=True, show_default=True, default=False, help="Remove built images."
 )
 def clean_all(remove_images):
+    """ Clear all created Docker objects (containers, volumes, networks, images). """
     click.echo("Removing all the stalactite related docker objects")
     client = APIClient()
     filters = {
@@ -70,10 +71,10 @@ def clean_all(remove_images):
         except NotFound:
             logger.warning('Could not remove container, resource already has been deleted')
     volumes = client.volumes(filters=filters)
-    click.echo(f'Removing {len(volumes)} volumes')
-    for volume in volumes:
+    click.echo(f'Removing {len(volumes["Volumes"])} volumes')
+    for volume in volumes['Volumes']:
         try:
-            client.remove_volume(volume, force=True)
+            client.remove_volume(volume['Name'], force=True)
         except NotFound:
             logger.warning('Could not remove volume, resource already has been deleted')
     networks = client.networks(filters=filters)
@@ -651,167 +652,6 @@ def logs(ctx, agent_id, follow, tail):
         logger.info("Logs in the single-process mode are not available")
 
 
-@cli.group()
-@click.pass_context
-@click.option(
-    "--single-process",
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Run single-node single-process (multi-thread) test.",
-)
-@click.option(
-    "--multi-process",
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Run single-node multi-process (dockerized) test.",
-)
-def test(ctx, multi_process, single_process):
-    """
-    Local tests (multi-process / single process) mode command group.
-
-    :param ctx: Click context
-    :param single_process: Run tests on single process experiment
-    :param multi_process: Run tests on multiple process (dockerized) experiment
-    """
-    if multi_process and not single_process:
-        click.echo("Manage multi-process single-node tests")
-    elif single_process and not multi_process:
-        click.echo("Manage single-process (multi-thread) single-node tests")
-    else:
-        raise SyntaxError("Either `--single-process` or `--multi-process` flag can be set.")
-    ctx.obj = dict()
-    ctx.obj["multi_process"] = multi_process
-    ctx.obj["single_process"] = single_process
-
-
-@test.command()
-@click.pass_context
-@click.option(
-    "--config-path", type=str, required=True, help="Absolute path to the configuration file in `YAML` format."
-)
-def start(ctx, config_path):
-    """
-    Start local test experiment.
-    For a multiprocess mode run integration tests on started VFL master and members containers.
-    Single-process test will run tests within a python process.
-
-    :param ctx: Click context
-    :param config_path: Absolute path to the configuration file in `YAML` format
-    """
-    config = VFLConfig.load_and_validate(config_path)
-    if ctx.obj["multi_process"] and not ctx.obj["single_process"]:
-        test_group_name = "TestLocalGroupStart"
-        report_file_name = f"{test_group_name}-log-{config.common.experiment_label}.jsonl"
-        run_subprocess_command(
-            command=f"python -m pytest --test_config_path {config_path} "
-                    f"tests/distributed_grpc/integration_test.py -k '{test_group_name}' -x "
-                    f"--report-log={os.path.join(config.common.reports_export_folder, report_file_name)} "
-                    "-W ignore::DeprecationWarning",
-            logger_err_info="Failed running test",
-            cwd=Path(__file__).parent.parent,
-            shell=True,
-        )
-    else:
-        report_file_name = f"local-tests-log-{config.common.experiment_label}.jsonl"
-        run_subprocess_command(
-            command=f"python -m pytest tests/test_local.py -x "
-                    f"--report-log={os.path.join(config.common.reports_export_folder, report_file_name)} "
-                    "-W ignore::DeprecationWarning --log-cli-level 20",
-            logger_err_info="Failed running test",
-            cwd=Path(__file__).parent.parent,
-            shell=True,
-        )
-
-
-@test.command()
-@click.pass_context
-@click.option("--config-path", type=str, help="Absolute path to the configuration file in `YAML` format.")
-@click.option(
-    "--no-tests",
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Remove test containers without launching Pytest.",
-)
-def stop(ctx, config_path, no_tests):
-    """
-    Stop local test experiment.
-    For a multiprocess mode run integration tests while stopping VFL master and members containers.
-    Does nothing for a single-process mode.
-
-    :param ctx: Click context
-    :param config_path: Absolute path to the configuration file in `YAML` format
-    :param no_tests: Remove test containers without launching Pytest. Useful if `start` command did not succeed,
-                     but containers have already been created
-    """
-    if config_path is None and not no_tests:
-        raise SyntaxError("Specify `--config-path` or pass flag `--no-tests`")
-    if no_tests:
-        _test = 1
-        if ctx.obj["multi_process"] and not ctx.obj["single_process"]:
-            logger.info("Removing test containers")
-            client = ctx.obj.get("client", APIClient())
-            try:
-                container_label = BASE_CONTAINER_LABEL + ("-test" if _test else "")
-                containers = client.containers(all=True, filters={"label": f"{KEY_CONTAINER_LABEL}={container_label}"})
-                stop_containers(client, containers, leave_containers=False)
-            except APIError as exc:
-                logger.error("Error while stopping (and removing) containers", exc_info=exc)
-            return
-    config = VFLConfig.load_and_validate(config_path)
-    if ctx.obj["multi_process"] and not ctx.obj["single_process"]:
-        test_group_name = "TestLocalGroupStop"
-        report_file_name = f"{test_group_name}-log-{config.common.experiment_label}.jsonl"
-        run_subprocess_command(
-            command=f"python -m pytest --test_config_path {config_path} "
-                    f"tests/distributed_grpc/integration_test.py -k '{test_group_name}' -x "
-                    f"--report-log={os.path.join(config.common.reports_export_folder, report_file_name)} "
-                    "-W ignore::DeprecationWarning",
-            logger_err_info="Failed running test",
-            cwd=Path(__file__).parent.parent,
-            shell=True,
-        )
-
-
-@test.command()
-@click.option("--agent-id", type=str, default=None, help="ID of the agents` container.")
-def status(agent_id):
-    """
-    Print status of the experimental test container(s).
-    If the `agent-id` is not passed, all the created on test containers` statuses will be returned.
-
-    :param ctx: Click context
-    :param agent_id: ID of the agents` container
-    """
-    _test = True
-    container_label = BASE_CONTAINER_LABEL + ("-test" if _test else "")
-    get_status(agent_id=agent_id, containers_label=f"{KEY_CONTAINER_LABEL}={container_label}")
-
-
-@test.command()
-@click.option("--agent-id", type=str, default=None, help="ID of the agents` container.")
-@click.option("--tail", type=str, default="all", help="Number of lines to show from the end of the logs.")
-@click.option("--config-path", type=str, default=None, help="Absolute path to the configuration file in `YAML` format.")
-def logs(agent_id, config_path, tail):
-    """
-    Print logs of the experimental test container or return path to tests` logs.
-    If the `agent-id` is passed, show container logs, otherwise, prints test report
-
-    :param agent_id: ID of the agents` container
-    :param config_path: Absolute path to the configuration file in `YAML` format
-    :param tail: Number of lines to show from the end of the logs
-    """
-    if agent_id is None and config_path is None:
-        raise SyntaxError("Either `--agent-id` or `--config-path` argument must be specified.")
-    if agent_id is not None:
-        get_logs(agent_id=agent_id, tail=tail)
-    if config_path is not None:
-        config = VFLConfig.load_and_validate(config_path)
-        logger.info(f"Test-report-logs path: {config.common.reports_export_folder}")
-
-
 @cli.command()
 @click.option("--config-path", type=str, required=True)
 @click.option(
@@ -829,6 +669,7 @@ def logs(agent_id, config_path, tail):
     help="Run single-node multi-process (dockerized) test.",
 )
 def predict(multi_process, single_process, config_path):
+    """ Run VFL inference for local experiments (multi-process / single process) """
     click.echo("Run VFL predictions")
     if multi_process and not single_process:
         client = APIClient()

@@ -1,9 +1,8 @@
-import math
+import logging
 from functools import partial
 from typing import Optional, Sequence, Union, Tuple
 
 import torch
-import numpy as np
 from torch import nn, Tensor
 
 from torchvision.models.efficientnet import MBConvConfig, FusedMBConvConfig
@@ -11,10 +10,12 @@ from torchvision.utils import _log_api_usage_once
 
 from stalactite.utils import init_linear_np
 
+logger = logging.getLogger(__name__)
+
 
 def _efficientnet_conf(
-    width_mult: float,
-    depth_mult: float
+        width_mult: float,
+        depth_mult: float
 ) -> Tuple[Sequence[Union[MBConvConfig, FusedMBConvConfig]], Optional[int]]:
     inverted_residual_setting: Sequence[Union[MBConvConfig, FusedMBConvConfig]]
     bneck_conf = partial(MBConvConfig, width_mult=width_mult, depth_mult=depth_mult)
@@ -34,12 +35,12 @@ def _efficientnet_conf(
 
 class EfficientNetTop(nn.Module):
     def __init__(
-        self,
-        dropout: float = 0.1,
-        input_dim=None,
-        num_classes: int = 1000,
-        init_weights: float = None,
-        seed: int = None,
+            self,
+            dropout: float = 0.1,
+            input_dim=None,
+            num_classes: int = 1000,
+            init_weights: float = None,
+            seed: int = None,
 
     ) -> None:
         """
@@ -53,6 +54,11 @@ class EfficientNetTop(nn.Module):
         """
         super().__init__()
         _log_api_usage_once(self)
+
+        self.dropout = dropout
+        self.input_dim = input_dim
+        self.num_classes = num_classes
+        self.init_weights = init_weights
 
         self.criterion = torch.nn.CrossEntropyLoss()
         self.seed = seed
@@ -87,6 +93,7 @@ class EfficientNetTop(nn.Module):
         if is_single:
             logit = self.forward(x)
             loss = self.criterion(torch.squeeze(logit), gradients.type(torch.LongTensor))
+            logger.info(f"Loss: {loss.item()}")
             grads = torch.autograd.grad(outputs=loss, inputs=x, retain_graph=True)
             loss.backward()
             optimizer.step()
@@ -95,13 +102,19 @@ class EfficientNetTop(nn.Module):
             model_output = self.forward(x)
             model_output.backward(gradient=gradients)
             optimizer.step()
-            
+
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
 
     def get_weights(self) -> torch.Tensor:
         return self.linear.weight.clone()
 
-
-
-
+    @property
+    def init_params(self):
+        return {
+            'dropout': self.dropout,
+            'input_dim': self.input_dim,
+            'num_classes': self.num_classes,
+            'init_weights': self.init_weights,
+            'seed': self.seed,
+        }

@@ -24,5 +24,5 @@ RUN poetry install --only-root
 WORKDIR /opt/stalactite
 ENV GIT_PYTHON_REFRESH="quiet"
 LABEL framework="stalactite"
-
+COPY ./plugins /opt/plugins
 # docker build -f ./docker/grpc-base.dockerfile -t grpc-base:latest .

@@ -24,5 +24,5 @@ WORKDIR /opt/stalactite
 ENV GIT_PYTHON_REFRESH="quiet"
 ENV CUDA_DEVICE_ORDER="PCI_BUS_ID"
 LABEL framework="stalactite"
-
+COPY ./plugins /opt/plugins
 # docker build -f ./docker/grpc-base.dockerfile -t grpc-base:latest .

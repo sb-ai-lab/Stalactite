@@ -37,7 +37,8 @@ from stalactite.communications.grpc_utils.utils import (
     start_thread,
 )
 from stalactite.communications.helpers import METHOD_VALUES, Method, MethodKwargs
-from stalactite.ml.arbitered.base import PartyArbiter, Role
+from stalactite.ml.arbitered.base import PartyArbiter
+from stalactite.utils import Role
 
 logger = logging.getLogger(__name__)
 

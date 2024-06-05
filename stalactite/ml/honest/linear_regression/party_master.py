@@ -12,14 +12,13 @@ from stalactite.batching import ConsecutiveListBatcher, ListBatcher
 from stalactite.ml.honest.base import HonestPartyMaster, Batcher
 from stalactite.metrics import ComputeAccuracy
 
+
 logger = logging.getLogger(__name__)
 
 
 class HonestPartyMasterLinReg(HonestPartyMaster):
     """ Implementation class of the PartyMaster used for local and distributed VFL training. """
-    do_save_model = False
-    do_load_model = False
-    model_path = None
+
     def __init__(
             self,
             uid: str,
@@ -37,7 +36,10 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             do_predict: bool = False,
             model_name: str = None,
             model_params: dict = None,
-            seed: int = None
+            seed: int = None,
+            device: str = 'cpu',
+            model_path: Optional[str] = None,
+            do_save_model: bool = False,
     ) -> None:
         """ Initialize PartyMaster.
 
@@ -75,6 +77,9 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         self.aggregated_output = None
         self._model_params = model_params
         self.seed = seed
+        self.device = torch.device(device)
+        self.do_save_model = do_save_model
+        self.model_path = model_path
 
         self.uid2tensor_idx = None
         self.uid2tensor_idx_test = None
@@ -87,7 +92,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
 
     def initialize(self, is_infer: bool = False) -> None:
         """ Initialize the party master. """
-        logger.info("Master %s: initializing" % self.id)
+        logger.info(f"Master {self.id}: initializing")
         ds = self.processor.fit_transform()
         self.target = ds[self.processor.data_params.train_split][self.processor.data_params.label_key]
         self.test_target = ds[self.processor.data_params.test_split][self.processor.data_params.label_key]
@@ -108,10 +113,14 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
             self.binary = False
 
         if self._model_name is not None:
-            self.initialize_model()
+            self.initialize_model(do_load_model=is_infer)
             self.initialize_optimizer()
+
+        self.target = self.target.to(self.device)
+        self.test_target = self.test_target.to(self.device)
         self.is_initialized = True
         self.is_finalized = False
+        logger.info(f"Master {self.id}: has been initialized")
 
     def make_batcher(
             self,
@@ -126,12 +135,12 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
 
         :return: Batcher instance.
         """
-        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, len(uids)))
         self.check_if_ready()
         batch_size = self._eval_batch_size if is_infer else self._batch_size
         epochs = 1 if is_infer else self.epochs
         if uids is None:
             raise RuntimeError('Master must initialize batcher with collected uids.')
+        logger.info(f"Master {self.id} makes a batcher for {len(uids)} uids")
         assert party_members is not None, "Master is trying to initialize make_batcher without members list"
         return ListBatcher(epochs=epochs, members=party_members, uids=uids, batch_size=batch_size)
 
@@ -142,9 +151,9 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
 
         :return: Initial updates as a list of tensors.
         """
-        logger.info("Master %s: making init updates for %s members" % (self.id, world_size))
+        logger.info(f"Master {self.id}: makes initial updates for {world_size} members")
         self.check_if_ready()
-        return [torch.zeros(self._batch_size) for _ in range(world_size)]
+        return [torch.zeros(self._batch_size, device=self.device) for _ in range(world_size)]
 
     def report_metrics(self, y: DataTensor, predictions: DataTensor, name: str, step: int) -> None:
         """ Report metrics based on target values and predictions.
@@ -155,16 +164,16 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
 
         :return: None
         """
-        logger.info(
-            f"Master %s: reporting metrics. Y dim: {y.size()}. " f"Predictions size: {predictions.size()}" % self.id
-        )
+        logger.info(f"Master {self.id} reporting metrics")
+        logger.debug(f"Predictions size: {predictions.size()}, Target size: {y.size()}")
         postfix = '-infer' if step == -1 else ""
         step = step if step != -1 else None
-
-        mae = metrics.mean_absolute_error(y, predictions.detach())
-        acc = ComputeAccuracy().compute(y, predictions.detach())
-        logger.info(f"Master %s: %s metrics (MAE): {mae}" % (self.id, name))
-        logger.info(f"Master %s: %s metrics (Accuracy): {acc}" % (self.id, name))
+        y = y.cpu()
+        predictions = predictions.cpu()
+        mae = metrics.mean_absolute_error(y, predictions)
+        acc = ComputeAccuracy().compute(y, predictions)
+        logger.info(f"{name} metrics (MAE): {mae}")
+        logger.info(f"{name} metrics (Accuracy): {acc}")
 
         if self.run_mlflow:
             mlflow.log_metric(f"{name.lower()}_mae{postfix}", mae, step=step)
@@ -181,11 +190,11 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
 
         :return: Aggregated predictions.
         """
-        logger.info("Master %s: aggregating party predictions (num predictions %s)" % (self.id, len(party_predictions)))
+        logger.info(f"Master {self.id}: aggregates party predictions (number of predictions {len(party_predictions)})")
         self.check_if_ready()
         if not is_infer:
             for member_id, member_prediction in zip(participating_members, party_predictions):
-                self.party_predictions[member_id] = member_prediction
+                self.party_predictions[member_id] = member_prediction.to(self.device)
             party_predictions = list(self.party_predictions.values())
 
         return torch.sum(torch.stack(party_predictions, dim=1), dim=1)
@@ -208,7 +217,7 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
 
         :return: List of updates as tensors.
         """
-        logger.info("Master %s: computing updates (world size %s)" % (self.id, world_size))
+        logger.info(f"Master {self.id}: computes updates (world size {world_size})")
         self.check_if_ready()
         self.iteration_counter += 1
         tensor_idx = [self.uid2tensor_idx[uid] for uid in uids]
@@ -216,17 +225,19 @@ class HonestPartyMasterLinReg(HonestPartyMaster):
         for member_id in participating_members:
             party_predictions_for_upd = [v for k, v in self.party_predictions.items() if k != member_id]
             if len(party_predictions_for_upd) == 0:
-                party_predictions_for_upd = [torch.rand(predictions.size())]
+                party_predictions_for_upd = [torch.rand(predictions.size(), device=self.device)]
             pred_for_member_upd = torch.mean(torch.stack(party_predictions_for_upd), dim=0)
             member_update = y - torch.reshape(pred_for_member_upd, (-1,))
             self.updates[member_id] = member_update
+        logger.debug(f"Master {self.id}: computed updates")
         return [self.updates[member_id] for member_id in participating_members]
 
     def finalize(self, is_infer: bool = False) -> None:
         """ Finalize the party master. """
-        logger.info("Master %s: finalizing" % self.id)
+        logger.info(f"Master {self.id}: finalizing")
         self.check_if_ready()
         self.is_finalized = True
+        logger.info(f"Master {self.id}: has finalized")
 
     def check_if_ready(self):
         """ Check if the party master is ready for operations.
@@ -256,12 +267,12 @@ class HonestPartyMasterLinRegConsequently(HonestPartyMasterLinReg):
 
         :return: ConsecutiveListBatcher instance.
         """
-        logger.info("Master %s: making a make_batcher for uids %s" % (self.id, len(uids)))
         self.check_if_ready()
         epochs = 1 if is_infer else self.epochs
         batch_size = self._eval_batch_size if is_infer else self._batch_size
         if uids is None:
             raise RuntimeError('Master must initialize batcher with collected uids.')
+        logger.info(f"Master {self.id} makes a batcher for {len(uids)} uids")
         if not is_infer:
             return ConsecutiveListBatcher(epochs=epochs, members=party_members, uids=uids, batch_size=batch_size)
         else:

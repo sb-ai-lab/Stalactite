@@ -28,7 +28,14 @@ class MLPBottom(nn.Module):
 
         super().__init__()
         _log_api_usage_once(self)
+
+        self.input_dim = input_dim
+        self.bias = bias
+        self.dropout = dropout
+        self.multilabel = multilabel
+        self.init_weights = init_weights
         self.seed = seed
+
         if multilabel:
             self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
 
@@ -69,3 +76,14 @@ class MLPBottom(nn.Module):
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
+
+    @property
+    def init_params(self):
+        return {
+            'input_dim': self.input_dim,
+            'bias': self.bias,
+            'dropout': self.dropout,
+            'multilabel': self.multilabel,
+            'init_weights': self.init_weights,
+            'seed': self.seed,
+        }

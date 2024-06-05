@@ -1,3 +1,5 @@
+import importlib
+import inspect
 import logging
 import os
 import time
@@ -9,7 +11,28 @@ import mlflow
 
 from stalactite.base import PartyMaster, PartyMember
 from stalactite.configs import VFLConfig
-from stalactite.ml.arbitered.base import PartyArbiter, Role
+from stalactite.ml.arbitered.base import PartyArbiter
+from stalactite.utils import Role
+
+
+def get_plugin_agent(module_path: str, role: Role):
+    agent_path = f"{module_path}.party_{role}"
+    target_class = None
+    try:
+        module = importlib.import_module(agent_path)
+    except ModuleNotFoundError as exc:
+        raise ValueError(f"No {role} is defined in plugin/. Check correctness of the config file") from exc
+    classes = inspect.getmembers(module, inspect.isclass)
+    for cls, path in classes:
+        if agent_path in path.__module__ and f"party{role}" in cls.lower():
+            target_class = cls
+    if target_class is not None:
+        return getattr(module, target_class)
+    else:
+        raise NameError(
+            f"Defined classes` names violate the naming convention "
+            f"(<arbitrary_prefix>Party{role.capitalize()}<arbitrary_postfix>)"
+        )
 
 
 def global_logging(
@@ -38,6 +61,8 @@ def global_logging(
                     logger.setLevel(logging.INFO)
             else:
                 logger.setLevel(logging_level)
+        else:
+            logger.propagate = False
 
 
 @contextmanager

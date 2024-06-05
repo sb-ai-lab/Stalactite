@@ -15,7 +15,6 @@ from stalactite.communications.helpers import MethodKwargs, Method
 
 logger = logging.getLogger(__name__)
 
-
 DataTensor = torch.Tensor
 # in reality, it will be a DataTensor but with one more dimension
 PartyDataTensor = List[torch.Tensor]
@@ -327,6 +326,7 @@ class PartyAgent(ABC):
             if self.model_path is None:
                 raise RuntimeError('If `do_save_model` is True, the `model_path` must be not None.')
             os.makedirs(os.path.join(self.model_path, f'agent_{self.id}'), exist_ok=True)
+            logger.info(f"Agent {self.id} saving the model to {self.model_path}")
             if is_ovr_models:
                 for idx, model in enumerate(self._model):
                     torch.save(model.state_dict(), os.path.join(self.model_path, f'agent_{self.id}', f'model-{idx}.pt'))
@@ -355,6 +355,10 @@ class PartyAgent(ABC):
 
         with open(os.path.join(agent_model_path, 'model_init_params.json')) as f:
             init_model_params = json.load(f)
+
+        if (model_params := getattr(self, '_model_params', None)) is not None:
+            for k, v in model_params.items():
+                init_model_params[k] = v
 
         if is_ovr_models:
             logger.info(f'Loading OVR models from {agent_model_path}')
@@ -397,7 +401,7 @@ class PartyMaster(PartyAgent, ABC):
 
         :return: Common records identifiers among the agents used in training loop.
         """
-        logger.debug("Master %s: synchronizing uids for party of size %s" % (self.id, world_size))
+        logger.debug(f"Master {self.id}: synchronizing uuids for party of size {world_size}")
         inner_collected_uids = [col_uids[0] for col_uids in collected_uids if col_uids[1]]
         uids = self.inference_target_uids if is_infer else self.target_uids
         if len(inner_collected_uids) > 0:
@@ -407,12 +411,12 @@ class PartyMaster(PartyAgent, ABC):
         shared_uids = sorted(
             [uid for uid, count in collections.Counter(uids).items() if count == len(inner_collected_uids) + 1]
         )
-        logger.debug("Master %s: registering shared uids f size %s" % (self.id, len(shared_uids)))
+        logger.debug(f"Master {self.id}: registering shared uuids of size {len(shared_uids)}")
         if is_infer:
             self.inference_target_uids = shared_uids
         else:
             self.target_uids = shared_uids
-        logger.debug("Master %s: record uids has been successfully synchronized")
+        logger.debug(f"Master {self.id}: record uuids has been successfully synchronized")
         return shared_uids
 
     @abstractmethod

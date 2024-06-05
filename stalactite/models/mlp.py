@@ -12,19 +12,23 @@ logger = logging.getLogger(__name__)
 
 class MLP(nn.Module):
     def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        hidden_channels: List[int],
-        norm_layer: Optional[Callable[..., torch.nn.Module]] = None,
-        activation_layer: Optional[Callable[..., torch.nn.Module]] = torch.nn.ReLU,
-        bias: bool = True,
-        dropout: float = 0.0,
-        init_weights: float = None,
+            self,
+            input_dim: int,
+            output_dim: int,
+            hidden_channels: List[int],
+            norm_layer: Optional[Callable[..., torch.nn.Module]] = None,
+            activation_layer: Optional[Callable[..., torch.nn.Module]] = torch.nn.ReLU,
+            bias: bool = True,
+            dropout: float = 0.0,
+            init_weights: float = None,
     ) -> None:
 
         super().__init__()
         _log_api_usage_once(self)
+
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.dropout = dropout
 
         layers = []
         in_dim = input_dim
@@ -64,9 +68,17 @@ class MLP(nn.Module):
         targets_type = torch.LongTensor if isinstance(criterion,
                                                       torch.nn.CrossEntropyLoss) else torch.FloatTensor
         loss = criterion(torch.squeeze(logit), y.type(targets_type))
-        logger.info(f"loss: {loss.item()}")
+        logger.info(f"Loss: {loss.item()}")
         loss.backward()
         optimizer.step()
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
+
+    @property
+    def init_params(self):
+        return {
+            'input_dim': self.input_dim,
+            'output_dim': self.output_dim,
+            'dropout': self.dropout,
+        }

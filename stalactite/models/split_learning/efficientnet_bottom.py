@@ -53,6 +53,11 @@ class EfficientNetBottom(nn.Module):
         super().__init__()
         _log_api_usage_once(self)
         self.seed = seed
+        self.width_mult = width_mult
+        self.depth_mult = depth_mult
+        self.stochastic_depth_prob = stochastic_depth_prob
+        self.init_weights = init_weights
+
         inverted_residual_setting, last_channel = _efficientnet_conf(width_mult=width_mult, depth_mult=depth_mult)
 
         if norm_layer is None:
@@ -138,3 +143,13 @@ class EfficientNetBottom(nn.Module):
 
     def get_weights(self) -> torch.Tensor:
         return self.linear.weight.clone()
+
+    @property
+    def init_params(self):
+        return {
+            'seed': self.seed,
+            'width_mult': self.width_mult,
+            'depth_mult': self.depth_mult,
+            'stochastic_depth_prob': self.stochastic_depth_prob,
+            'init_weights': self.init_weights,
+        }
