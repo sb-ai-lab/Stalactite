@@ -73,7 +73,7 @@ class VFLModelConfig(BaseModel):
     epochs: int = Field(default=3, description="Number of epochs to train a model")
     batch_size: int = Field(default=100, description="Batch size used for training")
     eval_batch_size: int = Field(default=100, description="Batch size used for evaluation")
-    vfl_model_name: Literal['linreg', 'logreg', 'logreg_sklearn', 'efficientnet', 'mlp', 'resnet'] = Field(
+    vfl_model_name: str = Field(
         default='linreg',
         description='Model type. One of `linreg`, `logreg`, `logreg_sklearn`, `efficientnet`, `mlp`, `resnet`'
     )

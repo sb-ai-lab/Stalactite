@@ -46,6 +46,15 @@ class ResNetBottom(nn.Module):
         **kwargs,
     ):
         super(ResNetBottom, self).__init__()
+
+        self.input_dim = input_dim
+        self.noise_std = noise_std
+        self.use_bn = use_bn
+        self.num_init_features = num_init_features
+        self.use_noise = use_noise
+        self.init_weights = init_weights
+        self.seed = seed
+
         if isinstance(drop_rate, float):
             drop_rate = [[drop_rate, drop_rate]] * len(hid_factor)
         elif isinstance(drop_rate, list) and len(drop_rate) == 2:
@@ -54,7 +63,6 @@ class ResNetBottom(nn.Module):
             assert (
                 len(drop_rate) == len(hid_factor) and len(drop_rate[0]) == 2
             ), "Wrong number hidden_sizes/drop_rates. Must be equal."
-        self.seed = seed
         num_features = input_dim if num_init_features is None else num_init_features
         self.dense0 = nn.Linear(input_dim, num_features) if num_init_features is not None else nn.Identity()
         self.features1 = nn.Sequential(OrderedDict([]))
@@ -102,4 +110,17 @@ class ResNetBottom(nn.Module):
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
+
+
+    @property
+    def init_params(self):
+        return {
+            'input_dim': self.input_dim,
+            'noise_std': self.noise_std,
+            'use_bn': self.use_bn,
+            'num_init_features': self.num_init_features,
+            'use_noise': self.use_noise,
+            'seed': self.seed,
+            'init_weights': self.init_weights,
+        }
 

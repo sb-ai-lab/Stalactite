@@ -94,7 +94,7 @@ class HonestPartyMaster(PartyMaster, ABC):
         :param party: Communicator instance used for communication between VFL agents.
         :return: None
         """
-        logger.info("Running master %s" % self.id)
+        logger.info(f"Running master {self.id}")
         if self.do_train:
             self.fit(party)
 
@@ -147,7 +147,7 @@ class HonestPartyMaster(PartyMaster, ABC):
             participating_members=party.members,
         )
         self.finalize()
-        logger.info("Finished master %s" % self.id)
+        logger.info(f"Finished master {self.id}")
 
     def inference(self, party: PartyCommunicator) -> None:
         records_uids_tasks = party.broadcast(
@@ -184,7 +184,7 @@ class HonestPartyMaster(PartyMaster, ABC):
             method_kwargs=MethodKwargs(other_kwargs={'is_infer': True})
         )
         self.finalize(is_infer=True)
-        logger.info("Finished master %s" % self.id)
+        logger.info(f"Finished master {self.id}")
 
     def loop(self, batcher: Batcher, party: PartyCommunicator) -> None:
         """ Run main training loop on the VFL master.
@@ -194,12 +194,12 @@ class HonestPartyMaster(PartyMaster, ABC):
 
         :return: None
         """
-        logger.info("Master %s: entering training loop" % self.id)
+        logger.info(f"Master {self.id}: entering training loop")
         updates = self.make_init_updates(party.world_size)
         for titer in batcher:
-            logger.debug(
-                f"Master %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
+            logger.info(
+                f"Master {self.id}: train loop - starting batch {titer.seq_num} (sub iter {titer.subiter_seq_num}) "
+                f"on epoch {titer.epoch}"
             )
             iter_start_time = time.time()
             if titer.seq_num == 0:
@@ -230,8 +230,8 @@ class HonestPartyMaster(PartyMaster, ABC):
 
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
                 logger.debug(
-                    f"Master %s: train loop - reporting train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
+                    f"Master {self.id}: train loop - reporting train metrics on iteration {titer.seq_num} "
+                    f"of epoch {titer.epoch}"
                 )
                 predict_tasks = party.broadcast(
                     Method.predict,
@@ -246,8 +246,8 @@ class HonestPartyMaster(PartyMaster, ABC):
 
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
                 logger.debug(
-                    f"Master %s: train loop - reporting test metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
+                    f"Master {self.id}: train loop - reporting test metrics on iteration {titer.seq_num} "
+                    f"of epoch {titer.epoch}"
                 )
                 predict_test_tasks = party.broadcast(
                     Method.predict,
@@ -276,14 +276,13 @@ class HonestPartyMaster(PartyMaster, ABC):
 
         :return: None
         """
-        logger.info("Master %s: entering inference loop" % self.id)
+        logger.info(f"Master {self.id}: entering inference loop")
         party_predictions_test = defaultdict(list)
         for titer in batcher:
             if titer.last_batch:
                 break
-            logger.debug(
-                f"Master %s: inference loop - starting batch %s (sub iter %s) on epoch %s"
-                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
+            logger.info(
+                f"Master {self.id}: inference loop - starting batch {titer.seq_num} (sub iter {titer.subiter_seq_num})"
             )
             predict_test_tasks = party.broadcast(
                 Method.predict,
@@ -332,7 +331,8 @@ class HonestPartyMember(PartyMember, ABC):
             do_save_model: bool = False,
             use_inner_join: bool = False,
             model_params: dict = None,
-            seed: int = None
+            seed: int = None,
+            device: str = 'cpu',
     ) -> None:
         """
         Initialize PartyMemberImpl.
@@ -373,6 +373,7 @@ class HonestPartyMember(PartyMember, ABC):
         self._optimizer = None
         self.use_inner_join = use_inner_join
         self.seed = seed
+        self.device = torch.device(device)
 
         if self.is_consequently:
             if self.members is None:
@@ -423,7 +424,7 @@ class HonestPartyMember(PartyMember, ABC):
         :param party: Communicator instance used for communication between VFL agents.
         :return: None
         """
-        logger.info("Running member %s" % self.id)
+        logger.info(f"Running member {self.id}")
         if self.do_train:
             self._run(party, is_infer=False)
 
@@ -464,7 +465,7 @@ class HonestPartyMember(PartyMember, ABC):
 
         finalize_task = party.recv(Task(method_name=Method.finalize, from_id=party.master, to_id=self.id))
         self.execute_received_task(finalize_task)
-        logger.info("Finished member %s" % self.id)
+        logger.info(f"Finished member {self.id}")
 
     def _predict_metrics_loop(self, party: PartyCommunicator):
         predict_task = party.recv(Task(method_name=Method.predict, from_id=party.master, to_id=self.id))
@@ -479,16 +480,15 @@ class HonestPartyMember(PartyMember, ABC):
 
         :return: None
         """
-        logger.info("Member %s: entering training loop" % self.id)
-
+        logger.info(f"Member {self.id}: entering training loop")
         for titer in batcher:
             if titer.participating_members is not None:
                 if self.id not in titer.participating_members:
                     logger.debug(f'Member {self.id} skipping {titer.seq_num}.')
                     continue
-            logger.debug(
-                f"Member %s: train loop - starting batch %s (sub iter %s) on epoch %s"
-                % (self.id, titer.seq_num, titer.subiter_seq_num, titer.epoch)
+            logger.info(
+                f"Member {self.id}: train loop - starting batch {titer.seq_num} (sub iter {titer.subiter_seq_num}) "
+                f"on epoch {titer.epoch}"
             )
             update_predict_task = party.recv(
                 Task(method_name=Method.update_predict, from_id=party.master, to_id=self.id)
@@ -498,15 +498,15 @@ class HonestPartyMember(PartyMember, ABC):
 
             if self.report_train_metrics_iteration > 0 and titer.seq_num % self.report_train_metrics_iteration == 0:
                 logger.debug(
-                    f"Member %s: train loop - calculating train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
+                    f"Member {self.id}: train loop - reporting train metrics on iteration {titer.seq_num} "
+                    f"of epoch {titer.epoch}"
                 )
                 self._predict_metrics_loop(party)
 
             if self.report_test_metrics_iteration > 0 and titer.seq_num % self.report_test_metrics_iteration == 0:
                 logger.debug(
-                    f"Member %s: train loop - calculating train metrics on iteration %s of epoch %s"
-                    % (self.id, titer.seq_num, titer.epoch)
+                    f"Member {self.id}: test loop - reporting train metrics on iteration {titer.seq_num} "
+                    f"of epoch {titer.epoch}"
                 )
                 self._predict_metrics_loop(party)
 
@@ -518,11 +518,14 @@ class HonestPartyMember(PartyMember, ABC):
 
         :return: None
         """
-        logger.info("Member %s: entering training loop" % self.id)
+        logger.info(f"Member {self.id}: entering inference loop")
 
         for titer in batcher:
             if titer.last_batch:
                 break
+            logger.info(
+                f"Member {self.id}: inference loop - starting batch {titer.seq_num} (sub iter {titer.subiter_seq_num})"
+            )
             if titer.participating_members is not None:
                 if self.id not in titer.participating_members:
                     logger.debug(f'Member {self.id} skipping {titer.seq_num}.')
@@ -543,6 +546,7 @@ class HonestPartyMember(PartyMember, ABC):
         uids_to_use = self._uids_to_use_test if is_infer else self._uids_to_use
         if uids_to_use is None:
             raise RuntimeError("Cannot create make_batcher, you must `register_records_uids` first.")
+        logger.info(f"Member {self.id} makes a batcher for {len(uids_to_use)} uids")
         return self._create_batcher(epochs=epochs, uids=uids_to_use, batch_size=batch_size)
 
     def _create_batcher(self, epochs: int, uids: List[str], batch_size: int) -> Batcher:
@@ -552,7 +556,7 @@ class HonestPartyMember(PartyMember, ABC):
         :param uids: List of unique identifiers for dataset rows.
         :param batch_size: Size of the training batch.
         """
-        logger.info("Member %s: making a make_batcher for uids" % self.id)
+        logger.info(f"Member {self.id}: making a make_batcher for {len(uids)} uids")
         if not self.is_consequently:
             return ListBatcher(epochs=epochs, members=None, uids=uids, batch_size=batch_size)
         else:
@@ -565,7 +569,7 @@ class HonestPartyMember(PartyMember, ABC):
 
         :return: List of unique identifiers.
         """
-        logger.info("Member %s: reporting existing record uids" % self.id)
+        logger.info(f"Member {self.id}: reporting existing record uids")
         if is_infer:
             return self._infer_uids, self.use_inner_join
         return self._uids, self.use_inner_join
@@ -576,7 +580,7 @@ class HonestPartyMember(PartyMember, ABC):
         :param uids: List of unique identifiers.
         :return: None
         """
-        logger.info("Member %s: registering %s uids to be used." % (self.id, len(uids)))
+        logger.info(f"Member {self.id}: registering {len(uids)} uids to be used.")
 
         if is_infer:
             self._uids_to_use_test = uids
@@ -595,7 +599,7 @@ class HonestPartyMember(PartyMember, ABC):
         if len(uids_to_fill) == 0:
             return
 
-        logger.info(f"Member {self.id} has {len(uids_to_fill)} missing values : using fillna...")
+        logger.info(f"Member {self.id} has {len(uids_to_fill)} missing values: using fillna...")
         start_idx = max(_uid2tensor_idx.values()) + 1
         idx = start_idx
         for uid in uids_to_fill:
@@ -618,14 +622,23 @@ class HonestPartyMember(PartyMember, ABC):
 
         ds = ds.with_format("torch")
         self._dataset[split] = ds
+        self.prepare_device_data(is_infer=is_infer)
         if not is_infer:
             self.initialize_model()
             self.initialize_optimizer()
 
+    def prepare_device_data(self, is_infer: bool = False):
+        if not is_infer:
+            self.device_dataset_train_split = self._dataset[self._data_params.train_split][
+                self._data_params.features_key].to(self.device)
+        else:
+            self.device_dataset_test_split = self._dataset[self._data_params.test_split][
+                self._data_params.features_key].to(self.device)
+
     def initialize(self, is_infer: bool = False):
         """ Initialize the party member. """
 
-        logger.info("Member %s: initializing" % self.id)
+        logger.info(f"Member {self.id}: initializing")
         self._dataset = self.processor.fit_transform()
         self.uid2tensor_idx = {uid: i for i, uid in enumerate(self._uids)}
         self.uid2tensor_idx_test = {uid: i for i, uid in enumerate(self._infer_uids)}
@@ -633,18 +646,20 @@ class HonestPartyMember(PartyMember, ABC):
         self._common_params = self.processor.common_params
         self.initialize_model(do_load_model=is_infer)
         self.initialize_optimizer()
+        self.prepare_device_data(is_infer=True)
+        self.prepare_device_data(is_infer=False)
         self.is_initialized = True
         self.is_finalized = False
-        logger.info("Member %s: has been initialized" % self.id)
+        logger.info(f"Member {self.id}: has been initialized")
 
     def finalize(self, is_infer: bool = False) -> None:
         """ Finalize the party member. """
-        logger.info("Member %s: finalizing" % self.id)
+        logger.info(f"Member {self.id}: finalizing")
         self.check_if_ready()
         if self.do_save_model and not is_infer:
             self.save_model(is_ovr_models=self.ovr)
         self.is_finalized = True
-        logger.info("Member %s: has been finalized" % self.id)
+        logger.info(f"Member {self.id}: has finalized")
 
     def _prepare_data(self, uids: RecordsBatch) -> Tuple:
         """ Prepare data for training.
@@ -652,6 +667,6 @@ class HonestPartyMember(PartyMember, ABC):
         :param uids: Batch of record unique identifiers.
         :return: Tuple of three SVD matrices.
         """
-        X_train = self._dataset[self._data_params.train_split][self._data_params.features_key][[int(x) for x in uids]]
+        X_train = self.device_dataset_train_split[[int(x) for x in uids]]
         U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
         return U, S, Vh

@@ -49,17 +49,17 @@ class ResNetBlock(nn.Module):
     """
 
     def __init__(
-        self,
-        n_in: int,
-        hid_factor: float,
-        n_out: int,
-        drop_rate: List[float] = [0.1, 0.1],
-        noise_std: float = 0.05,
-        act_fun: nn.Module = nn.ReLU,
-        use_bn: bool = True,
-        use_noise: bool = False,
-        device: torch.device = torch.device("cpu"),
-        **kwargs,
+            self,
+            n_in: int,
+            hid_factor: float,
+            n_out: int,
+            drop_rate: List[float] = [0.1, 0.1],
+            noise_std: float = 0.05,
+            act_fun: nn.Module = nn.ReLU,
+            use_bn: bool = True,
+            use_noise: bool = False,
+            device: torch.device = torch.device("cpu"),
+            **kwargs,
     ):
         super(ResNetBlock, self).__init__()
         self.features = nn.Sequential(OrderedDict([]))
@@ -104,20 +104,26 @@ class ResNet(nn.Module):
     """
 
     def __init__(
-        self,
-        input_dim: int,
-        output_dim: int = 1,
-        hid_factor: List[float] = [2, 2],
-        drop_rate: Union[float, List[float], List[List[float]]] = 0.1,
-        noise_std: float = 0.05,
-        act_fun: nn.Module = nn.ReLU,
-        num_init_features: Optional[int] = None,
-        use_bn: bool = True,
-        use_noise: bool = False,
-        device: torch.device = torch.device("cpu"),
-        init_weights: float = None,
-        **kwargs,
+            self,
+            input_dim: int,
+            output_dim: int = 1,
+            hid_factor: List[float] = [2, 2],
+            drop_rate: Union[float, List[float], List[List[float]]] = 0.1,
+            noise_std: float = 0.05,
+            act_fun: nn.Module = nn.ReLU,
+            num_init_features: Optional[int] = None,
+            use_bn: bool = True,
+            use_noise: bool = False,
+            device: torch.device = torch.device("cpu"),
+            init_weights: float = None,
+            **kwargs,
     ):
+
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.drop_rate = drop_rate
+        self.noise_std = noise_std
+
         super(ResNet, self).__init__()
         if isinstance(drop_rate, float):
             drop_rate = [[drop_rate, drop_rate]] * len(hid_factor)
@@ -125,7 +131,7 @@ class ResNet(nn.Module):
             drop_rate = [drop_rate] * len(hid_factor)
         else:
             assert (
-                len(drop_rate) == len(hid_factor) and len(drop_rate[0]) == 2
+                    len(drop_rate) == len(hid_factor) and len(drop_rate[0]) == 2
             ), "Wrong number hidden_sizes/drop_rates. Must be equal."
 
         num_features = input_dim if num_init_features is None else num_init_features
@@ -180,12 +186,21 @@ class ResNet(nn.Module):
         targets_type = torch.LongTensor if isinstance(criterion,
                                                       torch.nn.CrossEntropyLoss) else torch.FloatTensor
         loss = criterion(torch.squeeze(logit), y.type(targets_type))
-        logger.info(f"loss: {loss.item()}")
+        logger.info(f"Loss: {loss.item()}")
         loss.backward()
         optimizer.step()
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
+
+    @property
+    def init_params(self):
+        return {
+            'input_dim': self.input_dim,
+            'output_dim': self.output_dim,
+            'drop_rate': self.drop_rate,
+            'noise_std': self.noise_std,
+        }
 
 
 if __name__ == "__main__":

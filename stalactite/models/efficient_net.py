@@ -57,6 +57,12 @@ class EfficientNet(nn.Module):
         super().__init__()
         _log_api_usage_once(self)
 
+        self.width_mult = width_mult
+        self.depth_mult = depth_mult
+        self.dropout = dropout
+        self.stochastic_depth_prob = stochastic_depth_prob
+        self.num_classes = num_classes
+
         self.criterion = torch.nn.CrossEntropyLoss()
 
         inverted_residual_setting, last_channel = _efficientnet_conf(width_mult=width_mult, depth_mult=depth_mult)
@@ -154,7 +160,7 @@ class EfficientNet(nn.Module):
         optimizer.zero_grad()
         logit = self.forward(x)
         loss = self.criterion(torch.squeeze(logit), y.type(torch.LongTensor))
-        logger.info(f"loss: {loss.item()}")
+        logger.info(f"Loss: {loss.item()}")
         loss.backward()
         optimizer.step()
 
@@ -163,4 +169,15 @@ class EfficientNet(nn.Module):
 
     def get_weights(self) -> torch.Tensor:
         return self.linear.weight.clone()
+
+    @property
+    def init_params(self):
+        return {
+            'width_mult': self.width_mult,
+            'depth_mult': self.depth_mult,
+            'dropout': self.dropout,
+            'stochastic_depth_prob': self.stochastic_depth_prob,
+            'num_classes': self.num_classes,
+        }
+
 

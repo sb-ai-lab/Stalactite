@@ -9,7 +9,7 @@ import grpc
 from stalactite.communications.grpc_utils.generated_code import arbitered_communicator_pb2, \
     arbitered_communicator_pb2_grpc
 from stalactite.communications.grpc_utils.utils import Status
-from stalactite.ml.arbitered.base import Role
+from stalactite.utils import Role
 
 logger = logging.getLogger(__name__)
 logging.getLogger('asyncio').setLevel(logging.ERROR)

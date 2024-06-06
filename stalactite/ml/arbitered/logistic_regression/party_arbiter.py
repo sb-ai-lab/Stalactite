@@ -5,7 +5,8 @@ import torch.nn.parameter
 
 from stalactite.base import DataTensor, Batcher
 from stalactite.batching import ListBatcher
-from stalactite.ml.arbitered.base import PartyArbiter, SecurityProtocolArbiter, Role
+from stalactite.ml.arbitered.base import PartyArbiter, SecurityProtocolArbiter
+from stalactite.utils import Role
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class PartyArbiterLogReg(PartyArbiter):
             momentum: float = 0.0,
             do_train: bool = True,
             do_predict: bool = False,
+            **kwargs,
     ) -> None:
         self.id = uid
         self.epochs = epochs
@@ -36,6 +38,9 @@ class PartyArbiterLogReg(PartyArbiter):
         self.momentum = momentum
         self.do_train = do_train
         self.do_predict = do_predict
+
+        if kwargs:
+            logger.info(f'Passed extra kwargs to arbiter ({kwargs}), ignoring.')
 
         self.is_initialized = False
         self.is_finalized = False
@@ -60,6 +65,7 @@ class PartyArbiterLogReg(PartyArbiter):
     ) -> Batcher:
         if uids is None:
             uids = self._uids_to_use_test if is_infer else self._uids_to_use
+        logger.info(f"Arbiter {self.id} makes a batcher for {len(uids)} uids")
 
         epochs = 1 if is_infer else self.epochs
         batch_size = self._eval_batch_size if is_infer else self._batch_size
@@ -102,6 +108,7 @@ class PartyArbiterLogReg(PartyArbiter):
             raise ValueError(f"No previous steps were performed.")
 
     def calculate_updates(self, gradients: dict) -> dict[str, DataTensor]:
+        logger.info(f'Arbiter {self.id} calculates updates for {len(gradients)} agents')
         members = [key for key in gradients.keys() if key != self.master]
 
         try:
@@ -132,17 +139,21 @@ class PartyArbiterLogReg(PartyArbiter):
 
         splitted_grads = torch.tensor_split(delta_gradients, torch.cumsum(torch.tensor(size_list), 0)[:-1], dim=1)
         deltas = {agent: splitted_grads[i].clone().detach() for i, agent in enumerate([self.master] + members)}
-
+        logger.debug(f'Arbiter {self.id} has calculated updates')
         return deltas
 
     def initialize(self, is_infer: bool = False):
+        logger.info(f"Arbiter {self.id}: initializing")
         if self.security_protocol is not None:
             self.security_protocol.generate_keys()
         self.is_initialized = True
         self.is_finalized = False
+        logger.info(f"Arbiter {self.id}: has been initialized")
 
     def finalize(self, is_infer: bool = False):
+        logger.info(f"Arbiter {self.id}: finalizing")
         self.is_finalized = True
+        logger.info(f"Arbiter {self.id} has finalized")
 
     def register_records_uids(self, uids: List[str], is_infer: bool = False):
         """ Register unique identifiers to be used.
@@ -150,7 +161,7 @@ class PartyArbiterLogReg(PartyArbiter):
         :param uids: List of unique identifiers.
         :return: None
         """
-        logger.info("Agent %s: registering %s uids to be used." % (self.id, len(uids)))
+        logger.info(f"Arbiter {self.id}: registering {len(uids)} uids to be used.")
         if is_infer:
             self._uids_to_use_test = uids
         else:

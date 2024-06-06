@@ -1,3 +1,4 @@
+import enum
 import math
 import os
 import random
@@ -22,3 +23,9 @@ def seed_all(seed: int):
     np.random.seed(seed)
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
+
+
+class Role(str, enum.Enum):
+    arbiter = "arbiter"
+    master = "master"
+    member = "member"

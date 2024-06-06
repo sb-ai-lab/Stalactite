@@ -9,9 +9,8 @@ from stalactite.communications.distributed_grpc_comm import (
 )
 from stalactite.helpers import reporting, global_logging
 from stalactite.configs import VFLConfig
-from stalactite.ml.arbitered.base import Role
 from stalactite.data_utils import get_party_master, get_party_arbiter, get_party_member
-from stalactite.utils import seed_all
+from stalactite.utils import seed_all, Role
 
 import logging
 

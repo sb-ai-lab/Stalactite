@@ -19,6 +19,8 @@ from stalactite.ml import (
 )
 
 from stalactite.configs import VFLConfig
+from stalactite.helpers import get_plugin_agent
+from stalactite.utils import Role
 
 from examples.utils.local_experiment import load_processors as load_processors_honest
 from examples.utils.local_arbitered_experiment import load_processors as load_processors_arbitered
@@ -35,7 +37,10 @@ def get_party_master(config_path: str, is_infer: bool = False) -> PartyMaster:
         master_processor = master_processor if config.data.dataset.lower() == "sbol_smm" else processors[0]
         if config.data.dataset_size == -1:
             config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
-        master_class = ArbiteredPartyMasterLogReg
+        if config.vfl_model.vfl_model_name in ['logreg']:
+            master_class = ArbiteredPartyMasterLogReg
+        else:
+            master_class = get_plugin_agent(config.vfl_model.vfl_model_name, Role.master)
         if config.grpc_arbiter.security_protocol_params is not None:
             if config.grpc_arbiter.security_protocol_params.he_type == 'paillier':
                 sp_agent = SecurityProtocolPaillier(**config.grpc_arbiter.security_protocol_params.init_params)
@@ -62,26 +67,31 @@ def get_party_master(config_path: str, is_infer: bool = False) -> PartyMaster:
             do_train=not is_infer,
             do_save_model=config.vfl_model.do_save_model,
             model_path=config.vfl_model.vfl_model_path,
-            seed=config.common.seed
+            seed=config.common.seed,
+            device='cuda' if config.docker.use_gpu else 'cpu',
         )
 
     else:
         master_processor, processors = load_processors_honest(config)
         if config.data.dataset_size == -1:
             config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
-        if 'logreg' in config.vfl_model.vfl_model_name:
-            master_class = HonestPartyMasterLogReg
-        elif "resnet" in config.vfl_model.vfl_model_name:
-            master_class = HonestPartyMasterResNetSplitNN
-        elif "efficientnet" in config.vfl_model.vfl_model_name:
-            master_class = HonestPartyMasterEfficientNetSplitNN
-        elif "mlp" in config.vfl_model.vfl_model_name:
-            master_class = HonestPartyMasterMLPSplitNN
-        else:
-            if config.vfl_model.is_consequently:
-                master_class = HonestPartyMasterLinRegConsequently
+        if config.vfl_model.vfl_model_name in ['logreg', 'resnet', 'efficientnet', 'mlp', 'linreg']:
+            if 'logreg' in config.vfl_model.vfl_model_name:
+                master_class = HonestPartyMasterLogReg
+            elif "resnet" in config.vfl_model.vfl_model_name:
+                master_class = HonestPartyMasterResNetSplitNN
+            elif "efficientnet" in config.vfl_model.vfl_model_name:
+                master_class = HonestPartyMasterEfficientNetSplitNN
+            elif "mlp" in config.vfl_model.vfl_model_name:
+                master_class = HonestPartyMasterMLPSplitNN
             else:
-                master_class = HonestPartyMasterLinReg
+                if config.vfl_model.is_consequently:
+                    master_class = HonestPartyMasterLinRegConsequently
+                else:
+                    master_class = HonestPartyMasterLinReg
+        else:
+            master_class = get_plugin_agent(config.vfl_model.vfl_model_name, Role.master)
+
         return master_class(
             uid="master",
             epochs=config.vfl_model.epochs,
@@ -100,7 +110,10 @@ def get_party_master(config_path: str, is_infer: bool = False) -> PartyMaster:
             model_name=config.vfl_model.vfl_model_name if
             config.vfl_model.vfl_model_name in ["resnet", "mlp", "efficientnet"] else None,
             model_params=config.master.master_model_params,
-            seed=config.common.seed
+            seed=config.common.seed,
+            device='cuda' if config.docker.use_gpu else 'cpu',
+            do_save_model=config.vfl_model.do_save_model,
+            model_path=config.vfl_model.vfl_model_path,
         )
 
 
@@ -108,7 +121,10 @@ def get_party_member(config_path: str, member_rank: int, is_infer: bool = False)
     config = VFLConfig.load_and_validate(config_path)
     if config.grpc_arbiter.use_arbiter:
         master_processor, processors = load_processors_arbitered(config)
-        member_class = ArbiteredPartyMemberLogReg
+        if config.vfl_model.vfl_model_name in ['logreg']:
+            member_class = ArbiteredPartyMemberLogReg
+        else:
+            member_class = get_plugin_agent(config.vfl_model.vfl_model_name, Role.member)
         if config.grpc_arbiter.security_protocol_params is not None:
             if config.grpc_arbiter.security_protocol_params.he_type == 'paillier':
                 sp_agent = SecurityProtocolPaillier(**config.grpc_arbiter.security_protocol_params.init_params)
@@ -135,21 +151,25 @@ def get_party_member(config_path: str, member_rank: int, is_infer: bool = False)
             do_save_model=config.vfl_model.do_save_model,
             model_path=config.vfl_model.vfl_model_path,
             use_inner_join=False,
-            seed=config.common.seed
+            seed=config.common.seed,
+            device='cuda' if config.docker.use_gpu else 'cpu',
         )
 
     else:
         master_processor, processors = load_processors_honest(config)
-        if 'logreg' in config.vfl_model.vfl_model_name:
-            member_class = HonestPartyMemberLogReg
-        elif "resnet" in config.vfl_model.vfl_model_name:
-            member_class = HonestPartyMemberResNet
-        elif "efficientnet" in config.vfl_model.vfl_model_name:
-            member_class = HonestPartyMemberEfficientNet
-        elif "mlp" in config.vfl_model.vfl_model_name:
-            member_class = HonestPartyMemberMLP
+        if config.vfl_model.vfl_model_name in ['logreg', 'resnet', 'efficientnet', 'mlp', 'linreg']:
+            if 'logreg' in config.vfl_model.vfl_model_name:
+                member_class = HonestPartyMemberLogReg
+            elif "resnet" in config.vfl_model.vfl_model_name:
+                member_class = HonestPartyMemberResNet
+            elif "efficientnet" in config.vfl_model.vfl_model_name:
+                member_class = HonestPartyMemberEfficientNet
+            elif "mlp" in config.vfl_model.vfl_model_name:
+                member_class = HonestPartyMemberMLP
+            else:
+                member_class = HonestPartyMemberLinReg
         else:
-            member_class = HonestPartyMemberLinReg
+            member_class = get_plugin_agent(config.vfl_model.vfl_model_name, Role.member)
 
         member_ids = [f"member-{member_rank}" for member_rank in range(config.common.world_size)]
         return member_class(
@@ -171,7 +191,8 @@ def get_party_member(config_path: str, member_rank: int, is_infer: bool = False)
             model_path=config.vfl_model.vfl_model_path,
             model_params=config.member.member_model_params,
             use_inner_join=True if member_rank == 0 else False,
-            seed=config.common.seed
+            seed=config.common.seed,
+            device='cuda' if config.docker.use_gpu else 'cpu',
         )
 
 
@@ -179,8 +200,10 @@ def get_party_arbiter(config_path: str, is_infer: bool = False) -> PartyArbiter:
     config = VFLConfig.load_and_validate(config_path)
     if not config.grpc_arbiter.use_arbiter:
         raise RuntimeError('Arbiter should not be called in honest setting.')
-
-    arbiter_class = PartyArbiterLogReg
+    if config.vfl_model.vfl_model_name in ['logreg']:
+        arbiter_class = PartyArbiterLogReg
+    else:
+        arbiter_class = get_plugin_agent(config.vfl_model.vfl_model_name, Role.arbiter)
     if config.grpc_arbiter.security_protocol_params is not None:
         if config.grpc_arbiter.security_protocol_params.he_type == 'paillier':
             sp_arbiter = SecurityProtocolArbiterPaillier(**config.grpc_arbiter.security_protocol_params.init_params)
