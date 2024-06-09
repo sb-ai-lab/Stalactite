@@ -1,6 +1,7 @@
 common:
   experiment_label: test-experiment-mnist-multiprocess_cloud
-  reports_export_folder: "/Users/alexgrig/stalactite_data/reports"
+  #reports_export_folder: "/Users/alexgrig/stalactite_data/reports"
+  reports_export_folder: "/home/azureuser/data/stalactite_data/reports"
   report_train_metrics_iteration: 1
   report_test_metrics_iteration: 1
   world_size: 2
@@ -16,7 +17,8 @@ vfl_model:
   do_train: True
   do_predict: True
   do_save_model: True
-  vfl_model_path: /Users/alexgrig/stalactite_data/models/linreg_model_local_multiprocess #../../saved_models/linreg_model
+  #vfl_model_path: /Users/alexgrig/stalactite_data/models/linreg_model_local_multiprocess #../../saved_models/linreg_model
+  vfl_model_path: /home/azureuser/data/stalactite_data/models/linreg_model_local #../../saved_models/linreg_model
 
 prerequisites:
   mlflow_host: '176.123.161.62'
@@ -28,7 +30,8 @@ prerequisites:
 data:
   random_seed: 0
   dataset_size: 3000
-  host_path_data_dir: /Users/alexgrig/stalactite_data/mnist_binary38_parts_3 # ../../data/sber_ds_vfl/mnist_binary38_parts2
+  #host_path_data_dir: /Users/alexgrig/stalactite_data/mnist_binary38_parts_3
+  host_path_data_dir: /home/azureuser/data/stalactite_data/mnist_binary38_parts_3
   dataset: 'mnist'
   dataset_part_prefix: 'part_'
   train_split: "train_train"
