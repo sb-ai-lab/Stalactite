@@ -37,11 +37,11 @@ class LinearRegressionBatch(torch.nn.Module):
 
     def update_weights(self, X_train, rhs, optimizer=None) -> None:
         # todo: add docs
-        U, S, Vh = sp.linalg.svd(X_train.numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
-        logger.debug("updating weights inside model")
-        coeffs, num_rank = solve_ols_svd(U, S, Vh, rhs, self.reg_lambda)
+        U, S, Vh = sp.linalg.svd(X_train.cpu().numpy(), full_matrices=False, overwrite_a=False, check_finite=False)
+        logger.debug("Updating weights inside model")
+        coeffs, num_rank = solve_ols_svd(U, S, Vh, rhs.cpu(), self.reg_lambda)
         self.linear.weight.copy_(torch.as_tensor(coeffs).t())  # TODO: copying is not efficient
-        logger.debug("SUCCESS update weights")
+        logger.debug("Success: update weights")
 
     def predict(self, X_pred):
         Y_pred = self.forward(X_pred)

@@ -24,7 +24,13 @@ class MLPTop(nn.Module):
 
         super().__init__()
         _log_api_usage_once(self)
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.bias = bias
+        self.multilabel = multilabel
+        self.init_weights = init_weights
         self.seed = seed
+
         if multilabel:
             self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=class_weights)
         else:
@@ -55,6 +61,7 @@ class MLPTop(nn.Module):
             logit = self.forward(x)
             loss = self.criterion(torch.squeeze(logit), gradients.type(torch.FloatTensor))
             grads = torch.autograd.grad(outputs=loss, inputs=x, retain_graph=True)
+            logger.info(f"Loss: {loss.item()}")
             loss.backward()
             optimizer.step()
             return grads[0]
@@ -66,5 +73,14 @@ class MLPTop(nn.Module):
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
 
-
+    @property
+    def init_params(self):
+        return {
+            'input_dim': self.input_dim,
+            'output_dim': self.output_dim,
+            'bias': self.bias,
+            'multilabel': self.multilabel,
+            'init_weights': self.init_weights,
+            'seed': self.seed,
+        }
 

@@ -41,7 +41,14 @@ class ResNetTop(nn.Module):
         super(ResNetTop, self).__init__()
 
         num_features = input_dim if num_init_features is None else num_init_features
+
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.num_init_features = num_init_features
+        self.use_bn = use_bn
+        self.init_weights = init_weights
         self.seed = seed
+
         self.features = nn.Sequential(OrderedDict([]))
         if use_bn:
             self.features.add_module("norm", nn.BatchNorm1d(num_features))
@@ -71,6 +78,7 @@ class ResNetTop(nn.Module):
             logit = self.forward(x)
             loss = criterion(torch.squeeze(logit), gradients.type(torch.FloatTensor))
             grads = torch.autograd.grad(outputs=loss, inputs=x, retain_graph=True)
+            logger.info(f"Loss: {loss.item()}")
             loss.backward()
             optimizer.step()
             return grads[0]
@@ -81,3 +89,14 @@ class ResNetTop(nn.Module):
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
+
+    @property
+    def init_params(self):
+        return {
+            'input_dim': self.input_dim,
+            'output_dim': self.output_dim,
+            'num_init_features': self.num_init_features,
+            'use_bn': self.use_bn,
+            'seed': self.seed,
+            'init_weights': self.init_weights,
+        }
