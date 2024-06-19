@@ -70,4 +70,4 @@ grpc_arbiter:
 docker:
   docker_compose_command: "docker compose"
   docker_compose_path: '../../../prerequisites'
-  use_gpu: True
+  use_gpu: False
