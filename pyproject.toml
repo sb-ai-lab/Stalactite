@@ -95,7 +95,7 @@ legacy_tox_ini = """
     description = tests
     allowlist_externals = poetry
     commands =
-        poetry install
+        poetry install -vvv
 
 """
 
