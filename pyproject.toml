@@ -93,10 +93,10 @@ legacy_tox_ini = """
 
     [testenv]
     description = tests
-    allowlist_externals = poetry
+    allowlist_externals = poetry,echo
     commands =
-        poetry install
-
+        echo "Running poetry installation"
+        poetry install -vv
 """
 
 
