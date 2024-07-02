@@ -62,7 +62,7 @@ member:
     hidden_channels:[1000, 300, 100],
 #    init_weights: 0.005
   }
-  cuda_visible_devices: "1"
+  cuda_visible_devices: "0"
 
 grpc_arbiter:
   use_arbiter: False
