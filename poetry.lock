@@ -2868,21 +2868,6 @@ files = [
 ptyprocess = ">=0.5"
 
 [[package]]
-name = "phe"
-version = "1.5.0"
-description = "Partially Homomorphic Encryption library for Python"
-optional = false
-python-versions = "*"
-files = [
-    {file = "phe-1.5.0-py2.py3-none-any.whl", hash = "sha256:a0d0098e22474b3027cbc0b05e9de2290bc603f1728bf401f498abbdbe795391"},
-    {file = "phe-1.5.0.tar.gz", hash = "sha256:992fb7091d2427f0d9733946f8f350acdd4d1d012057f2aad364ba79f970339c"},
-]
-
-[package.extras]
-cli = ["click"]
-examples = ["numpy", "scipy", "sklearn"]
-
-[[package]]
 name = "pillow"
 version = "10.4.0"
 description = "Python Imaging Library (Fork)"
@@ -4970,4 +4955,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9,<3.13"
-content-hash = "ac7648e8ea8323a814d48e08d7dd48ff3e2988e304c5cc9e528f11168d04193b"
+content-hash = "3507bed5e493ed60f09fee3352f6fb3387623b4df37184a764838b8403d67d2a"

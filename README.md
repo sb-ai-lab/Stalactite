@@ -22,6 +22,8 @@ poetry config virtualenvs.in-project true # Create the virtualenv inside the pro
 poetry run pip install torch~=2.1 torchvision~=0.16 --index-url https://download.pytorch.org/whl/cpu
 # Otherwise, to use GPU:
 poetry run pip install torch~=2.1 torchvision~=0.16 --index-url https://download.pytorch.org/whl/cu121
+# Install phe library
+poetry run pip install phe==1.5.0
 poetry install # Install stalactite and dependencies
 poetry shell # Start a new shell and activate the virtual environment
 ```
