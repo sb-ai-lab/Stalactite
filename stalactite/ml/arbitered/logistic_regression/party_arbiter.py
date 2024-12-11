@@ -98,7 +98,7 @@ class PartyArbiterLogReg(PartyArbiter):
         for class_idx in range(self.num_classes):
             self._optimizer[class_idx].zero_grad()
             self._prev_model_parameter.append(self._model_parameter[class_idx].data.clone())
-            self._model_parameter[class_idx].grad = gradient[class_idx]
+            self._model_parameter[class_idx].grad = gradient[class_idx].to('cpu')  # Local communicator requirement
             self._optimizer[class_idx].step()
 
     def _get_delta_gradients(self) -> torch.Tensor:

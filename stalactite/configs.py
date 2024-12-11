@@ -98,7 +98,15 @@ class DataConfig(BaseModel):
     dataset_size: int = Field(default=100, description="Number of dataset rows to use")
     host_path_data_dir: str = Field(default='.', description="Path to datasets` directory")
     dataset: Literal[
-        'mnist', 'sbol', 'sbol_smm', 'home_credit', 'home_credit_bureau_pos', 'avito', 'avito_texts_images'] = Field(
+        'sbol_master_only_labels',
+        'mnist',
+        'sbol',
+        'sbol_smm',
+        'home_credit',
+        'home_credit_bureau_pos',
+        'avito',
+        'avito_texts_images',
+    ] = Field(
         default='mnist',
         description='Dataset type. One of `mnist`, `sbol`, `sbol_smm`, `home_credit`,  `home_credit_bureau_pos`,'
                     ' `avito`, `avito_texts_images`'

@@ -210,7 +210,7 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
         return self.server_thread.is_alive()
 
     def put_to_tasks_to_send_queue(self, message: communicator_pb2.MainMessage, send_to_id: str):
-        self.servicer._tasks_to_send_queues[send_to_id][message.method_name] = message
+        self.servicer._tasks_to_send_queues[send_to_id][message.method_name].put(message)
 
     def send(
             self,
@@ -378,10 +378,13 @@ class GRpcMasterPartyCommunicator(GRpcPartyCommunicator):
                     get_response_timeout=timeout,
                 )
                 return self._arbiter_stub.RecvFromArbiter(request_message, timeout=timeout)
-        while (message := self.servicer._received_tasks.get(method_name, dict()).pop(receive_from_id, None)) is None:
+        while (
+                message_queue := self.servicer._received_tasks.get(method_name, dict()).get(receive_from_id, Queue())
+        ).empty():
             if time.time() - timer_start > timeout:
-                raise TimeoutError(f"Could not receive task: {method_name} from {receive_from_id}.")
+                raise TimeoutError(f"Could not send task: {method_name} to {receive_from_id}.")
             continue
+        message = message_queue.get()
         return message
 
     def recv(self, task: Task, recv_results: bool = False) -> Task:
@@ -563,7 +566,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
         self._sent_time: Queue = Queue()
         self._lock = threading.Lock()
 
-        self._received_tasks = defaultdict(dict)
+        self._received_tasks = defaultdict(lambda: defaultdict(Queue))
 
         self.arbiter_ready: bool = False
         self.arbiter: Optional[str] = None
@@ -749,7 +752,7 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
                 )
             )
         else:
-            self._received_tasks[prepared_task_message.method_name][self.participant.id] = prepared_task_message
+            self._received_tasks[prepared_task_message.method_name][self.participant.id].put(prepared_task_message)
 
         logger.debug("Party communicator %s: sent to %s event %s" % (self.participant.id, send_to_id, task_id))
         return Task(id=task_id, method_name=method_name, to_id=send_to_id, from_id=self.participant.id)
@@ -787,9 +790,11 @@ class GRpcMemberPartyCommunicator(GRpcPartyCommunicator):
             raise UnsupportedError("GRpcMemberPartyCommunicator cannot receive from other Members")
 
         if receive_from_id == self.participant.id:
-            received_message = self._received_tasks.get(task.method_name, dict()).pop(self.participant.id, None)
-            if received_message is None:
+            received_message_queue = self._received_tasks.get(task.method_name, dict())\
+                .get(self.participant.id, Queue())
+            if received_message_queue.empty():
                 raise RuntimeError(f"Tried to receive task ({task.method_name}) from self before sending it to self.")
+            received_message = received_message_queue.get()
         else:
             if self.participant.id != receive_to_id:
                 raise RuntimeError(

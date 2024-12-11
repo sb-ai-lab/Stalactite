@@ -18,6 +18,7 @@ from stalactite.base import PartyMember
 from stalactite.configs import VFLConfig
 from examples.utils.prepare_mnist import load_data as load_mnist
 from examples.utils.prepare_sbol import load_data as load_sbol
+from examples.utils.prepare_data_arbitered_no_master_features import load_data as load_data_sbol_no_feat
 from stalactite.helpers import reporting, run_local_agents
 from stalactite.utils import seed_all
 
@@ -77,6 +78,23 @@ def load_processors(config: VFLConfig):
             os.path.join(f"{config.data.host_path_data_dir}/master_part_arbiter"),
         ), member_id=0, params=config, is_master=True)
 
+    elif config.data.dataset.lower() == "sbol_master_only_labels":
+        dataset = {}
+        if len(os.listdir(config.data.host_path_data_dir)) == 0:
+            load_data_sbol_no_feat(data_dir_path=config.data.host_path_data_dir, sample=config.data.dataset_size,
+                      seed=config.common.seed)
+
+        for m in range(1, config.common.world_size + 1):
+            dataset[m] = datasets.load_from_disk(
+                os.path.join(f"{config.data.host_path_data_dir}/part_{m}")
+            )
+        processors = [
+            TabularPreprocessor(dataset=dataset[i], member_id=i, params=config) for i, v in dataset.items()
+        ]
+        master_processor = TabularPreprocessor(master_has_features=True, dataset=datasets.load_from_disk(
+            os.path.join(f"{config.data.host_path_data_dir}/master_part_arbiter"),
+        ), member_id=0, params=config, is_master=True)
+
     else:
         raise ValueError(f"Unknown dataset: {config.data.dataset}, choose one from ['mnist', 'multilabel']")
 
@@ -121,7 +139,8 @@ def run(config_path: Optional[str] = None):
             do_predict=config.vfl_model.do_predict,
             do_train=config.vfl_model.do_train,
         )
-        master_processor = master_processor if config.data.dataset.lower() == "sbol_smm" else processors[0]
+        master_processor = master_processor if config.data.dataset.lower() \
+                                               in ["sbol_smm", "sbol_master_only_labels"] else processors[0]
 
         master = master_class(
             uid="master",

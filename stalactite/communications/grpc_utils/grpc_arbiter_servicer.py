@@ -3,6 +3,7 @@ import logging
 import time
 from collections import defaultdict
 from concurrent import futures
+from queue import Queue
 
 import grpc
 
@@ -33,8 +34,8 @@ class GRpcArbiterCommunicatorServicer(arbitered_communicator_pb2_grpc.ArbiteredC
 
         self.host = '0.0.0.0'
 
-        self._received_tasks = defaultdict(dict)
-        self._tasks_to_send_queues = defaultdict(dict)
+        self._received_tasks = defaultdict(lambda: defaultdict(Queue))
+        self._tasks_to_send_queues = defaultdict(lambda: defaultdict(Queue))
         self.connected_agents = dict()
         self.status = Status.not_started
 
@@ -45,10 +46,11 @@ class GRpcArbiterCommunicatorServicer(arbitered_communicator_pb2_grpc.ArbiteredC
             self, method_name: str, send_to_id: str, timeout: float = 30.0
     ) -> arbitered_communicator_pb2.MainArbiterMessage:
         timer_start = time.time()
-        while (message := self._tasks_to_send_queues.get(send_to_id, dict()).pop(method_name, None)) is None:
+        while (message_queue := self._tasks_to_send_queues.get(send_to_id, dict()).get(method_name, Queue())).empty():
             await asyncio.sleep(0.0)
             if time.time() - timer_start > timeout:
                 raise TimeoutError(f"Could not send task: {method_name} to {send_to_id}.")
+        message = message_queue.get()
         return message
 
     async def start_servicer_and_server(self):
@@ -68,7 +70,7 @@ class GRpcArbiterCommunicatorServicer(arbitered_communicator_pb2_grpc.ArbiteredC
         await server.wait_for_termination()
 
     def put_to_received_tasks(self, message: arbitered_communicator_pb2.MainArbiterMessage, receive_from_id: str):
-        self._received_tasks[message.method_name][receive_from_id] = message
+        self._received_tasks[message.method_name][receive_from_id].put(message)
 
     async def SendToArbiter(
             self, request: arbitered_communicator_pb2.MainArbiterMessage, context: grpc.aio.ServicerContext
