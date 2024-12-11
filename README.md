@@ -79,6 +79,33 @@ logistic regression on SBOL and SMM while all the agents are on different hosts.
 stalactite CLI and configuration file, which must be copied to each host (and changed accordingly).
 The instructions for the distributed multi-host experiment are shown in `examples/vfl/distributed/README.md`
   
+### Arbitered example with no features on master
+- distributed config: `examples/configs/arbitered-logreg-sbol-smm-multiprocess-no-features-master.yml`,
+- local config: `examples/configs/arbitered-logreg-sbol-smm-local-no-features-master.yml`
+Launches the multilabel logistic regression with master, arbiter and member on Sbol dataset. In the experiment, the
+member holds all the features, and master is responsible for labels.
+To launch the experiment:
+1) Create the empty folder `./multilabel_sber_samplemaster_no_labels_parts2` in the same folder 
+with Sbol dataset parquet files
+2) Adjust the configuration files' paths and hosts, following the instructions on
+[how to adjust the configuration file](https://github.com/sb-ai-lab/vfl-benchmark/blob/main/docs/tutorials/configuration_file_tutorial.rst) 
+3) Run the experiment
+- locally
+```bash
+stalactite local \
+--single-process start \
+--config-path examples/configs/arbitered-logreg-sbol-smm-local-no-features-master.yml
+```
+- or by using multi-process / distributed mode:
+```bash
+stalactite local --multi-process stop
+stalactite local \
+--multi-process start \
+--config-path examples/configs/arbitered-logreg-sbol-smm-multiprocess-no-features-master.yml
+```
+
+
+
 ## Prerequisites start and Stalactite CLI usage
 To run the experiment and check the metrics, first, you should launch the prerequisites (Prometheus and MlFlow).
 > **It is important to launch the prerequisites on the same host, where the distributed master will be running**
