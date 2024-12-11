@@ -3,7 +3,7 @@ common:
   report_test_metrics_iteration: 1
   world_size: 1
   experiment_label: sbol-smm-logreg-multi-multiprocess-no-features-master
-  reports_export_folder: "/mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/reports"
+  reports_export_folder: "../../reports"
 
 vfl_model:
   epochs: 10
@@ -16,14 +16,14 @@ vfl_model:
   do_train: True
   do_predict: False
   do_save_model: False
-  vfl_model_path: /mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/saved_models/logreg_model_arbitered_he
+  vfl_model_path: ../../saved_models/logreg_model_arbitered_he
 
 prerequisites:
-  mlflow_host: 'node3.bdcl'
+  mlflow_host: '0.0.0.0'
   mlflow_port: '5555'
 
 master:
-  external_host: 'node3.bdcl'
+  external_host: '0.0.0.0'
   run_mlflow: True
   recv_timeout: 3600.
 
@@ -34,7 +34,7 @@ member:
 data:
   dataset_size: 10000
   dataset: 'sbol_master_only_labels'
-  host_path_data_dir:  /mnt/ess_storage/DN_1/storage/qa-system-research/zakharova/vfl-benchmark-test-mounts/data/sber_ds_vfl/multilabel_sber_samplemaster_no_labels_parts2
+  host_path_data_dir:  ../../data/sber_ds_vfl/multilabel_sber_samplemaster_no_labels_parts2
   dataset_part_prefix: 'part_'
   train_split: "train_train"
   test_split: "train_val"
