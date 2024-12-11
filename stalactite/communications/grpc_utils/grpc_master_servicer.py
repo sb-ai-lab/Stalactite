@@ -4,6 +4,7 @@ import time
 import uuid
 from collections import defaultdict
 from concurrent import futures
+from queue import Queue
 from typing import Any, AsyncIterator, Optional, List
 
 import grpc
@@ -83,21 +84,22 @@ class GRpcCommunicatorServicer(communicator_pb2_grpc.CommunicatorServicer):
         self.status = Status.not_started
         self.connected_clients = dict()
 
-        self._received_tasks = defaultdict(dict)
-        self._tasks_to_send_queues = defaultdict(dict)
+        self._received_tasks = defaultdict(lambda: defaultdict(Queue))
+        self._tasks_to_send_queues = defaultdict(lambda: defaultdict(Queue))
         self._info_messages = 0
 
     def put_to_received_tasks(self, message: communicator_pb2.MainMessage, receive_from_id: str):
-        self._received_tasks[message.method_name][receive_from_id] = message
+        self._received_tasks[message.method_name][receive_from_id].put(message)
 
     async def get_from_tasks_to_send_dict(
             self, method_name: str, send_to_id: str, timeout: float = 30.0
     ) -> communicator_pb2.MainMessage:
         timer_start = time.time()
-        while (message := self._tasks_to_send_queues.get(send_to_id, dict()).pop(method_name, None)) is None:
+        while (message_queue := self._tasks_to_send_queues.get(send_to_id, dict()).get(method_name, Queue())).empty():
             await asyncio.sleep(0.0)
             if time.time() - timer_start > timeout:
                 raise TimeoutError(f"Could not send task: {method_name} to {send_to_id}.")
+        message = message_queue.get()
         self.log_recv_message_size(message)
         return message
 

@@ -21,6 +21,7 @@ from stalactite.communications.helpers import ParticipantType, MethodKwargs, Met
 
 logger = logging.getLogger(__name__)
 
+
 class RecvFuture(Future):
     def __init__(self, method_name: str, receive_from_id: str):
         super().__init__()
@@ -94,6 +95,10 @@ class LocalPartyCommunicator(PartyCommunicator, ABC):
             method_kwargs=method_kwargs,
             result=result,
         )
+        while self._party_info[send_to_id].received_tasks \
+                .get(task.method_name, dict()) \
+                .get(self.participant.id) is not None:
+            time.sleep(0.1)
         with self._lock:
             self._party_info[send_to_id].received_tasks[task.method_name][self.participant.id] = task
         return task
@@ -336,7 +341,7 @@ class ArbiteredLocalPartyCommunicator(LocalPartyCommunicator, ABC):
         self._party_info[self.participant.id] = _ParticipantInfo(type=ptype, received_tasks=defaultdict(dict))
 
         # todo: allow to work with timeout for rendezvous operation
-        while len(self._party_info) < self.world_size + 2: # members + master + arbiter
+        while len(self._party_info) < self.world_size + 2:  # members + master + arbiter
             time.sleep(0.1)
 
         for uid, pinfo in self._party_info.items():
@@ -373,4 +378,3 @@ class ArbiteredLocalPartyCommunicator(LocalPartyCommunicator, ABC):
         except:
             logger.error("Exception in party communicator %s" % self.participant.id, exc_info=True)
             raise
-
