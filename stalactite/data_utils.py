@@ -39,7 +39,6 @@ def get_party_master(config_path: str, is_infer: bool = False) -> PartyMaster:
         master_processor = master_processor if config.data.dataset.lower() in [
             "sbol_smm", "sbol_master_only_labels"
         ] else processors[0]
-        logging.info(f"Master processor: {list(master_processor.dataset.values())[0]}")
         if config.data.dataset_size == -1:
             config.data.dataset_size = len(master_processor.dataset[config.data.train_split][config.data.uids_key])
         if config.vfl_model.vfl_model_name in ['logreg']:

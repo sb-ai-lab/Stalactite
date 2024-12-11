@@ -13,7 +13,7 @@ RUN pip install poetry
 
 RUN poetry config virtualenvs.create false
 RUN poetry run pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
-RUN poetry run pip install phe==1.5.0
+# RUN poetry run pip install phe==1.5.0  # Uncomment to run phe-based examples
 RUN poetry install --no-root
 
 COPY ./stalactite /opt/stalactite
@@ -25,4 +25,3 @@ WORKDIR /opt/stalactite
 ENV GIT_PYTHON_REFRESH="quiet"
 LABEL framework="stalactite"
 COPY ./plugins /opt/plugins
-# docker build -f ./docker/grpc-base.dockerfile -t grpc-base:latest .

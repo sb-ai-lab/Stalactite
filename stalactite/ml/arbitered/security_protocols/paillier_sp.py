@@ -5,7 +5,11 @@ from typing import Any
 import numpy as np
 import torch
 from joblib import Parallel, delayed
-from phe import paillier
+
+try:
+    from phe import paillier
+except ImportError:
+    paillier = None
 
 from stalactite.ml.arbitered.base import SecurityProtocolArbiter, SecurityProtocol, Keys
 
