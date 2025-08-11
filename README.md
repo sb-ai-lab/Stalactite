@@ -121,3 +121,23 @@ refer to the examples in the `Examples` section of the current README.
 ## Note
 If you want to use GPU, follow the `Installation 1.` and install correct versions of `torch` and `torchvision` in your 
 environment and set the `docker.use_gpu=True` variable in an experimental config. 
+
+## Citation
+```bibtex
+@inproceedings{10.1145/3640457.3691700,
+author = {Zakharova, Anastasiia and Alexandrov, Dmitriy and Khodorchenko, Maria and Butakov, Nikolay and Vasilev, Alexey and Savchenko, Maxim and Grigorievskiy, Alexander},
+title = {Stalactite: toolbox for fast prototyping of vertical federated learning systems},
+year = {2024},
+isbn = {9798400705052},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3640457.3691700},
+doi = {10.1145/3640457.3691700},
+booktitle = {Proceedings of the 18th ACM Conference on Recommender Systems},
+pages = {1187–1190},
+numpages = {4},
+keywords = {data privacy, data security, distributed machine learning, fast prototyping, machine learning software, vertical federated learning},
+location = {Bari, Italy},
+series = {RecSys '24}
+}
+```
