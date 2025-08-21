@@ -111,7 +111,7 @@ def save_master_dataset(dataset, path):
     if not path.exists():
         path.mkdir()
 
-    dataset.save_to_disk(path)
+    dataset.save_to_disk(str(path))
 
 
 def save_splitted_dataset(ds_list, path, part_dir_name='part_', clean_dir=False):
@@ -133,7 +133,7 @@ def save_splitted_dataset(ds_list, path, part_dir_name='part_', clean_dir=False)
         if part_path.exists():
             raise IOError('Directory already exists')
         part_path.mkdir()
-        ds.save_to_disk(part_path)
+        ds.save_to_disk(str(part_path))
 
 
 def load_data(save_path: Path, parts_num: int, binary: bool = True):
@@ -195,11 +195,20 @@ if __name__ == '__main__':
 
     parser.add_argument('--save_path', type=str, default='~/stalactite_data',
                         help='Path where the splitted data is saved to')
-    parser.add_argument('--members_no', type=int, default=3, help='Amount of parties (members)')
+    parser.add_argument('--parts_num', type=int, default=3, help='Amount of parties (members)')
+    parser.add_argument('--binary', action='store_true', required=False, help='Whether the data is binary(digits 3 and 8), or not.')
 
     args = parser.parse_args()
-    save_path = Path(args.save_path).absolute() / ('mnist_binary38_parts_' + str(args.members_no))
+    if args.binary:
+        file_name = 'mnist_binary38_parts_'
+    else:
+        file_name = 'mnist_all_classes_parts_'
+        
+    save_path = Path(args.save_path).absolute() / (file_name + str(args.parts_num))
+    save_path.mkdir(parents=True, exist_ok=True)
 
-    load_data(save_path, args.members_no)
+    load_data(save_path, args.parts_num, args.binary)
 
     print(f"Splitted data is saved to: {save_path}")
+    
+    # python ./prepare_mnist.py --save_path ~/stalactite_data --parts_num 3

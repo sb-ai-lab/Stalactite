@@ -3,6 +3,8 @@ import logging
 
 import pandas as pd
 import datasets
+from pathlib import Path
+import argparse
 
 from sklearn.model_selection import train_test_split
 
@@ -42,6 +44,7 @@ def load_data(data_dir_path: str, parts_num: int, sample: int, seed: int, use_sm
     :param use_smm: whether to use smm or not (useful for parts=2 only)
     :return:
     """
+    
     sbol_path = os.path.join(os.path.dirname(data_dir_path), "sbol")
     smm_path = os.path.join(os.path.dirname(data_dir_path), "smm")
     zvuk_path = os.path.join(os.path.dirname(data_dir_path), "zvuk")
@@ -126,7 +129,29 @@ def load_data(data_dir_path: str, parts_num: int, sample: int, seed: int, use_sm
 
 
 if __name__ == "__main__":
-    load_data(data_dir_path="/home/dmitriy/Projects/vfl-benchmark/data/sber_ds_vfl/",
-              parts_num=3, use_smm=False, seed=22, sample=5000)
+    # python ./prepare_sbol_ag.py --save_path ~/stalactite_data/sbol_smm_data/multilabel_sbol_smm_10000 --parts_num 2 --use_smm --sample 10000
+
+    parser = argparse.ArgumentParser(description='Command line params. See docstring of load_data function.')
+
+    parser.add_argument('--save_path', type=str, default='~/stalactite_data',
+                        help='Path where the splitted data is saved to')
+
+    parser.add_argument('--parts_num', type=int, default=2,
+                        help='Number of parts the data is split in')
+    
+    parser.add_argument('--use_smm', action='store_true',
+                        help='If True use sbol + smm, else use sbol + zvuk')
+    
+    parser.add_argument('--seed', type=int, default=22,
+                        help='Seed for data splitting')
+    
+    parser.add_argument('--sample', type=int, default=-1,
+                        help='How many data samples to use. -1 means all samples. Allows to reduce data size.')
+    
+    args = parser.parse_args()
+    save_path = Path(args.save_path).absolute()
+    
+    load_data(data_dir_path=save_path, parts_num=args.parts_num, use_smm=args.use_smm, seed=args.seed, sample=args.sample)
+    print(f"Sbol and Ssm data are saved to: {save_path}")
 
 
