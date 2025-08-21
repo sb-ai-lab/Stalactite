@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 from typing import Optional, Any, List
 
-from docker.errors import APIError, NotFound
+from docker.errors import APIError, NotFound, DockerException
 
 from docker import APIClient
 
@@ -33,7 +33,16 @@ logger = logging.getLogger(__name__)
 logging.getLogger('docker').setLevel(logging.ERROR)
 
 
-def create_external_network(docker_client: APIClient = APIClient()):
+def _get_docker_client() -> APIClient:
+    try:
+        return APIClient()
+    except DockerException as exc:
+        logger.error("Could not create a docker client. Please check if docker is installed and running.", exc_info=exc)
+        raise
+
+def create_external_network(docker_client: APIClient | None = None):
+    docker_client = docker_client or _get_docker_client()
+
     if networks := docker_client.networks(names=[EXTERNAL_PREREQUISITES_NETWORK], filters={'driver': 'bridge'}):
         logger.debug(f'{EXTERNAL_PREREQUISITES_NETWORK} has already been created ({networks}). Skipping.')
     else:
@@ -88,8 +97,9 @@ def run_subprocess_command(
 def get_status(
         agent_id: Optional[str],
         containers_label: str,
-        docker_client: APIClient = APIClient(),
+        docker_client: APIClient | None = None,
 ):
+    docker_client = docker_client or _get_docker_client()
     try:
         if agent_id is None:
             containers = docker_client.containers(all=True, filters={"label": containers_label})
@@ -108,8 +118,9 @@ def get_logs(
         agent_id: str,
         tail: str = "all",
         follow: bool = False,
-        docker_client: APIClient = APIClient(),
+        docker_client: APIClient | None = None,
 ):
+    docker_client = docker_client or _get_docker_client()
     if tail != "all":
         tail = validate_int(tail)
     try:
@@ -206,13 +217,13 @@ def create_and_start_container(
 
 
 def get_mlflow_endpoint(config: VFLConfig) -> str:
+    docker_client = _get_docker_client()
     mlflow_host = config.prerequisites.mlflow_host
     mlflow_port = config.prerequisites.mlflow_port
     if mlflow_host in ['0.0.0.0', 'localhost']:
         logger.info('Searching the MlFlow container locally')
-        client = APIClient()
         try:
-            client.inspect_container(MLFLOW_CONTAINER_NAME)
+            docker_client.inspect_container(MLFLOW_CONTAINER_NAME)
         except NotFound as exc:
             logger.error(
                 f'Could not find the `{MLFLOW_CONTAINER_NAME}` container locally. Are you sure, that you have '
@@ -242,7 +253,7 @@ def start_distributed_agent(
     _logs_name = f"member-{rank}" if role == Role.member else role
 
     logger.info(f"Starting {role} for distributed experiment")
-    client = APIClient()
+    client = _get_docker_client()
     logger.info(f"Building an image for the {role} container. If build for the first time, it may take a while...")
 
     try:

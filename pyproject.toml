@@ -34,6 +34,7 @@ aiohttp = "^3.9.4"
 jupyter-server = "^2.14.1"
 tornado = "^6.4.1"
 pillow = "^10.3.0"
+typing-extensions = "^4.14.1"
 
 
 [tool.poetry.group.dev.dependencies]
